@@ -2736,8 +2736,8 @@ function renderSettingsPage(section) {
         </label>
       </div>
       <div class="legacy-note" style="margin-top:8px;line-height:1.5;">
-        关掉 xv/xnxx 列表「滑过/进视野就播」的预览，减轻下滑卡顿。<br>
-        <b>不影响</b>Creamu：点缩略图仍可手动预览。
+        关闭站点列表自动播放预览，减轻下滑卡顿。<br>
+        点缩略图的手动预览仍可用。
       </div>
     `;
   } else if (sec === 'overview') {
@@ -2858,14 +2858,12 @@ function renderSettingsPage(section) {
     const curCfg = getConfig();
     curCfg.block_site_auto_preview = !!e.currentTarget.checked;
     saveConfig(curCfg);
-    if (typeof pauseSiteListPreviewVideos === 'function') {
+    if (typeof applyBlockSiteAutoPreviewMode === 'function') {
+      try { applyBlockSiteAutoPreviewMode(); } catch (_) { /* ignore */ }
+    } else if (typeof pauseSiteListPreviewVideos === 'function') {
       try { pauseSiteListPreviewVideos(); } catch (_) { /* ignore */ }
     }
-    showToast(
-      curCfg.block_site_auto_preview
-        ? '已关闭站点自动预览（点按预览仍可用）'
-        : '已恢复站点自动预览'
-    );
+    showToast(curCfg.block_site_auto_preview ? '已关闭站点自动预览' : '已恢复站点自动预览');
   });
 
   const copyText = (data, ta) => {

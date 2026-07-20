@@ -216,15 +216,23 @@ function stopListPreview() {
   document.querySelectorAll('.scout-list-preview-layer').forEach((el) => el.remove());
 }
 
-/** 列表预览地址：仅站内 data-pvv 等；不用 gvideo（黑屏且撑布局） */
+/** 站方预览属性与脚本侧备份属性 */
+const SCOUT_SITE_PREVIEW_ATTR_MAP = [
+  ['data-pvv', 'data-scout-pvv'],
+  ['data-spvv', 'data-scout-spvv'],
+  ['data-preview', 'data-scout-preview']
+];
+
+/** 列表预览 URL（备份优先；不用 gvideo） */
 function getListPreviewUrl(img) {
   if (!img) return '';
-  return (
-    img.getAttribute('data-pvv') ||
-    img.getAttribute('data-spvv') ||
-    img.getAttribute('data-preview') ||
-    ''
-  ).trim();
+  for (let i = 0; i < SCOUT_SITE_PREVIEW_ATTR_MAP.length; i++) {
+    const siteAttr = SCOUT_SITE_PREVIEW_ATTR_MAP[i][0];
+    const scoutAttr = SCOUT_SITE_PREVIEW_ATTR_MAP[i][1];
+    const v = (img.getAttribute(scoutAttr) || img.getAttribute(siteAttr) || '').trim();
+    if (v) return v;
+  }
+  return '';
 }
 
 /** eporner 列表没有可用预览源（无 data-pvv，gvideo 黑屏，换帧会撑卡）→ 不做预览 */
@@ -377,9 +385,7 @@ function setupListPreviewPlayback() {
   });
 }
 
-// ----------------------------------------
-// 关闭站点列表自动预览（不影响 Creamu 点按预览）
-// ----------------------------------------
+// 站点列表自动预览拦截（block_site_auto_preview）
 
 function isSiteListPreviewHost(el) {
   if (!el || !el.closest) return false;
@@ -391,26 +397,108 @@ function isSiteListPreviewHost(el) {
 
 function isMainDetailPlayerVideo(v) {
   if (!v || !v.closest) return false;
+  if (v.classList && v.classList.contains('scout-list-preview-video')) return false;
   return !!v.closest(
     '#html5video, #html5video_base, #video-player-bg, .video-player, ' +
       '#player, .x-video-player, [class*="player-container"]'
   );
 }
 
-/** 暂停列表里非 Creamu 的预览 video */
+/** 是否列表侧站点预览 video（详情与 .scout-list-preview-video 除外） */
+function isBlockedSiteListVideo(v) {
+  if (!v || v.tagName !== 'VIDEO') return false;
+  if (v.classList && v.classList.contains('scout-list-preview-video')) return false;
+  if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return false;
+  if (isMainDetailPlayerVideo(v)) return false;
+  if (isSiteListPreviewHost(v)) return true;
+  return !!v.closest('.mozaique, #vidresults, #content .thumb-block, #content .video-block');
+}
+
+/** site 预览属性 → data-scout-* */
+function stashSitePreviewAttrs(root) {
+  const scope = root && root.querySelectorAll ? root : document;
+  const imgs = scope.querySelectorAll
+    ? scope.querySelectorAll('img[data-pvv], img[data-spvv], img[data-preview], img[data-scout-pvv], img[data-scout-spvv], img[data-scout-preview]')
+    : [];
+  const list = [];
+  if (root && root.nodeType === 1 && root.tagName === 'IMG') list.push(root);
+  imgs.forEach((img) => list.push(img));
+  for (let i = 0; i < list.length; i++) {
+    const img = list[i];
+    if (!img || !img.getAttribute) continue;
+    if (!isSiteListPreviewHost(img) && !img.closest('.mozaique, #vidresults, .thumb-block')) continue;
+    for (let j = 0; j < SCOUT_SITE_PREVIEW_ATTR_MAP.length; j++) {
+      const siteAttr = SCOUT_SITE_PREVIEW_ATTR_MAP[j][0];
+      const scoutAttr = SCOUT_SITE_PREVIEW_ATTR_MAP[j][1];
+      const cur = (img.getAttribute(siteAttr) || '').trim();
+      if (cur) {
+        img.setAttribute(scoutAttr, cur);
+        img.removeAttribute(siteAttr);
+      }
+    }
+  }
+}
+
+/** data-scout-* → site 预览属性 */
+function restoreSitePreviewAttrs(root) {
+  const scope = root && root.querySelectorAll ? root : document;
+  const imgs = scope.querySelectorAll
+    ? scope.querySelectorAll('img[data-scout-pvv], img[data-scout-spvv], img[data-scout-preview]')
+    : [];
+  const list = [];
+  if (root && root.nodeType === 1 && root.tagName === 'IMG') list.push(root);
+  imgs.forEach((img) => list.push(img));
+  for (let i = 0; i < list.length; i++) {
+    const img = list[i];
+    if (!img || !img.getAttribute) continue;
+    for (let j = 0; j < SCOUT_SITE_PREVIEW_ATTR_MAP.length; j++) {
+      const siteAttr = SCOUT_SITE_PREVIEW_ATTR_MAP[j][0];
+      const scoutAttr = SCOUT_SITE_PREVIEW_ATTR_MAP[j][1];
+      const cur = (img.getAttribute(scoutAttr) || '').trim();
+      if (cur && !img.getAttribute(siteAttr)) {
+        img.setAttribute(siteAttr, cur);
+      }
+    }
+  }
+}
+
+function killSiteListPreviewVideo(v) {
+  if (!v || !isBlockedSiteListVideo(v)) return;
+  try {
+    v.autoplay = false;
+    v.removeAttribute('autoplay');
+    v.preload = 'none';
+    v.muted = true;
+    try {
+      v.pause();
+    } catch (_) { /* ignore */ }
+    try {
+      v.removeAttribute('src');
+      while (v.firstChild) v.removeChild(v.firstChild);
+      v.load();
+    } catch (_) { /* ignore */ }
+    try {
+      if (v.parentNode && !v.classList.contains('scout-list-preview-video')) {
+        v.dataset.scoutKilledPreview = '1';
+        v.style.display = 'none';
+      }
+    } catch (_) { /* ignore */ }
+  } catch (_) { /* ignore */ }
+}
+
 function pauseSiteListPreviewVideos() {
   if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
   if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
-  document.querySelectorAll('video').forEach((v) => {
-    if (!v || v.classList.contains('scout-list-preview-video')) return;
-    if (isMainDetailPlayerVideo(v)) return;
-    if (!isSiteListPreviewHost(v) && !v.closest('.mozaique, #vidresults, #content')) return;
-    try {
-      v.autoplay = false;
-      v.removeAttribute('autoplay');
-      if (!v.paused) v.pause();
-    } catch (_) { /* ignore */ }
-  });
+  stashSitePreviewAttrs(document);
+  document.querySelectorAll('video').forEach((v) => killSiteListPreviewVideo(v));
+}
+
+function applyBlockSiteAutoPreviewMode() {
+  if (typeof isBlockSiteAutoPreview === 'function' && isBlockSiteAutoPreview()) {
+    pauseSiteListPreviewVideos();
+  } else {
+    restoreSitePreviewAttrs(document);
+  }
 }
 
 function setupBlockSiteAutoPreview() {
@@ -430,27 +518,89 @@ function setupBlockSiteAutoPreview() {
     document.addEventListener(type, stopHoverPreview, true);
   });
 
+  try {
+    if (!window.__scoutPlayPatched) {
+      window.__scoutPlayPatched = true;
+      const origPlay = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function scoutGuardedPlay() {
+        if (
+          typeof isBlockSiteAutoPreview === 'function' &&
+          isBlockSiteAutoPreview() &&
+          this &&
+          this.tagName === 'VIDEO' &&
+          isBlockedSiteListVideo(this)
+        ) {
+          killSiteListPreviewVideo(this);
+          return Promise.resolve();
+        }
+        return origPlay.apply(this, arguments);
+      };
+    }
+  } catch (e) {
+    console.warn('[Creamu Scout] play() patch failed', e);
+  }
+
   document.addEventListener(
     'play',
     (e) => {
       const v = e.target;
       if (!v || v.tagName !== 'VIDEO') return;
-      if (v.classList.contains('scout-list-preview-video')) return;
       if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
-      if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
-      if (isMainDetailPlayerVideo(v)) return;
-      if (!isSiteListPreviewHost(v) && !v.closest('.mozaique, #vidresults')) return;
-      try {
-        v.pause();
-      } catch (_) { /* ignore */ }
+      if (!isBlockedSiteListVideo(v)) return;
+      killSiteListPreviewVideo(v);
     },
     true
   );
+
+  try {
+    const obs = new MutationObserver((mutations) => {
+      if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
+      if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+      for (let i = 0; i < mutations.length; i++) {
+        const m = mutations[i];
+        if (m.type === 'attributes' && m.target && m.target.tagName === 'IMG') {
+          const name = m.attributeName || '';
+          if (name === 'data-pvv' || name === 'data-spvv' || name === 'data-preview') {
+            stashSitePreviewAttrs(m.target);
+          }
+          continue;
+        }
+        if (!m.addedNodes || !m.addedNodes.length) continue;
+        m.addedNodes.forEach((n) => {
+          if (!n || n.nodeType !== 1) return;
+          if (n.tagName === 'VIDEO') {
+            killSiteListPreviewVideo(n);
+            return;
+          }
+          if (n.tagName === 'IMG') {
+            stashSitePreviewAttrs(n);
+            return;
+          }
+          if (n.querySelectorAll) {
+            stashSitePreviewAttrs(n);
+            n.querySelectorAll('video').forEach((v) => killSiteListPreviewVideo(v));
+          }
+        });
+      }
+    });
+    obs.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-pvv', 'data-spvv', 'data-preview']
+    });
+  } catch (e) {
+    console.warn('[Creamu Scout] preview attr observer failed', e);
+  }
+
+  if (typeof isBlockSiteAutoPreview === 'function' && isBlockSiteAutoPreview()) {
+    try {
+      pauseSiteListPreviewVideos();
+    } catch (_) { /* ignore */ }
+  }
 }
 
-// ----------------------------------------
-// 详情 / 全屏：横向滑动调进度
-// ----------------------------------------
+// 详情全屏横滑 seek
 
 function formatScoutSeekTime(sec) {
   const s = Math.max(0, Math.floor(Number(sec) || 0));

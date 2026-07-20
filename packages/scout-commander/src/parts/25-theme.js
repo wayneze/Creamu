@@ -1166,11 +1166,7 @@ function getScoutThemeCss() {
           }
         }
 
-        /*
-         * 已点：PC 轻微整卡变暗；手机用缩略图遮罩（站点原生卡 opacity 几乎看不出，
-         * 且 eporner 手机曾强制 opacity:1 盖掉已点）。
-         * 屏蔽仍是 opacity ~0.08，两者差很多
-         */
+        /* 已点：PC 整卡略淡；手机缩略图遮罩 + 角标（与弱屏蔽 opacity~0.08 区分） */
         .scout-visited-item {
           opacity: 0.78 !important;
           filter: none !important;
@@ -1203,7 +1199,6 @@ function getScoutThemeCss() {
           html.scout-cream-site body.creamu-site-eporner .mb.scout-visited-item {
             opacity: 1 !important;
           }
-          /* 缩略图区域暗罩（不整卡淡） */
           .scout-visited-item .thumb,
           .scout-visited-item .thumb-inside,
           .scout-visited-item .mbimg,
@@ -1226,7 +1221,6 @@ function getScoutThemeCss() {
             z-index: 25 !important;
             border-radius: inherit;
           }
-          /* 无 .thumb 结构时：罩在首图上 */
           .scout-visited-item > a:first-child,
           .scout-visited-item a.thumb,
           .scout-visited-item .frame-block > a {
@@ -1777,7 +1771,6 @@ function getScoutThemeCss() {
             font-size: 14px !important;
             visibility: visible !important;
           }
-          /* 未点过才强制不透明，避免盖掉 .scout-visited-item */
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-visited-item),
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb[data-id]:not(.scout-visited-item) {
             opacity: 1 !important;
@@ -2240,7 +2233,6 @@ html.scout-cream-site body.creamu-site-xnxx #video-player-bg {
   background: #121010 !important;
 }
 
-/* 全屏横滑 seek 浮层（挂到 fullscreenElement 内才看得见） */
 #scout-seek-hud {
   position: fixed !important;
   left: 50% !important;

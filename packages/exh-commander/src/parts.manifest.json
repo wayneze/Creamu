@@ -1,0 +1,13 @@
+{
+  "parts": [
+    "00-header.meta.js",
+    "10-core.js",
+    "20-domain.js",
+    "30-storage.js",
+    "40-lrr.js",
+    "50-page.js",
+    "60-ui-page.js",
+    "70-workbench.js",
+    "80-boot.js"
+  ]
+}

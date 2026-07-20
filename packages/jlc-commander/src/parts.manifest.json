@@ -1,0 +1,11 @@
+{
+  "version": "3.5.2",
+  "generatedAt": "2026-07-18T18:49:33.483Z",
+  "parts": [
+    "00-header.meta.js",
+    "10-core.js",
+    "20-workbench.js",
+    "30-services-rest.js"
+  ],
+  "output": "dist/creamu-jlc.user.js"
+}

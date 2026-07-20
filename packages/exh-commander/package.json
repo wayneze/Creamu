@@ -1,0 +1,12 @@
+{
+  "name": "@creamu/exh-commander",
+  "version": "0.9.53",
+  "private": true,
+  "description": "Creamu · ExH — e-hentai / exhentai + LANraragi",
+  "author": "wayneze",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "node scripts/build.mjs"
+  }
+}

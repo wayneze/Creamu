@@ -1,0 +1,13 @@
+{
+  "name": "@creamu/jlc-commander",
+  "version": "3.8.1",
+  "private": true,
+  "description": "Creamu · JavLibrary — 奶油工作台 userscript",
+  "author": "wayneze",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "split": "node scripts/split.mjs",
+    "check": "node scripts/build.mjs"
+  }
+}

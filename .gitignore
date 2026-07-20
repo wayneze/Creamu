@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+.idea/
+.vscode/
+*.code-workspace
+
+# secrets & personal dumps
+.env
+.env.*
+*.pem
+*backup*.json
+*secret*
+**/local/
+**/private/
+
+# logs
+npm-debug.log*
+*.log
+
+# optional local notes
+TODO.local.md

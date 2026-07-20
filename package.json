@@ -1,0 +1,25 @@
+{
+  "name": "creamu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Creamu — userscript monorepo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wayneze/Creamu.git"
+  },
+  "author": "wayneze",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build -w @creamu/exh-commander && npm run build -w @creamu/jlc-commander && npm run build -w @creamu/scout-commander",
+    "build:exh": "npm run build -w @creamu/exh-commander",
+    "build:jlc": "npm run build -w @creamu/jlc-commander",
+    "build:scout": "npm run build -w @creamu/scout-commander",
+    "test:scout": "npm run test -w @creamu/scout-commander",
+    "check": "npm run check -w @creamu/scout-commander && npm run build -w @creamu/exh-commander && npm run build -w @creamu/jlc-commander"
+  },
+  "workspaces": [
+    "packages/exh-commander",
+    "packages/jlc-commander",
+    "packages/scout-commander"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@creamu/scout-commander",
+  "version": "0.1.2",
+  "private": true,
+  "description": "Creamu · Scout — 欧美发现 / 词库 / 屏蔽 / 追更断点",
+  "author": "wayneze",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test-core.mjs",
+    "check": "node scripts/test-core.mjs && node scripts/build.mjs"
+  }
+}

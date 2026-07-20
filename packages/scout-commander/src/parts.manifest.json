@@ -1,0 +1,19 @@
+{
+  "version": "0.1.2",
+  "description": "Scout parts build order; inject shared after 10-core.",
+  "parts": [
+    "00-header.meta.js",
+    "10-core.js",
+    "20-sites.js",
+    "25-theme.js",
+    "30-workbench.js",
+    "40-boot.js"
+  ],
+  "injectAfter": {
+    "10-core.js": [
+      "packages/shared/creamu-workbench-css.js",
+      "packages/shared/creamu-webdav.js"
+    ]
+  },
+  "output": "dist/creamu-scout.user.js"
+}

@@ -2729,6 +2729,16 @@ function renderSettingsPage(section) {
         </label>
       </div>
       <div class="legacy-note" style="margin-top:8px;">开启后列表点影片在新标签打开，不离开当前搜索页。组合搜索同样用新标签。</div>
+      <div class="legacy-row" style="margin-top:12px;">
+        <label class="legacy-toggle">
+          <span>关闭站点自动预览</span>
+          <input type="checkbox" id="scout-cfg-block-site-preview" ${cfg.block_site_auto_preview !== false ? 'checked' : ''}>
+        </label>
+      </div>
+      <div class="legacy-note" style="margin-top:8px;line-height:1.5;">
+        关掉 xv/xnxx 列表「滑过/进视野就播」的预览，减轻下滑卡顿。<br>
+        <b>不影响</b>Creamu：点缩略图仍可手动预览。
+      </div>
     `;
   } else if (sec === 'overview') {
     html = `
@@ -2842,6 +2852,20 @@ function renderSettingsPage(section) {
     curCfg.open_videos_new_tab = !!e.currentTarget.checked;
     saveConfig(curCfg);
     showToast(curCfg.open_videos_new_tab ? '影片将在新标签打开' : '影片将在当前页打开');
+  });
+
+  container.querySelector('#scout-cfg-block-site-preview')?.addEventListener('change', (e) => {
+    const curCfg = getConfig();
+    curCfg.block_site_auto_preview = !!e.currentTarget.checked;
+    saveConfig(curCfg);
+    if (typeof pauseSiteListPreviewVideos === 'function') {
+      try { pauseSiteListPreviewVideos(); } catch (_) { /* ignore */ }
+    }
+    showToast(
+      curCfg.block_site_auto_preview
+        ? '已关闭站点自动预览（点按预览仍可用）'
+        : '已恢复站点自动预览'
+    );
   });
 
   const copyText = (data, ta) => {

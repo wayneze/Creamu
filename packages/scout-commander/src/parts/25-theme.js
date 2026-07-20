@@ -1167,7 +1167,8 @@ function getScoutThemeCss() {
         }
 
         /*
-         * 已点：仅轻微变暗，保持彩色（不要灰度/角标/描边，避免像屏蔽）
+         * 已点：PC 轻微整卡变暗；手机用缩略图遮罩（站点原生卡 opacity 几乎看不出，
+         * 且 eporner 手机曾强制 opacity:1 盖掉已点）。
          * 屏蔽仍是 opacity ~0.08，两者差很多
          */
         .scout-visited-item {
@@ -1190,6 +1191,69 @@ function getScoutThemeCss() {
         body.creamu-site-eporner #vidresults .mb.scout-visited-item,
         body.creamu-site-eporner .mb.scout-visited-item {
           outline: none !important;
+        }
+        @media (max-width: 820px) {
+          .scout-visited-item {
+            opacity: 1 !important;
+            position: relative !important;
+            outline: 2px solid rgba(200, 200, 210, 0.55) !important;
+            outline-offset: 0 !important;
+          }
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb.scout-visited-item,
+          html.scout-cream-site body.creamu-site-eporner .mb.scout-visited-item {
+            opacity: 1 !important;
+          }
+          /* 缩略图区域暗罩（不整卡淡） */
+          .scout-visited-item .thumb,
+          .scout-visited-item .thumb-inside,
+          .scout-visited-item .mbimg,
+          .scout-visited-item .mbcontent {
+            position: relative !important;
+          }
+          .scout-visited-item .thumb::after,
+          .scout-visited-item .thumb-inside::after,
+          .scout-visited-item .mbimg::after,
+          .scout-visited-item .mbcontent::after {
+            content: '' !important;
+            display: block !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background: rgba(0, 0, 0, 0.42) !important;
+            pointer-events: none !important;
+            z-index: 25 !important;
+            border-radius: inherit;
+          }
+          /* 无 .thumb 结构时：罩在首图上 */
+          .scout-visited-item > a:first-child,
+          .scout-visited-item a.thumb,
+          .scout-visited-item .frame-block > a {
+            position: relative !important;
+          }
+          .scout-visited-item::before {
+            content: '过' !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            position: absolute !important;
+            top: 6px !important;
+            right: 6px !important;
+            z-index: 40 !important;
+            min-width: 22px !important;
+            height: 20px !important;
+            padding: 0 6px !important;
+            border-radius: 6px !important;
+            font-size: 11px !important;
+            font-weight: 750 !important;
+            line-height: 1 !important;
+            color: #f2f2f4 !important;
+            background: rgba(0, 0, 0, 0.62) !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
+            pointer-events: none !important;
+            box-sizing: border-box !important;
+          }
         }
 
         .scout-pub-loved-card {
@@ -1712,6 +1776,10 @@ function getScoutThemeCss() {
             box-sizing: border-box !important;
             font-size: 14px !important;
             visibility: visible !important;
+          }
+          /* 未点过才强制不透明，避免盖掉 .scout-visited-item */
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-visited-item),
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb[data-id]:not(.scout-visited-item) {
             opacity: 1 !important;
           }
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbimg,
@@ -1719,6 +1787,8 @@ function getScoutThemeCss() {
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb img {
             max-width: 100% !important;
             visibility: visible !important;
+          }
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-visited-item) img {
             opacity: 1 !important;
           }
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb img {
@@ -2168,6 +2238,29 @@ html.scout-cream-site body.creamu-site-eporner .tag-container a {
 html.scout-cream-site body.creamu-site-xvideos #video-player-bg,
 html.scout-cream-site body.creamu-site-xnxx #video-player-bg {
   background: #121010 !important;
+}
+
+/* 全屏横滑 seek 浮层（挂到 fullscreenElement 内才看得见） */
+#scout-seek-hud {
+  position: fixed !important;
+  left: 50% !important;
+  top: 18% !important;
+  transform: translateX(-50%) !important;
+  z-index: 2147483646 !important;
+  padding: 10px 16px !important;
+  border-radius: 12px !important;
+  background: rgba(0, 0, 0, 0.72) !important;
+  color: #fff !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  pointer-events: none !important;
+  white-space: nowrap !important;
+  display: none !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
+}
+#scout-seek-hud.is-on {
+  display: block !important;
 }
 `;
 }

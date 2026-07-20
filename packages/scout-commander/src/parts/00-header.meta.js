@@ -2,7 +2,7 @@
 // @name         Creamu · Scout
 // @name:zh-CN   Creamu · Scout
 // @namespace    https://github.com/wayneze/Creamu
-// @version      0.1.2
+// @version      0.1.3
 // @description  Creamu：欧美发现工作台；组合模板；词库采集；屏蔽；搜索追更断点；导入导出
 // @author       wayneze
 // @match        *://*.xvideos.com/*

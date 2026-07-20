@@ -2,7 +2,7 @@
 // @name         Creamu · Scout
 // @name:zh-CN   Creamu · Scout
 // @namespace    https://github.com/wayneze/Creamu
-// @version      0.1.2
+// @version      0.1.3
 // @description  Creamu：欧美发现工作台；组合模板；词库采集；屏蔽；搜索追更断点；导入导出
 // @author       wayneze
 // @match        *://*.xvideos.com/*
@@ -25,7 +25,7 @@
   'use strict';
 // 10-core.js
 
-const SCOUT_VERSION = '0.1.2';
+const SCOUT_VERSION = '0.1.3';
 
 function compactText(str) {
   return String(str == null ? '' : str).replace(/\s+/g, ' ').trim();
@@ -1370,6 +1370,11 @@ function getConfig() {
     /** 列表点影片是否新标签打开（默认开，避免站点当前页跳转） */
     open_videos_new_tab: true,
     /**
+     * 关闭站点列表自动预览（xv/xnxx 滑过/进视野自动播会卡顿）。
+     * 不影响 Creamu「点缩略图才播」的预览。默认开。
+     */
+    block_site_auto_preview: true,
+    /**
      * 组合搜索多词连接：and（默认，多站更稳）| space | or
      */
     combo_join: 'and'
@@ -1427,6 +1432,12 @@ function openScoutUrl(url, opts) {
 function isOpenVideosNewTab() {
   const cfg = getConfig();
   return cfg.open_videos_new_tab !== false;
+}
+
+/** 是否拦截站点列表自动预览（默认 true） */
+function isBlockSiteAutoPreview() {
+  const cfg = getConfig();
+  return cfg.block_site_auto_preview !== false;
 }
 
 /** 组合搜索连接符：and | space | or */
@@ -5028,7 +5039,8 @@ function getScoutThemeCss() {
         }
 
         /*
-         * 已点：仅轻微变暗，保持彩色（不要灰度/角标/描边，避免像屏蔽）
+         * 已点：PC 轻微整卡变暗；手机用缩略图遮罩（站点原生卡 opacity 几乎看不出，
+         * 且 eporner 手机曾强制 opacity:1 盖掉已点）。
          * 屏蔽仍是 opacity ~0.08，两者差很多
          */
         .scout-visited-item {
@@ -5051,6 +5063,69 @@ function getScoutThemeCss() {
         body.creamu-site-eporner #vidresults .mb.scout-visited-item,
         body.creamu-site-eporner .mb.scout-visited-item {
           outline: none !important;
+        }
+        @media (max-width: 820px) {
+          .scout-visited-item {
+            opacity: 1 !important;
+            position: relative !important;
+            outline: 2px solid rgba(200, 200, 210, 0.55) !important;
+            outline-offset: 0 !important;
+          }
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb.scout-visited-item,
+          html.scout-cream-site body.creamu-site-eporner .mb.scout-visited-item {
+            opacity: 1 !important;
+          }
+          /* 缩略图区域暗罩（不整卡淡） */
+          .scout-visited-item .thumb,
+          .scout-visited-item .thumb-inside,
+          .scout-visited-item .mbimg,
+          .scout-visited-item .mbcontent {
+            position: relative !important;
+          }
+          .scout-visited-item .thumb::after,
+          .scout-visited-item .thumb-inside::after,
+          .scout-visited-item .mbimg::after,
+          .scout-visited-item .mbcontent::after {
+            content: '' !important;
+            display: block !important;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            background: rgba(0, 0, 0, 0.42) !important;
+            pointer-events: none !important;
+            z-index: 25 !important;
+            border-radius: inherit;
+          }
+          /* 无 .thumb 结构时：罩在首图上 */
+          .scout-visited-item > a:first-child,
+          .scout-visited-item a.thumb,
+          .scout-visited-item .frame-block > a {
+            position: relative !important;
+          }
+          .scout-visited-item::before {
+            content: '过' !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            position: absolute !important;
+            top: 6px !important;
+            right: 6px !important;
+            z-index: 40 !important;
+            min-width: 22px !important;
+            height: 20px !important;
+            padding: 0 6px !important;
+            border-radius: 6px !important;
+            font-size: 11px !important;
+            font-weight: 750 !important;
+            line-height: 1 !important;
+            color: #f2f2f4 !important;
+            background: rgba(0, 0, 0, 0.62) !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
+            pointer-events: none !important;
+            box-sizing: border-box !important;
+          }
         }
 
         .scout-pub-loved-card {
@@ -5573,6 +5648,10 @@ function getScoutThemeCss() {
             box-sizing: border-box !important;
             font-size: 14px !important;
             visibility: visible !important;
+          }
+          /* 未点过才强制不透明，避免盖掉 .scout-visited-item */
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-visited-item),
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb[data-id]:not(.scout-visited-item) {
             opacity: 1 !important;
           }
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbimg,
@@ -5580,6 +5659,8 @@ function getScoutThemeCss() {
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb img {
             max-width: 100% !important;
             visibility: visible !important;
+          }
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-visited-item) img {
             opacity: 1 !important;
           }
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb img {
@@ -6029,6 +6110,29 @@ html.scout-cream-site body.creamu-site-eporner .tag-container a {
 html.scout-cream-site body.creamu-site-xvideos #video-player-bg,
 html.scout-cream-site body.creamu-site-xnxx #video-player-bg {
   background: #121010 !important;
+}
+
+/* 全屏横滑 seek 浮层（挂到 fullscreenElement 内才看得见） */
+#scout-seek-hud {
+  position: fixed !important;
+  left: 50% !important;
+  top: 18% !important;
+  transform: translateX(-50%) !important;
+  z-index: 2147483646 !important;
+  padding: 10px 16px !important;
+  border-radius: 12px !important;
+  background: rgba(0, 0, 0, 0.72) !important;
+  color: #fff !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  pointer-events: none !important;
+  white-space: nowrap !important;
+  display: none !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
+}
+#scout-seek-hud.is-on {
+  display: block !important;
 }
 `;
 }
@@ -8763,6 +8867,16 @@ function renderSettingsPage(section) {
         </label>
       </div>
       <div class="legacy-note" style="margin-top:8px;">开启后列表点影片在新标签打开，不离开当前搜索页。组合搜索同样用新标签。</div>
+      <div class="legacy-row" style="margin-top:12px;">
+        <label class="legacy-toggle">
+          <span>关闭站点自动预览</span>
+          <input type="checkbox" id="scout-cfg-block-site-preview" ${cfg.block_site_auto_preview !== false ? 'checked' : ''}>
+        </label>
+      </div>
+      <div class="legacy-note" style="margin-top:8px;line-height:1.5;">
+        关掉 xv/xnxx 列表「滑过/进视野就播」的预览，减轻下滑卡顿。<br>
+        <b>不影响</b>Creamu：点缩略图仍可手动预览。
+      </div>
     `;
   } else if (sec === 'overview') {
     html = `
@@ -8876,6 +8990,20 @@ function renderSettingsPage(section) {
     curCfg.open_videos_new_tab = !!e.currentTarget.checked;
     saveConfig(curCfg);
     showToast(curCfg.open_videos_new_tab ? '影片将在新标签打开' : '影片将在当前页打开');
+  });
+
+  container.querySelector('#scout-cfg-block-site-preview')?.addEventListener('change', (e) => {
+    const curCfg = getConfig();
+    curCfg.block_site_auto_preview = !!e.currentTarget.checked;
+    saveConfig(curCfg);
+    if (typeof pauseSiteListPreviewVideos === 'function') {
+      try { pauseSiteListPreviewVideos(); } catch (_) { /* ignore */ }
+    }
+    showToast(
+      curCfg.block_site_auto_preview
+        ? '已关闭站点自动预览（点按预览仍可用）'
+        : '已恢复站点自动预览'
+    );
   });
 
   const copyText = (data, ta) => {
@@ -9704,6 +9832,229 @@ function setupListPreviewPlayback() {
 }
 
 // ----------------------------------------
+// 关闭站点列表自动预览（不影响 Creamu 点按预览）
+// ----------------------------------------
+
+function isSiteListPreviewHost(el) {
+  if (!el || !el.closest) return false;
+  return !!el.closest(
+    '.thumb-block, .thumb, .thumb-inside, .mozaique, .video-block, ' +
+      '.mb, .mbimg, .mbcontent, #vidresults, #videos-list .post, .post'
+  );
+}
+
+function isMainDetailPlayerVideo(v) {
+  if (!v || !v.closest) return false;
+  return !!v.closest(
+    '#html5video, #html5video_base, #video-player-bg, .video-player, ' +
+      '#player, .x-video-player, [class*="player-container"]'
+  );
+}
+
+/** 暂停列表里非 Creamu 的预览 video */
+function pauseSiteListPreviewVideos() {
+  if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
+  if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+  document.querySelectorAll('video').forEach((v) => {
+    if (!v || v.classList.contains('scout-list-preview-video')) return;
+    if (isMainDetailPlayerVideo(v)) return;
+    if (!isSiteListPreviewHost(v) && !v.closest('.mozaique, #vidresults, #content')) return;
+    try {
+      v.autoplay = false;
+      v.removeAttribute('autoplay');
+      if (!v.paused) v.pause();
+    } catch (_) { /* ignore */ }
+  });
+}
+
+function setupBlockSiteAutoPreview() {
+  if (window.__scoutBlockSitePreviewBound) return;
+  window.__scoutBlockSitePreviewBound = true;
+
+  const stopHoverPreview = (e) => {
+    if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
+    if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+    if (e.target && e.target.closest && e.target.closest('#jlc-wb, #jlc-wb-fab, .scout-list-preview-layer')) {
+      return;
+    }
+    if (!isSiteListPreviewHost(e.target)) return;
+    e.stopPropagation();
+  };
+  ['mouseenter', 'mouseover', 'pointerenter', 'pointerover'].forEach((type) => {
+    document.addEventListener(type, stopHoverPreview, true);
+  });
+
+  document.addEventListener(
+    'play',
+    (e) => {
+      const v = e.target;
+      if (!v || v.tagName !== 'VIDEO') return;
+      if (v.classList.contains('scout-list-preview-video')) return;
+      if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
+      if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+      if (isMainDetailPlayerVideo(v)) return;
+      if (!isSiteListPreviewHost(v) && !v.closest('.mozaique, #vidresults')) return;
+      try {
+        v.pause();
+      } catch (_) { /* ignore */ }
+    },
+    true
+  );
+}
+
+// ----------------------------------------
+// 详情 / 全屏：横向滑动调进度
+// ----------------------------------------
+
+function formatScoutSeekTime(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m + ':' + String(r).padStart(2, '0');
+}
+
+function findScoutDetailVideo() {
+  const sels = [
+    '#html5video video',
+    '#html5video_base video',
+    '#video-player-bg video',
+    '.video-player video',
+    '#player video',
+    'video'
+  ];
+  for (const s of sels) {
+    const v = document.querySelector(s);
+    if (v && v.tagName === 'VIDEO') return v;
+  }
+  return null;
+}
+
+function getScoutFullscreenRoot() {
+  return (
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement ||
+    null
+  );
+}
+
+function showScoutSeekHud(text, mountRoot) {
+  const root = mountRoot || document.documentElement;
+  let el = document.getElementById('scout-seek-hud');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'scout-seek-hud';
+    el.style.cssText =
+      'position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:2147483646;' +
+      'padding:10px 16px;border-radius:12px;background:rgba(0,0,0,.72);color:#fff;' +
+      'font-size:16px;font-weight:700;pointer-events:none;white-space:nowrap;' +
+      'box-shadow:0 6px 20px rgba(0,0,0,.35);display:none;';
+  }
+  if (el.parentNode !== root) {
+    try {
+      root.appendChild(el);
+    } catch (_) {
+      document.documentElement.appendChild(el);
+    }
+  }
+  el.textContent = text;
+  el.style.display = 'block';
+  el.classList.add('is-on');
+  if (el._scoutHideTimer) clearTimeout(el._scoutHideTimer);
+  el._scoutHideTimer = setTimeout(() => {
+    el.style.display = 'none';
+    el.classList.remove('is-on');
+  }, 700);
+}
+
+function setupVideoSeekGesture() {
+  if (window.__scoutSeekGestureBound) return;
+  window.__scoutSeekGestureBound = true;
+
+  let tracking = false;
+  let axisLocked = '';
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  let video = null;
+  let moved = false;
+
+  const reset = () => {
+    tracking = false;
+    axisLocked = '';
+    video = null;
+    moved = false;
+  };
+
+  const onStart = (e) => {
+    if (typeof detectPageKind === 'function' && detectPageKind() !== 'video') return;
+    if (!e.touches || e.touches.length !== 1) return;
+    const fs = getScoutFullscreenRoot();
+    if (!fs) return;
+    const v = findScoutDetailVideo();
+    if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
+    const target = e.target;
+    if (!fs.contains(target) && target !== fs) return;
+    const t = e.touches[0];
+    tracking = true;
+    axisLocked = '';
+    moved = false;
+    startX = t.clientX;
+    startY = t.clientY;
+    startTime = v.currentTime || 0;
+    video = v;
+  };
+
+  const onMove = (e) => {
+    if (!tracking || !video || !e.touches || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    if (!axisLocked) {
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+      axisLocked = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
+      if (axisLocked === 'v') {
+        reset();
+        return;
+      }
+    }
+    if (axisLocked !== 'h') return;
+    e.preventDefault();
+    moved = true;
+    const w = Math.max(window.innerWidth || 320, 320);
+    const span = Math.min(90, Math.max(30, (video.duration || 90) * 0.25));
+    const delta = (dx / w) * span;
+    let next = startTime + delta;
+    next = Math.max(0, Math.min(video.duration - 0.25, next));
+    const sign = delta >= 0 ? '+' : '−';
+    const abs = formatScoutSeekTime(Math.abs(delta));
+    const fs = getScoutFullscreenRoot() || document.documentElement;
+    showScoutSeekHud(
+      sign + abs + ' → ' + formatScoutSeekTime(next) + ' / ' + formatScoutSeekTime(video.duration),
+      fs
+    );
+    try {
+      video.currentTime = next;
+    } catch (_) { /* ignore */ }
+  };
+
+  const onEnd = () => {
+    if (tracking && moved && video && typeof showToast === 'function') {
+      try {
+        showToast('进度 ' + formatScoutSeekTime(video.currentTime));
+      } catch (_) { /* ignore */ }
+    }
+    reset();
+  };
+
+  document.addEventListener('touchstart', onStart, { passive: true, capture: true });
+  document.addEventListener('touchmove', onMove, { passive: false, capture: true });
+  document.addEventListener('touchend', onEnd, { passive: true, capture: true });
+  document.addEventListener('touchcancel', onEnd, { passive: true, capture: true });
+}
+
+// ----------------------------------------
 // Page lifecycle: MutationObserver + history
 // ----------------------------------------
 let __scoutEnhancing = false;
@@ -9750,6 +10101,7 @@ function refreshPageEnhancements(reason) {
       if (navigated || reason === 'boot') {
         checkSearchTrackingBreakpoints();
       }
+      pauseSiteListPreviewVideos();
     } else {
       // 首页/分类等列表页
       applyClickedEnhancements();
@@ -9760,6 +10112,7 @@ function refreshPageEnhancements(reason) {
         try { setupListPreviewPlayback(); } catch (e) { console.warn(e); }
       }
       document.getElementById('scout-search-track-bar')?.remove();
+      pauseSiteListPreviewVideos();
     }
 
     if (kind === 'video') {
@@ -9812,8 +10165,9 @@ function isScoutUiNode(node) {
   )) {
     return true;
   }
+  if (node.id === 'scout-seek-hud') return true;
   return !!(node.closest && node.closest(
-    '#scout-lex-hit-bar, #scout-work-fav-bar, #jlc-wb, #jlc-wb-fab, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
+    '#scout-lex-hit-bar, #scout-work-fav-bar, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
   ));
 }
 
@@ -9904,6 +10258,12 @@ function bootCreamuScout() {
     try { dedupeBlockListStore(); } catch (_) { /* ignore */ }
   }
   setupScoutPageLifecycle();
+  if (typeof setupBlockSiteAutoPreview === 'function') {
+    try { setupBlockSiteAutoPreview(); } catch (_) { /* ignore */ }
+  }
+  if (typeof setupVideoSeekGesture === 'function') {
+    try { setupVideoSeekGesture(); } catch (_) { /* ignore */ }
+  }
   refreshPageEnhancements('boot');
   if (typeof applyVideoOpenMode === 'function') {
     try { applyVideoOpenMode(); } catch (_) { /* ignore */ }

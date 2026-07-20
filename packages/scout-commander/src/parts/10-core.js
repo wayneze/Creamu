@@ -1,6 +1,6 @@
 // 10-core.js
 
-const SCOUT_VERSION = '0.1.2';
+const SCOUT_VERSION = '0.1.3';
 
 function compactText(str) {
   return String(str == null ? '' : str).replace(/\s+/g, ' ').trim();
@@ -1345,6 +1345,11 @@ function getConfig() {
     /** 列表点影片是否新标签打开（默认开，避免站点当前页跳转） */
     open_videos_new_tab: true,
     /**
+     * 关闭站点列表自动预览（xv/xnxx 滑过/进视野自动播会卡顿）。
+     * 不影响 Creamu「点缩略图才播」的预览。默认开。
+     */
+    block_site_auto_preview: true,
+    /**
      * 组合搜索多词连接：and（默认，多站更稳）| space | or
      */
     combo_join: 'and'
@@ -1402,6 +1407,12 @@ function openScoutUrl(url, opts) {
 function isOpenVideosNewTab() {
   const cfg = getConfig();
   return cfg.open_videos_new_tab !== false;
+}
+
+/** 是否拦截站点列表自动预览（默认 true） */
+function isBlockSiteAutoPreview() {
+  const cfg = getConfig();
+  return cfg.block_site_auto_preview !== false;
 }
 
 /** 组合搜索连接符：and | space | or */

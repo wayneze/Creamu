@@ -378,6 +378,229 @@ function setupListPreviewPlayback() {
 }
 
 // ----------------------------------------
+// 关闭站点列表自动预览（不影响 Creamu 点按预览）
+// ----------------------------------------
+
+function isSiteListPreviewHost(el) {
+  if (!el || !el.closest) return false;
+  return !!el.closest(
+    '.thumb-block, .thumb, .thumb-inside, .mozaique, .video-block, ' +
+      '.mb, .mbimg, .mbcontent, #vidresults, #videos-list .post, .post'
+  );
+}
+
+function isMainDetailPlayerVideo(v) {
+  if (!v || !v.closest) return false;
+  return !!v.closest(
+    '#html5video, #html5video_base, #video-player-bg, .video-player, ' +
+      '#player, .x-video-player, [class*="player-container"]'
+  );
+}
+
+/** 暂停列表里非 Creamu 的预览 video */
+function pauseSiteListPreviewVideos() {
+  if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
+  if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+  document.querySelectorAll('video').forEach((v) => {
+    if (!v || v.classList.contains('scout-list-preview-video')) return;
+    if (isMainDetailPlayerVideo(v)) return;
+    if (!isSiteListPreviewHost(v) && !v.closest('.mozaique, #vidresults, #content')) return;
+    try {
+      v.autoplay = false;
+      v.removeAttribute('autoplay');
+      if (!v.paused) v.pause();
+    } catch (_) { /* ignore */ }
+  });
+}
+
+function setupBlockSiteAutoPreview() {
+  if (window.__scoutBlockSitePreviewBound) return;
+  window.__scoutBlockSitePreviewBound = true;
+
+  const stopHoverPreview = (e) => {
+    if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
+    if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+    if (e.target && e.target.closest && e.target.closest('#jlc-wb, #jlc-wb-fab, .scout-list-preview-layer')) {
+      return;
+    }
+    if (!isSiteListPreviewHost(e.target)) return;
+    e.stopPropagation();
+  };
+  ['mouseenter', 'mouseover', 'pointerenter', 'pointerover'].forEach((type) => {
+    document.addEventListener(type, stopHoverPreview, true);
+  });
+
+  document.addEventListener(
+    'play',
+    (e) => {
+      const v = e.target;
+      if (!v || v.tagName !== 'VIDEO') return;
+      if (v.classList.contains('scout-list-preview-video')) return;
+      if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
+      if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+      if (isMainDetailPlayerVideo(v)) return;
+      if (!isSiteListPreviewHost(v) && !v.closest('.mozaique, #vidresults')) return;
+      try {
+        v.pause();
+      } catch (_) { /* ignore */ }
+    },
+    true
+  );
+}
+
+// ----------------------------------------
+// 详情 / 全屏：横向滑动调进度
+// ----------------------------------------
+
+function formatScoutSeekTime(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m + ':' + String(r).padStart(2, '0');
+}
+
+function findScoutDetailVideo() {
+  const sels = [
+    '#html5video video',
+    '#html5video_base video',
+    '#video-player-bg video',
+    '.video-player video',
+    '#player video',
+    'video'
+  ];
+  for (const s of sels) {
+    const v = document.querySelector(s);
+    if (v && v.tagName === 'VIDEO') return v;
+  }
+  return null;
+}
+
+function getScoutFullscreenRoot() {
+  return (
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement ||
+    null
+  );
+}
+
+function showScoutSeekHud(text, mountRoot) {
+  const root = mountRoot || document.documentElement;
+  let el = document.getElementById('scout-seek-hud');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'scout-seek-hud';
+    el.style.cssText =
+      'position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:2147483646;' +
+      'padding:10px 16px;border-radius:12px;background:rgba(0,0,0,.72);color:#fff;' +
+      'font-size:16px;font-weight:700;pointer-events:none;white-space:nowrap;' +
+      'box-shadow:0 6px 20px rgba(0,0,0,.35);display:none;';
+  }
+  if (el.parentNode !== root) {
+    try {
+      root.appendChild(el);
+    } catch (_) {
+      document.documentElement.appendChild(el);
+    }
+  }
+  el.textContent = text;
+  el.style.display = 'block';
+  el.classList.add('is-on');
+  if (el._scoutHideTimer) clearTimeout(el._scoutHideTimer);
+  el._scoutHideTimer = setTimeout(() => {
+    el.style.display = 'none';
+    el.classList.remove('is-on');
+  }, 700);
+}
+
+function setupVideoSeekGesture() {
+  if (window.__scoutSeekGestureBound) return;
+  window.__scoutSeekGestureBound = true;
+
+  let tracking = false;
+  let axisLocked = '';
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  let video = null;
+  let moved = false;
+
+  const reset = () => {
+    tracking = false;
+    axisLocked = '';
+    video = null;
+    moved = false;
+  };
+
+  const onStart = (e) => {
+    if (typeof detectPageKind === 'function' && detectPageKind() !== 'video') return;
+    if (!e.touches || e.touches.length !== 1) return;
+    const fs = getScoutFullscreenRoot();
+    if (!fs) return;
+    const v = findScoutDetailVideo();
+    if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
+    const target = e.target;
+    if (!fs.contains(target) && target !== fs) return;
+    const t = e.touches[0];
+    tracking = true;
+    axisLocked = '';
+    moved = false;
+    startX = t.clientX;
+    startY = t.clientY;
+    startTime = v.currentTime || 0;
+    video = v;
+  };
+
+  const onMove = (e) => {
+    if (!tracking || !video || !e.touches || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX;
+    const dy = t.clientY - startY;
+    if (!axisLocked) {
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+      axisLocked = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v';
+      if (axisLocked === 'v') {
+        reset();
+        return;
+      }
+    }
+    if (axisLocked !== 'h') return;
+    e.preventDefault();
+    moved = true;
+    const w = Math.max(window.innerWidth || 320, 320);
+    const span = Math.min(90, Math.max(30, (video.duration || 90) * 0.25));
+    const delta = (dx / w) * span;
+    let next = startTime + delta;
+    next = Math.max(0, Math.min(video.duration - 0.25, next));
+    const sign = delta >= 0 ? '+' : '−';
+    const abs = formatScoutSeekTime(Math.abs(delta));
+    const fs = getScoutFullscreenRoot() || document.documentElement;
+    showScoutSeekHud(
+      sign + abs + ' → ' + formatScoutSeekTime(next) + ' / ' + formatScoutSeekTime(video.duration),
+      fs
+    );
+    try {
+      video.currentTime = next;
+    } catch (_) { /* ignore */ }
+  };
+
+  const onEnd = () => {
+    if (tracking && moved && video && typeof showToast === 'function') {
+      try {
+        showToast('进度 ' + formatScoutSeekTime(video.currentTime));
+      } catch (_) { /* ignore */ }
+    }
+    reset();
+  };
+
+  document.addEventListener('touchstart', onStart, { passive: true, capture: true });
+  document.addEventListener('touchmove', onMove, { passive: false, capture: true });
+  document.addEventListener('touchend', onEnd, { passive: true, capture: true });
+  document.addEventListener('touchcancel', onEnd, { passive: true, capture: true });
+}
+
+// ----------------------------------------
 // Page lifecycle: MutationObserver + history
 // ----------------------------------------
 let __scoutEnhancing = false;
@@ -424,6 +647,7 @@ function refreshPageEnhancements(reason) {
       if (navigated || reason === 'boot') {
         checkSearchTrackingBreakpoints();
       }
+      pauseSiteListPreviewVideos();
     } else {
       // 首页/分类等列表页
       applyClickedEnhancements();
@@ -434,6 +658,7 @@ function refreshPageEnhancements(reason) {
         try { setupListPreviewPlayback(); } catch (e) { console.warn(e); }
       }
       document.getElementById('scout-search-track-bar')?.remove();
+      pauseSiteListPreviewVideos();
     }
 
     if (kind === 'video') {
@@ -486,8 +711,9 @@ function isScoutUiNode(node) {
   )) {
     return true;
   }
+  if (node.id === 'scout-seek-hud') return true;
   return !!(node.closest && node.closest(
-    '#scout-lex-hit-bar, #scout-work-fav-bar, #jlc-wb, #jlc-wb-fab, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
+    '#scout-lex-hit-bar, #scout-work-fav-bar, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
   ));
 }
 
@@ -578,6 +804,12 @@ function bootCreamuScout() {
     try { dedupeBlockListStore(); } catch (_) { /* ignore */ }
   }
   setupScoutPageLifecycle();
+  if (typeof setupBlockSiteAutoPreview === 'function') {
+    try { setupBlockSiteAutoPreview(); } catch (_) { /* ignore */ }
+  }
+  if (typeof setupVideoSeekGesture === 'function') {
+    try { setupVideoSeekGesture(); } catch (_) { /* ignore */ }
+  }
   refreshPageEnhancements('boot');
   if (typeof applyVideoOpenMode === 'function') {
     try { applyVideoOpenMode(); } catch (_) { /* ignore */ }

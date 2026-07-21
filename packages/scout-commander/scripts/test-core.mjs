@@ -721,6 +721,25 @@ test('多词短语整词匹配', () => {
   assert.strictEqual(ctx.textMatchesBlock('stepmother', block), false);
 });
 
+test('主题 CSS：手机 eporner 不得用 !important 强制盖掉屏蔽类', () => {
+  const themeSrc = fs.readFileSync(path.join(partsDir, '25-theme.js'), 'utf8');
+  // 回归：曾用 #vidresults .mb { display:inline-block !important } 盖掉 hide
+  assert.ok(
+    themeSrc.includes('.mb:not(.scout-blocked-hide)') ||
+      themeSrc.includes('.mb[data-id]:not(.scout-blocked-hide)'),
+    'eporner 手机卡 display 规则须排除 .scout-blocked-hide'
+  );
+  assert.ok(
+    themeSrc.includes('.mb:not(.scout-blocked-dim)') ||
+      themeSrc.includes('not(.scout-blocked-dim)'),
+    'eporner 手机卡 opacity 规则须排除 .scout-blocked-dim'
+  );
+  assert.ok(
+    themeSrc.includes('.scout-blocked-hide') && themeSrc.includes('.scout-blocked-dim'),
+    '须提供屏蔽类样式'
+  );
+});
+
 if (process.exitCode) {
   console.error('\nSome tests failed.');
   process.exit(1);

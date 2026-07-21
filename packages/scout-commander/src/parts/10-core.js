@@ -1,6 +1,6 @@
 // 10-core.js
 
-const SCOUT_VERSION = '0.1.4';
+const SCOUT_VERSION = '0.1.5';
 
 function compactText(str) {
   return String(str == null ? '' : str).replace(/\s+/g, ' ').trim();

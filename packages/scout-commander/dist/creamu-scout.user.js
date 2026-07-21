@@ -2,7 +2,7 @@
 // @name         Creamu · Scout
 // @name:zh-CN   Creamu · Scout
 // @namespace    https://github.com/wayneze/Creamu
-// @version      0.1.4
+// @version      0.1.5
 // @description  Creamu：欧美发现工作台；组合模板；词库采集；屏蔽；搜索追更断点；导入导出
 // @author       wayneze
 // @match        *://*.xvideos.com/*
@@ -25,7 +25,7 @@
   'use strict';
 // 10-core.js
 
-const SCOUT_VERSION = '0.1.4';
+const SCOUT_VERSION = '0.1.5';
 
 function compactText(str) {
   return String(str == null ? '' : str).replace(/\s+/g, ' ').trim();
@@ -5034,6 +5034,25 @@ function getScoutThemeCss() {
           }
         }
 
+        /* 列表屏蔽：!important + 类名，避免主题强制 display/opacity 盖掉内联样式 */
+        .thumb-block.scout-blocked-hide,
+        .video-block.scout-blocked-hide,
+        .mb.scout-blocked-hide,
+        .post.scout-blocked-hide,
+        [id^="video_"].scout-blocked-hide {
+          display: none !important;
+          visibility: hidden !important;
+          pointer-events: none !important;
+        }
+        .thumb-block.scout-blocked-dim,
+        .video-block.scout-blocked-dim,
+        .mb.scout-blocked-dim,
+        .post.scout-blocked-dim,
+        [id^="video_"].scout-blocked-dim {
+          opacity: 0.08 !important;
+          pointer-events: none !important;
+        }
+
         /* 已点：PC 整卡略淡；手机缩略图遮罩 + 角标（与弱屏蔽 opacity~0.08 区分） */
         .scout-visited-item {
           opacity: 0.78 !important;
@@ -5625,8 +5644,9 @@ function getScoutThemeCss() {
             box-sizing: border-box !important;
             font-size: 0 !important; /* 清 inline-block 空隙；子项再设字号 */
           }
-          html.scout-cream-site body.creamu-site-eporner #vidresults .mb,
-          html.scout-cream-site body.creamu-site-eporner #vidresults .mb[data-id] {
+          /* 排除 .scout-blocked-*，否则 !important 会盖掉屏蔽 hide/dim */
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-blocked-hide),
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb[data-id]:not(.scout-blocked-hide) {
             display: inline-block !important;
             float: none !important;
             vertical-align: top !important;
@@ -5639,8 +5659,8 @@ function getScoutThemeCss() {
             font-size: 14px !important;
             visibility: visible !important;
           }
-          html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-visited-item),
-          html.scout-cream-site body.creamu-site-eporner #vidresults .mb[data-id]:not(.scout-visited-item) {
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-blocked-dim):not(.scout-visited-item),
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb[data-id]:not(.scout-blocked-dim):not(.scout-visited-item) {
             opacity: 1 !important;
           }
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbimg,
@@ -5649,7 +5669,7 @@ function getScoutThemeCss() {
             max-width: 100% !important;
             visibility: visible !important;
           }
-          html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-visited-item) img {
+          html.scout-cream-site body.creamu-site-eporner #vidresults .mb:not(.scout-blocked-dim):not(.scout-visited-item) img {
             opacity: 1 !important;
           }
           html.scout-cream-site body.creamu-site-eporner #vidresults .mb img {
@@ -6453,7 +6473,51 @@ function makeResizable(wbEl) {
   if (resizeH) resizeH.addEventListener('pointerdown', (e) => initResize(e, 'h'));
 }
 
-// 
+/** 清除列表卡屏蔽呈现（类名 + 内联，避免被主题 !important 盖掉） */
+function clearListBlockPresentation(el) {
+  if (!el) return;
+  el.classList.remove('scout-blocked-hide', 'scout-blocked-dim');
+  try {
+    el.style.removeProperty('display');
+    el.style.removeProperty('opacity');
+    el.style.removeProperty('pointer-events');
+  } catch (_) {
+    el.style.display = '';
+    el.style.opacity = '';
+    el.style.pointerEvents = '';
+  }
+  el.removeAttribute('title');
+}
+
+function applyListBlockHide(el) {
+  if (!el) return;
+  el.classList.remove('scout-blocked-dim');
+  el.classList.add('scout-blocked-hide');
+  try {
+    el.style.setProperty('display', 'none', 'important');
+    el.style.removeProperty('opacity');
+    el.style.removeProperty('pointer-events');
+  } catch (_) {
+    el.style.display = 'none';
+  }
+}
+
+function applyListBlockDim(el, titleText) {
+  if (!el) return;
+  el.classList.remove('scout-blocked-hide');
+  el.classList.add('scout-blocked-dim');
+  try {
+    el.style.removeProperty('display');
+    el.style.setProperty('opacity', '0.08', 'important');
+    el.style.setProperty('pointer-events', 'none', 'important');
+  } catch (_) {
+    el.style.display = '';
+    el.style.opacity = '0.08';
+    el.style.pointerEvents = 'none';
+  }
+  if (titleText) el.title = titleText;
+}
+
 function applyListBlocks() {
   const blocks = getBlockList();
   const pubs = getPublishers();
@@ -6473,7 +6537,7 @@ function applyListBlocks() {
       const matchedPub = pubs.find(p => p.name.toLowerCase().trim() === uploaderLower);
       if (matchedPub) {
         if (matchedPub.status === 'blocked') {
-          el.style.display = 'none';
+          applyListBlockHide(el);
           blockedCount++;
           return;
         } else if (matchedPub.status === 'loved') {
@@ -6495,22 +6559,19 @@ function applyListBlocks() {
     if (hitBlock) {
       blockedCount++;
       if (hitBlock.mode === 'hide') {
-        el.style.display = 'none';
+        applyListBlockHide(el);
       } else {
-        el.style.display = '';
-        el.style.opacity = '0.08';
-        el.style.pointerEvents = 'none';
         const matchLabel = normalizeBlockMatch(hitBlock.match) === 'sub' ? '子串' : '整词';
         const scopeLabel = normalizeBlockScope(hitBlock.scope) === 'both'
           ? '标题+上传者'
           : normalizeBlockScope(hitBlock.scope) === 'uploader' ? '上传者' : '标题';
-        el.title = `已被弱屏蔽词 "${hitBlock.text}" 过滤 [${matchLabel}/${scopeLabel}] (原因: ${hitBlock.reason || '无'})`;
+        applyListBlockDim(
+          el,
+          `已被弱屏蔽词 "${hitBlock.text}" 过滤 [${matchLabel}/${scopeLabel}] (原因: ${hitBlock.reason || '无'})`
+        );
       }
     } else {
-      el.style.display = '';
-      el.style.opacity = '';
-      el.style.pointerEvents = '';
-      el.removeAttribute('title');
+      clearListBlockPresentation(el);
 
       if (pubLoved) {
         el.classList.add('scout-pub-loved-card');

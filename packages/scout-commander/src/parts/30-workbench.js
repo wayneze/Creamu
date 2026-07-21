@@ -327,7 +327,51 @@ function makeResizable(wbEl) {
   if (resizeH) resizeH.addEventListener('pointerdown', (e) => initResize(e, 'h'));
 }
 
-// 
+/** 清除列表卡屏蔽呈现（类名 + 内联，避免被主题 !important 盖掉） */
+function clearListBlockPresentation(el) {
+  if (!el) return;
+  el.classList.remove('scout-blocked-hide', 'scout-blocked-dim');
+  try {
+    el.style.removeProperty('display');
+    el.style.removeProperty('opacity');
+    el.style.removeProperty('pointer-events');
+  } catch (_) {
+    el.style.display = '';
+    el.style.opacity = '';
+    el.style.pointerEvents = '';
+  }
+  el.removeAttribute('title');
+}
+
+function applyListBlockHide(el) {
+  if (!el) return;
+  el.classList.remove('scout-blocked-dim');
+  el.classList.add('scout-blocked-hide');
+  try {
+    el.style.setProperty('display', 'none', 'important');
+    el.style.removeProperty('opacity');
+    el.style.removeProperty('pointer-events');
+  } catch (_) {
+    el.style.display = 'none';
+  }
+}
+
+function applyListBlockDim(el, titleText) {
+  if (!el) return;
+  el.classList.remove('scout-blocked-hide');
+  el.classList.add('scout-blocked-dim');
+  try {
+    el.style.removeProperty('display');
+    el.style.setProperty('opacity', '0.08', 'important');
+    el.style.setProperty('pointer-events', 'none', 'important');
+  } catch (_) {
+    el.style.display = '';
+    el.style.opacity = '0.08';
+    el.style.pointerEvents = 'none';
+  }
+  if (titleText) el.title = titleText;
+}
+
 function applyListBlocks() {
   const blocks = getBlockList();
   const pubs = getPublishers();
@@ -347,7 +391,7 @@ function applyListBlocks() {
       const matchedPub = pubs.find(p => p.name.toLowerCase().trim() === uploaderLower);
       if (matchedPub) {
         if (matchedPub.status === 'blocked') {
-          el.style.display = 'none';
+          applyListBlockHide(el);
           blockedCount++;
           return;
         } else if (matchedPub.status === 'loved') {
@@ -369,22 +413,19 @@ function applyListBlocks() {
     if (hitBlock) {
       blockedCount++;
       if (hitBlock.mode === 'hide') {
-        el.style.display = 'none';
+        applyListBlockHide(el);
       } else {
-        el.style.display = '';
-        el.style.opacity = '0.08';
-        el.style.pointerEvents = 'none';
         const matchLabel = normalizeBlockMatch(hitBlock.match) === 'sub' ? '子串' : '整词';
         const scopeLabel = normalizeBlockScope(hitBlock.scope) === 'both'
           ? '标题+上传者'
           : normalizeBlockScope(hitBlock.scope) === 'uploader' ? '上传者' : '标题';
-        el.title = `已被弱屏蔽词 "${hitBlock.text}" 过滤 [${matchLabel}/${scopeLabel}] (原因: ${hitBlock.reason || '无'})`;
+        applyListBlockDim(
+          el,
+          `已被弱屏蔽词 "${hitBlock.text}" 过滤 [${matchLabel}/${scopeLabel}] (原因: ${hitBlock.reason || '无'})`
+        );
       }
     } else {
-      el.style.display = '';
-      el.style.opacity = '';
-      el.style.pointerEvents = '';
-      el.removeAttribute('title');
+      clearListBlockPresentation(el);
 
       if (pubLoved) {
         el.classList.add('scout-pub-loved-card');

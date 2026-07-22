@@ -19,6 +19,17 @@ Desktop.ini
 **/local/
 **/private/
 
+# local-only notes, drafts, and exports
+.local/
+.notes/
+**/notes.local/
+**/drafts.local/
+*.bak.*
+
+# machine-specific files
+**/*-local.*
+*.local.*
+
 # logs
 npm-debug.log*
 *.log

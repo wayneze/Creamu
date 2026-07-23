@@ -64,7 +64,7 @@ function validateOutput(source, required) {
   return checks.length;
 }
 
-export function buildUserscript(buildModuleUrl) {
+export function assembleUserscript(buildModuleUrl) {
   const scriptsDirectory = path.dirname(fileURLToPath(buildModuleUrl));
   const packageRoot = path.resolve(scriptsDirectory, '..');
   const monorepoRoot = path.resolve(packageRoot, '../..');
@@ -94,6 +94,11 @@ export function buildUserscript(buildModuleUrl) {
 
   const source = chunks.join('');
   const checkCount = validateOutput(source, manifest.required);
+  return { source, checkCount, outputFile };
+}
+
+export function buildUserscript(buildModuleUrl) {
+  const { source, checkCount, outputFile } = assembleUserscript(buildModuleUrl);
   fs.mkdirSync(path.dirname(outputFile), { recursive: true });
   fs.writeFileSync(outputFile, source);
 

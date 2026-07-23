@@ -271,62 +271,6 @@
 
     function initCommanderStyles() {
         GM_addStyle(`
-        /* Commander 悬浮球按钮 */
-        #jlc-trigger {
-            position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px;
-            background: #ff4400; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            cursor: pointer; z-index: 999999; box-shadow: 0 4px 20px rgba(255,68,0,0.6);
-            font-size: 30px; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); color: white !important;
-        }
-        #jlc-trigger:hover { transform: scale(1.1) rotate(20deg); background: #ff5500; }
-
-        /* Commander 主控面板 */
-        #jlc-panel {
-            position: fixed; top: 10%; right: 20px; width: 450px; height: 80%;
-            background: #1a1a1a; color: #eee; border-radius: 16px; z-index: 999998;
-            box-shadow: 0 10px 60px rgba(0,0,0,0.8); display: none; flex-direction: column;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 1px solid #333; overflow: hidden;
-        }
-        #jlc-panel header { padding: 18px; background: #333; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #ff4400; font-weight: bold; }
-        #jlc-panel .tabs { display: flex; background: #222; border-bottom: 1px solid #333; }
-        #jlc-panel .tab { flex: 1; padding: 14px; text-align: center; cursor: pointer; color: #888; transition: 0.3s; font-size: 14px; }
-        #jlc-panel .tab.active { background: #2a2a2a; color: #ff4400; border-bottom: 2px solid #ff4400; }
-        #jlc-panel .content { padding: 20px; overflow-y: auto; flex: 1; display: none; background: #1a1a1a; }
-        #jlc-panel .content.active { display: block; }
-        #jlc-panel label { font-size: 12px; color: #999; margin-top: 12px; display: block; text-transform: uppercase; letter-spacing: 1px; }
-        #jlc-panel input, #jlc-panel textarea {
-            width: 100%; padding: 12px; margin: 8px 0; background: #252525;
-            border: 1px solid #444; color: #fff; border-radius: 6px; box-sizing: border-box;
-            font-size: 14px; transition: 0.2s;
-        }
-        #jlc-panel input:focus, #jlc-panel textarea:focus { border-color: #ff4400; outline: none; background: #2a2a2a; }
-        #jlc-panel button {
-            background: #ff4400; color: white; border: none; padding: 14px;
-            border-radius: 6px; cursor: pointer; width: 100%; margin: 8px 0;
-            font-weight: bold; font-size: 14px; transition: 0.2s;
-        }
-        #jlc-panel button:hover { background: #ff5500; transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        #jlc-panel .stat-box {
-            background: #252525; padding: 15px; border-radius: 10px; margin-bottom: 20px;
-            display: flex; justify-content: space-around; border: 1px solid #333;
-        }
-        #jlc-panel .stat-item { text-align: center; }
-        #jlc-panel .stat-item b { color: #ff4400; font-size: 22px; display: block; margin-bottom: 4px; }
-        #jlc-panel .stat-item span { font-size: 11px; color: #888; }
-        .person-item {
-            background: #252525; padding: 10px 15px; border-radius: 6px; margin-bottom: 8px;
-            display: flex; justify-content: space-between; align-items: center;
-            border: 1px solid #333; font-size: 14px;
-        }
-        .person-item:hover { border-color: #555; background: #2a2a2a; }
-        .person-item span.remove { color: #ff4400; cursor: pointer; font-size: 18px; padding: 0 10px; }
-
-        .jlc-setting-entry > div {
-            width: 22px; height: 22px; border-radius: 999px; font-size: 12px;
-            background-color: rgb(208 176 176 / 24%); backdrop-filter: blur(3px);
-            box-shadow: 0 2px 8px rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.18);
-        }
-        #jlc-panel .legacy-row.disabled { opacity: .55; }
         .jlc-resource-center {
             margin: 18px 0; padding: 16px; border-radius: 14px;
             background: linear-gradient(180deg, rgba(18,18,18,.96), rgba(30,30,30,.94));
@@ -598,16 +542,6 @@
         #grid-b .toolbar-b .jlc-tool-btn:hover { opacity: 1; transform: scale(1.08); color: #ff4400; }
         #grid-b .toolbar-b .jlc-tool-btn.active-like { opacity: 1; color: #ffcc00; text-shadow: 0 0 8px rgba(255,204,0,.45); }
         #grid-b .toolbar-b .jlc-tool-btn.active-hate { opacity: 1; color: #ff6666; text-shadow: 0 0 8px rgba(255,102,102,.4); }
-        #jlc-panel .legacy-row { background: #252525; border: 1px solid #333; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
-        #jlc-panel .legacy-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-        #jlc-panel .legacy-toggle input[type="checkbox"] { width: auto; margin: 0; padding: 0; accent-color: #ff4400; transform: scale(1.08); }
-        #jlc-panel .legacy-range { display: flex; align-items: center; gap: 12px; }
-        #jlc-panel .legacy-range input[type="range"] { flex: 1; margin: 0; padding: 0; background: transparent; border: none; }
-        #jlc-panel .legacy-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-        #jlc-panel .legacy-actions button { margin: 0; }
-        #jlc-panel .legacy-note { font-size: 12px; color: #888; margin-top: 12px; line-height: 1.6; }
-        #jlc-panel .legacy-subtitle { font-size: 12px; color: #aaa; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
-        #jlc-panel .legacy-range-value { min-width: 32px; text-align: right; color: #ff4400; font-weight: bold; }
         #grid-b .avid-link-b { display: inline-flex !important; align-items: center; gap: 8px; flex-wrap: wrap; }
         #grid-b .avid-line-b { display: inline-flex; align-items: center; gap: 2px; }
         #grid-b .avid-date-badge {
@@ -643,16 +577,12 @@
             content: ''; flex: 1 1 auto; min-width: 24px; height: 1px;
             background: linear-gradient(90deg, rgba(255,95,86,.55), rgba(255,95,86,.08));
         }
-        #jlc-panel .tabs { flex-wrap: wrap; }
-        #jlc-panel .tabs .tab { white-space: nowrap; }
-        #jlc-panel .content#jlc-tab-tracking { padding-top: 2px; }
         .jlc-tracking-toolbar {
             display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px;
             flex-wrap: wrap;
         }
         .jlc-tracking-toolbar-summary { color: #aaa; font-size: 12px; line-height: 1.4; }
         .jlc-tracking-toolbar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-        #jlc-panel .jlc-tracking-toolbar-actions button { width: auto; min-width: 0; margin: 0; padding: 3px 8px; font-size: 11px; line-height: 1.2; border-radius: 999px; font-weight: 600; }
         .jlc-tracking-group { border: 1px solid #333; border-radius: 10px; overflow: hidden; margin-bottom: 12px; background: #1f1f1f; }
         .jlc-tracking-group-toggle {
             width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -674,7 +604,6 @@
         }
         .jlc-tracking-meta span { display: inline-flex; align-items: center; gap: 4px; }
         .jlc-tracking-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; justify-content: center; width: 84px; }
-        #jlc-panel .jlc-tracking-actions button { width: 100%; min-width: 0; margin: 0; padding: 4px 6px; font-size: 11px; line-height: 1.2; border-radius: 8px; font-weight: 600; }
         .jlc-status-pill, .jlc-site-pill {
             display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px; font-size: 11px;
             border: 1px solid transparent;
@@ -698,7 +627,6 @@
         #jlc-tracking-pagebar .jlc-tracking-pagehint { color: #c4a574; font-size: 11px; font-weight: 550; }
         #jlc-tracking-pagebar .jlc-tracking-pagebar-meta { color: #b0b0b0; font-size: 12px; line-height: 1.5; display: flex; flex-wrap: wrap; gap: 8px; }
         #jlc-tracking-pagebar .jlc-tracking-pagebar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-        #jlc-panel #jlc-tracking-pagebar button { width: auto; min-width: 0; margin: 0; padding: 3px 8px; font-size: 11px; line-height: 1.2; border-radius: 999px; font-weight: 600; }
         /* 继续断点：与断点红框同色系，常用操作要一眼能扫到 */
         #jlc-tracking-pagebar .jlc-bp-continue,
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.jlc-bp-continue {
@@ -730,7 +658,6 @@
         @media (max-width: 820px) {
             .jlc-tracking-item { grid-template-columns: 1fr; }
             .jlc-tracking-actions { width: 100%; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
-            #jlc-panel .jlc-tracking-actions button { width: auto; }
             #jlc-tracking-pagebar { align-items: flex-start; }
         }
         `);
@@ -873,6 +800,35 @@
                 req.onsuccess = () => r(req.result);
                 req.onerror = () => r(null);
             } catch (e) { r(null); }
+        });
+    }
+
+    async function getManyFromStore(store, keys) {
+        const uniqueKeys = Array.from(new Set(Array.from(keys || []).filter(key => key != null)));
+        if (!db || !uniqueKeys.length) return new Map();
+        return new Promise(resolve => {
+            const values = new Map();
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                resolve(values);
+            };
+            try {
+                const tx = db.transaction(store, 'readonly');
+                const objectStore = tx.objectStore(store);
+                uniqueKeys.forEach(key => {
+                    const request = objectStore.get(key);
+                    request.onsuccess = () => {
+                        if (request.result !== undefined) values.set(key, request.result);
+                    };
+                });
+                tx.oncomplete = finish;
+                tx.onerror = finish;
+                tx.onabort = finish;
+            } catch (_) {
+                finish();
+            }
         });
     }
 
@@ -2723,6 +2679,8 @@
 
     const META_REQUEST_TIMEOUT = 8000;
     const META_FETCH_BUDGET_MS = 8000;
+    const META_MISS_TTL_MS = 60000;
+    const metaMissCache = new Map();
 
     function getMetaRequestTimeout(deadline) {
         const remaining = Math.max(0, Number(deadline) - Date.now());
@@ -2823,9 +2781,39 @@
         return fetchMetaDetail(base, hit, deadline);
     }
 
-    async function fetchMeta(avid, seedMeta = null) {
-        if (!config.metatube_url) return null;
-        const base = config.metatube_url.replace(/\/$/, '');
+    function normalizeMetaBase(value) {
+        return String(value || '').trim().replace(/\/+$/, '');
+    }
+
+    function getMetaFetchKey(avid, base = config.metatube_url) {
+        const normalizedBase = normalizeMetaBase(base);
+        const normalizedAvid = normalizeCode(avid);
+        return normalizedBase && normalizedAvid ? `${normalizedBase}\n${normalizedAvid}` : '';
+    }
+
+    function hasRecentMetaMiss(key, now = Date.now()) {
+        if (!key) return false;
+        const expiresAt = Number(metaMissCache.get(key) || 0);
+        if (expiresAt > now) return true;
+        metaMissCache.delete(key);
+        return false;
+    }
+
+    function rememberMetaMiss(key, now = Date.now()) {
+        if (key) metaMissCache.set(key, now + META_MISS_TTL_MS);
+    }
+
+    function clearMetaMiss(key) {
+        if (key) metaMissCache.delete(key);
+    }
+
+    function clearMetaMissCache() {
+        metaMissCache.clear();
+    }
+
+    async function fetchMeta(avid, seedMeta = null, baseUrl = config.metatube_url) {
+        const base = normalizeMetaBase(baseUrl);
+        if (!base) return null;
         const deadline = Date.now() + META_FETCH_BUDGET_MS;
         const seed = normalizeMetaRecord(seedMeta);
         let fallback = null;
@@ -2864,13 +2852,16 @@
     const META_PREFETCH_MARGIN_PX = 1200;
     const META_IMMEDIATE_SWEEP_DELAY = 32;
     const META_DEFERRED_SWEEP_DELAY = 120;
+    const META_DEFERRED_BATCH_SIZE = 16;
     const DECORATE_CONCURRENCY = 8;
     const DECORATE_VISIBLE_LIMIT = 12;
+    const DECORATE_BATCH_MIN_SIZE = 8;
     const decorateQueue = [];
     const metaFetchQueue = [];
     const metaInflight = new Map();
     const metaQueuedTasks = new Map();
     const metaDeferredItems = new Set();
+    const metaNearViewportItems = new Set();
     let decorateActiveCount = 0;
     let metaFetchActiveCount = 0;
     let metaViewportObserver = null;
@@ -3049,10 +3040,13 @@
 
 
     async function refreshLibraryUI() {
-        const embyItems = await getAllFromStore('emby_data');
+        const [embyItems, videoItems] = await Promise.all([
+            getAllFromStore('emby_data'),
+            getAllFromStore('videos')
+        ]);
         const mCount = embyItems.filter(i => i.type === 'movie').length;
         const pList = embyItems.filter(i => i.type === 'person');
-        const vCount = (await getAllFromStore('videos')).length;
+        const vCount = videoItems.length;
         const personCount = knownPersons.size;
 
         const mEl = document.getElementById('st-m');
@@ -3618,6 +3612,12 @@
             && typeof source.querySelectorAll !== 'function') {
             return Array.from(source).flatMap(collectCommanderItems);
         }
+        const grid = typeof document !== 'undefined' && source === document
+            ? document.getElementById('grid-b')
+            : (source.id === 'grid-b' ? source : null);
+        if (grid?.children) {
+            return Array.from(grid.children).filter(item => item.matches?.('.item-b'));
+        }
         if (typeof source.matches === 'function' && source.matches('.item-b')) return [source];
         if (typeof source.querySelectorAll === 'function') return Array.from(source.querySelectorAll('.item-b'));
         return [];
@@ -3654,14 +3654,16 @@
     }
 
     function sortMetaItemsByViewport(items) {
-        return Array.from(items || []).sort((left, right) => (
-            getItemViewportPriority(left) - getItemViewportPriority(right)
-        ));
+        return Array.from(items || [])
+            .map((item, index) => ({ item, index, priority: getItemViewportPriority(item) }))
+            .sort((left, right) => left.priority - right.priority || left.index - right.index)
+            .map(entry => entry.item);
     }
 
     function clearDeferredMetaItem(item) {
         if (!item) return;
         metaDeferredItems.delete(item);
+        metaNearViewportItems.delete(item);
         if (metaViewportObserver) metaViewportObserver.unobserve(item);
         delete item._jlcMetaPending;
     }
@@ -3669,20 +3671,33 @@
     function flushDeferredMetaItems(force = false) {
         metaDeferredSweepTimer = null;
         metaDeferredSweepDueAt = 0;
-        sortMetaItemsByViewport(metaDeferredItems).forEach(item => {
-                if (!item?.isConnected) {
-                    clearDeferredMetaItem(item);
-                    return;
-                }
-                const pending = item._jlcMetaPending;
-                if (!pending) {
-                    clearDeferredMetaItem(item);
-                    return;
-                }
-                if (!force && !isItemNearViewport(item)) return;
+        const candidatePool = force || !metaViewportObserver
+            ? metaDeferredItems
+            : metaNearViewportItems;
+        const candidates = sortMetaItemsByViewport(candidatePool);
+        let processed = 0;
+        for (const item of candidates) {
+            if (!item?.isConnected) {
                 clearDeferredMetaItem(item);
-                requestMetaEnrichment(item, pending.avid, pending.title, isItemImmediateViewport(item));
-            });
+                continue;
+            }
+            const pending = item._jlcMetaPending;
+            if (!pending) {
+                clearDeferredMetaItem(item);
+                continue;
+            }
+            if (!force && !isItemNearViewport(item)) {
+                metaNearViewportItems.delete(item);
+                continue;
+            }
+            if (!force && processed >= META_DEFERRED_BATCH_SIZE) break;
+            clearDeferredMetaItem(item);
+            requestMetaEnrichment(item, pending.avid, pending.title, isItemImmediateViewport(item));
+            processed += 1;
+        }
+        if (!force && processed >= META_DEFERRED_BATCH_SIZE && metaDeferredItems.size) {
+            scheduleDeferredMetaSweep(META_IMMEDIATE_SWEEP_DELAY);
+        }
     }
 
     function scheduleDeferredMetaSweep(delay = META_DEFERRED_SWEEP_DELAY) {
@@ -3699,7 +3714,17 @@
     function ensureMetaViewportObserver() {
         if (metaViewportObserver || !('IntersectionObserver' in window)) return;
         metaViewportObserver = new IntersectionObserver(entries => {
-            const touched = entries.some(entry => entry.isIntersecting || entry.intersectionRatio > 0);
+            let touched = false;
+            entries.forEach(entry => {
+                if (!entry?.target) return;
+                const near = entry.isIntersecting || entry.intersectionRatio > 0;
+                if (near) {
+                    metaNearViewportItems.add(entry.target);
+                    touched = true;
+                } else {
+                    metaNearViewportItems.delete(entry.target);
+                }
+            });
             if (touched) scheduleDeferredMetaSweep(META_IMMEDIATE_SWEEP_DELAY);
         }, {
             root: null,
@@ -3727,12 +3752,14 @@
         ensureMetaViewportObserver();
         bindMetaSweepEvents();
         if (metaViewportObserver) metaViewportObserver.observe(item);
-        scheduleDeferredMetaSweep(
-            isItemImmediateViewport(item) ? META_IMMEDIATE_SWEEP_DELAY : META_DEFERRED_SWEEP_DELAY
-        );
+        const delay = metaViewportObserver
+            ? META_DEFERRED_SWEEP_DELAY
+            : (isItemImmediateViewport(item) ? META_IMMEDIATE_SWEEP_DELAY : META_DEFERRED_SWEEP_DELAY);
+        scheduleDeferredMetaSweep(delay);
     }
 
-    function refreshCommanderDecorations(scope = document) {
+    function refreshCommanderDecorations(scope = document, options = {}) {
+        if (options.clearMetaMisses) clearMetaMissCache();
         const items = collectCommanderItems(scope);
         items.forEach(item => {
             item.classList.remove('jlc-final-done');
@@ -3742,10 +3769,10 @@
             delete item.dataset.jlcMetaState;
             delete item.dataset.jlcMetaRetry;
             delete item._jlcDecorModel;
-            queueDecorateItem(item, true);
         });
-        if (items.length) scheduleCommanderRescan(8);
-        scheduleTrackingPageRefresh(false);
+        queueCommanderItems(items, true);
+        if (items.length && options.scheduleRescan !== false) scheduleCommanderRescan(8);
+        if (options.syncTracking !== false) scheduleTrackingPageRefresh(false);
     }
     function enqueueStablePriority(queue, item, prioritized, isPrioritized) {
         if (!prioritized) {
@@ -3757,8 +3784,8 @@
         else queue.splice(index, 0, item);
     }
 
-    function prioritizeMetaTask(avid) {
-        const task = metaQueuedTasks.get(avid);
+    function prioritizeMetaTask(key) {
+        const task = metaQueuedTasks.get(key);
         if (!task) return;
         const index = metaFetchQueue.indexOf(task);
         if (index >= 0) {
@@ -3772,12 +3799,12 @@
         while (metaFetchActiveCount < META_FETCH_CONCURRENCY && metaFetchQueue.length) {
             const task = metaFetchQueue.shift();
             if (!task) continue;
-            metaQueuedTasks.delete(task.avid);
+            metaQueuedTasks.delete(task.key);
             metaFetchActiveCount += 1;
             Promise.resolve().then(async () => {
                 const cached = normalizeMetaRecord(await getVal('meta_cache', task.avid));
                 if (cached?.genres?.length) return cached;
-                const fresh = normalizeMetaRecord(await fetchMeta(task.avid, cached));
+                const fresh = normalizeMetaRecord(await fetchMeta(task.avid, cached, task.base));
                 if (fresh) {
                     await setVal('meta_cache', { avid: task.avid, ...fresh });
                     return fresh;
@@ -3793,21 +3820,34 @@
         }
     }
 
+    function hasMetaEnrichmentData(value) {
+        const meta = normalizeMetaRecord(value);
+        return !!(meta && (meta.genres?.length || meta.actors?.length || meta.releaseDate));
+    }
+
     function queueMetaFetch(avid, prioritize = false) {
-        if (metaInflight.has(avid)) {
-            if (prioritize) prioritizeMetaTask(avid);
-            return metaInflight.get(avid);
+        const base = normalizeMetaBase(config.metatube_url);
+        const key = getMetaFetchKey(avid, base);
+        if (!key) return Promise.resolve(null);
+        if (metaInflight.has(key)) {
+            if (prioritize) prioritizeMetaTask(key);
+            return metaInflight.get(key);
         }
+        if (hasRecentMetaMiss(key)) return Promise.resolve(null);
         const promise = new Promise(resolve => {
-            const task = { avid, resolve, prioritized: !!prioritize };
+            const task = { key, base, avid, resolve, prioritized: !!prioritize };
             enqueueStablePriority(metaFetchQueue, task, prioritize, entry => entry.prioritized);
-            metaQueuedTasks.set(avid, task);
+            metaQueuedTasks.set(key, task);
             pumpMetaFetchQueue();
+        }).then(result => {
+            if (hasMetaEnrichmentData(result)) clearMetaMiss(key);
+            else rememberMetaMiss(key);
+            return result;
         }).finally(() => {
-            metaInflight.delete(avid);
-            metaQueuedTasks.delete(avid);
+            metaInflight.delete(key);
+            metaQueuedTasks.delete(key);
         });
-        metaInflight.set(avid, promise);
+        metaInflight.set(key, promise);
         return promise;
     }
     function setItemReleaseDate(item, dateText) {
@@ -4119,18 +4159,50 @@
         });
     }
 
+    function getCommanderItemAvid(item) {
+        return String(
+            item?.dataset?.jlcAvid
+            || item?.querySelector?.('date[name="avid"]')?.textContent
+            || ''
+        ).trim().toUpperCase();
+    }
+
+    async function loadCommanderDecorationBatch(avids) {
+        const normalizedAvids = Array.from(new Set(
+            Array.from(avids || []).map(avid => String(avid || '').trim().toUpperCase()).filter(Boolean)
+        ));
+        const [videos, embyData, metaCache] = await Promise.all([
+            getManyFromStore('videos', normalizedAvids),
+            getManyFromStore('emby_data', normalizedAvids.map(avid => `vid_${avid}`)),
+            getManyFromStore('meta_cache', normalizedAvids)
+        ]);
+        return { videos, embyData, metaCache };
+    }
+
     async function decorate(item) {
         if (!item || !item.isConnected || item.classList.contains('jlc-final-done')) return;
-        const avidTag = item.querySelector('date[name="avid"]');
-        if (!avidTag) return;
-        const avid = avidTag.innerText.trim().toUpperCase();
+        const preparedAvid = item._jlcDecorAvid;
+        const batchPromise = item._jlcDecorBatchPromise;
+        delete item._jlcDecorAvid;
+        delete item._jlcDecorBatchPromise;
+        const avid = preparedAvid || getCommanderItemAvid(item);
         if (!avid) return;
 
-        const [vidData, inEmby, cachedMeta] = await Promise.all([
-            getVal('videos', avid),
-            getVal('emby_data', `vid_${avid}`),
-            getVal('meta_cache', avid)
-        ]);
+        let vidData;
+        let inEmby;
+        let cachedMeta;
+        if (batchPromise) {
+            const batch = await batchPromise;
+            vidData = batch.videos.get(avid) || null;
+            inEmby = batch.embyData.get(`vid_${avid}`) || null;
+            cachedMeta = batch.metaCache.get(avid) || null;
+        } else {
+            [vidData, inEmby, cachedMeta] = await Promise.all([
+                getVal('videos', avid),
+                getVal('emby_data', `vid_${avid}`),
+                getVal('meta_cache', avid)
+            ]);
+        }
 
         const current = vidData || { avid, clicked: false, status: 'none' };
         const title = item.querySelector("a[name='av-title']")?.getAttribute('title') || item.querySelector('.detail-b a')?.getAttribute('title') || '';
@@ -4168,6 +4240,24 @@
         pumpDecorateQueue();
     }
 
+    function queueCommanderItems(items, prioritize = false) {
+        const entries = Array.from(items || [])
+            .filter(item => item?.isConnected
+                && item.dataset?.jlcQueued !== '1'
+                && !item.classList?.contains('jlc-final-done'))
+            .map(item => ({ item, avid: getCommanderItemAvid(item) }));
+        const avids = entries.map(entry => entry.avid).filter(Boolean);
+        const batchPromise = avids.length >= DECORATE_BATCH_MIN_SIZE
+            ? loadCommanderDecorationBatch(avids)
+            : null;
+        entries.forEach(entry => {
+            if (entry.avid) entry.item._jlcDecorAvid = entry.avid;
+            if (entry.avid && batchPromise) entry.item._jlcDecorBatchPromise = batchPromise;
+            queueDecorateItem(entry.item, prioritize);
+        });
+        return entries.length;
+    }
+
     function pumpDecorateQueue() {
         while (decorateActiveCount < DECORATE_CONCURRENCY && decorateQueue.length) {
             const item = decorateQueue.shift();
@@ -4187,7 +4277,7 @@
 
     function runCommanderScanner(root = document, prioritize = false) {
         const items = collectCommanderItems(root);
-        items.forEach(item => queueDecorateItem(item, prioritize));
-        if (items.length) scheduleTrackingPageRefresh(false);
-        return items.length;
+        const queuedCount = queueCommanderItems(items, prioritize);
+        if (queuedCount) scheduleTrackingPageRefresh(false);
+        return queuedCount;
     }

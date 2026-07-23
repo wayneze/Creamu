@@ -8,6 +8,8 @@ const files = [
   'tests/webdav.mjs',
   'tests/exh/test-domain.mjs',
   'tests/jlc/core.mjs',
+  'tests/jlc/dom-scanning.mjs',
+  'tests/jlc/idb-batching.mjs',
   'tests/jlc/meta-fetching.mjs',
   'tests/jlc/meta-scheduling.mjs',
   'packages/scout-commander/scripts/test-core.mjs',

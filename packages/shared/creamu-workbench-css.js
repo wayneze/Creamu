@@ -569,6 +569,7 @@ function injectCreamuWorkbenchStyles(opts) {
       (document.head || document.documentElement).appendChild(styleEl);
     }
     const extra = opts.extraCss || '';
-    styleEl.textContent = getCreamuWorkbenchCss() + (extra ? '\n' + extra : '');
+    const css = getCreamuWorkbenchCss() + (extra ? '\n' + extra : '');
+    if (styleEl.textContent !== css) styleEl.textContent = css;
     return styleEl;
   }

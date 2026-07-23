@@ -13,6 +13,9 @@ function extract(pattern, label) {
 const prefetchMatch = source.match(/const META_PREFETCH_MARGIN_PX = (\d+);/);
 assert.ok(prefetchMatch, 'META_PREFETCH_MARGIN_PX not found');
 assert.equal(Number(prefetchMatch[1]), 1200);
+const batchMatch = source.match(/const META_DEFERRED_BATCH_SIZE = (\d+);/);
+assert.ok(batchMatch, 'META_DEFERRED_BATCH_SIZE not found');
+assert.ok(Number(batchMatch[1]) > 0 && Number(batchMatch[1]) <= 32);
 
 const prioritySource = extract(
   /function getRectViewportPriority[\s\S]*?(?=\n\s*function clearDeferredMetaItem)/,
@@ -59,6 +62,17 @@ assert.deepEqual(
   ['first', 'second']
 );
 
+let priorityReads = 0;
+const measuredItems = [300, 100, 200].map((top, index) => ({
+  id: index,
+  getBoundingClientRect() {
+    priorityReads += 1;
+    return { top, bottom: top + 100 };
+  },
+}));
+priorityContext.sortMetaItemsByViewport(measuredItems);
+assert.equal(priorityReads, measuredItems.length, 'viewport priority should be measured once per item');
+
 const scheduleSource = extract(
   /function scheduleDeferredMetaSweep[\s\S]*?(?=\n\s*function ensureMetaViewportObserver)/,
   'deferred sweep scheduler'
@@ -95,6 +109,37 @@ const observerSource = extract(
   'viewport observer'
 );
 assert.doesNotMatch(observerSource, /requestMetaEnrichment\s*\(/);
+assert.match(observerSource, /metaNearViewportItems/);
+
+const sweepSource = extract(
+  /function clearDeferredMetaItem[\s\S]*?(?=\n\s*function scheduleDeferredMetaSweep)/,
+  'deferred metadata sweep'
+);
+const sweepItems = [0, 1, 2].map((id) => ({
+  id: String(id),
+  isConnected: true,
+  _jlcMetaPending: { avid: 'T-' + id, title: '' },
+}));
+const requested = [];
+const sweepContext = {
+  metaDeferredItems: new Set(sweepItems),
+  metaNearViewportItems: new Set(sweepItems),
+  metaViewportObserver: null,
+  metaDeferredSweepTimer: null,
+  metaDeferredSweepDueAt: 0,
+  META_DEFERRED_BATCH_SIZE: 2,
+  META_IMMEDIATE_SWEEP_DELAY: 32,
+  sortMetaItemsByViewport(items) { return Array.from(items); },
+  isItemNearViewport() { return true; },
+  isItemImmediateViewport() { return true; },
+  requestMetaEnrichment(item, avid) { requested.push([item.id, avid]); },
+  scheduleDeferredMetaSweep() {},
+};
+vm.createContext(sweepContext);
+vm.runInContext(sweepSource, sweepContext);
+sweepContext.flushDeferredMetaItems();
+assert.deepEqual(requested, [['0', 'T-0'], ['1', 'T-1']]);
+assert.equal(sweepContext.metaDeferredItems.size, 1, 'a sweep should cap visible metadata requests');
 
 const enqueueSource = extract(
   /function scheduleMetaEnrichment[\s\S]*?(?=\n\s*function refreshCommanderDecorations)/,

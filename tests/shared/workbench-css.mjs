@@ -8,6 +8,7 @@ const source = fs.readFileSync(path.join(root, 'packages/shared/creamu-workbench
 
 function createDocument(withHead = true) {
   const children = [];
+  const writes = { count: 0 };
   const appendChild = (element) => {
     children.push(element);
     return element;
@@ -18,11 +19,18 @@ function createDocument(withHead = true) {
     head: withHead ? { appendChild, children } : null,
     documentElement,
     createElement(tagName) {
-      return { tagName: String(tagName).toUpperCase(), id: '', textContent: '' };
+      const element = { tagName: String(tagName).toUpperCase(), id: '' };
+      let text = '';
+      Object.defineProperty(element, 'textContent', {
+        get() { return text; },
+        set(value) { writes.count += 1; text = String(value); },
+      });
+      return element;
     },
     getElementById(id) {
       return children.find((element) => element.id === id) || null;
     },
+    writes,
   };
 }
 
@@ -63,6 +71,13 @@ console.log('Shared workbench styles');
   assert.ok(second.textContent.includes('var(--creamu-wb-accent)'));
   assert.ok(second.textContent.includes('color: steelblue'));
   assert.ok(!second.textContent.includes('color: tomato'));
+  const writesBeforeRepeat = document.writes.count;
+  const third = context.injectCreamuWorkbenchStyles({
+    styleId: 'workbench-test-style',
+    extraCss: '#product-rule { color: steelblue; }',
+  });
+  assert.equal(third, second);
+  assert.equal(document.writes.count, writesBeforeRepeat, 'unchanged CSS should not rewrite the style node');
   console.log('  OK  idempotent injection and product extension');
 }
 

@@ -1179,7 +1179,7 @@
         } else {
             setWorkbenchSettingsOpen(false);
         }
-        void refreshWorkbenchFabBadge();
+        if (nav !== 'tracking') void refreshWorkbenchFabBadge();
     }
 
     function toggleWorkbenchV3(tabId = '') {
@@ -1323,7 +1323,8 @@
         const session = getWorkbenchSession();
         const context = getCurrentTrackingPageContext();
         const currentSignature = context?.query_signature || '';
-        let list = (await getTrackingSearches()).filter(record => !record.archived);
+        const allRecords = (await getTrackingSearches()).filter(record => !record.archived);
+        let list = allRecords.slice();
 
         const query = compactText(session.tracking.query || '').toLowerCase();
         const groupFilter = session.tracking.groupFilter || 'all';
@@ -1352,7 +1353,6 @@
             pinCurrent: session.tracking.pinCurrent !== false
         });
         const updateCount = list.filter(trackingRecordHasUpdate).length;
-        const allRecords = (await getTrackingSearches()).filter(r => !r.archived);
         const allUpdateCount = allRecords.filter(trackingRecordHasUpdate).length;
         updateWorkbenchFabBadge(allUpdateCount);
         const headerSub = document.getElementById('jlc-wb-header-sub');
@@ -1864,6 +1864,7 @@
             config.webdav_auto = !!shell.querySelector('#jlc-wb-wd-auto')?.checked;
             config.webdav_conflict = shell.querySelector('#jlc-wb-wd-conflict')?.value || 'ask';
             GM_setValue('jlc_config_stable', config);
+            if (previous.metatube_url !== config.metatube_url) clearMetaMissCache();
             persistWorkbenchSession({ openMode });
             try { ensureCreamuSync()?.markLocalDirty(); } catch (_) {}
             await loadRadarData();
@@ -1875,7 +1876,7 @@
         });
         shell.querySelector('#jlc-wb-btn-sync')?.addEventListener('click', () => { void syncEmby(); });
         shell.querySelector('#jlc-wb-btn-rescan')?.addEventListener('click', () => {
-            refreshCommanderDecorations();
+            refreshCommanderDecorations(document, { clearMetaMisses: true });
             renderDetailResourceCenter(true);
             showAlert('已重新扫描当前页！');
         });
@@ -2221,7 +2222,6 @@
         createWorkbenchV3();
         const session = getWorkbenchSession();
         updateWorkbenchOpenModeChip();
-        await refreshWorkbenchFabBadge();
         if (session.panelOpen) {
             openWorkbenchV3(normalizeWorkbenchMainNav(session.nav));
             if (session.settingsOpen) {
@@ -2229,31 +2229,44 @@
                 syncWorkbenchSettingsForm();
                 await refreshLibraryUI();
             }
+        } else {
+            await refreshWorkbenchFabBadge();
         }
+    }
+
+    function collectCommanderMutationItems(mutations) {
+        const items = new Set();
+        const isPendingItem = (item) => item
+            && item.dataset?.jlcBaseDone !== '1'
+            && !item.classList?.contains?.('jlc-final-done');
+        Array.from(mutations || []).forEach(mutation => {
+            Array.from(mutation?.addedNodes || []).forEach(node => {
+                if (!node || node.nodeType !== 1) return;
+                if (node.matches?.('.item-b')) {
+                    items.add(node);
+                    return;
+                }
+                const owner = node.closest?.('.item-b');
+                if (owner) {
+                    if (isPendingItem(owner)) items.add(owner);
+                    return;
+                }
+                node.querySelectorAll?.('.item-b').forEach(item => items.add(item));
+            });
+        });
+        return items;
     }
 
     function ensureCommanderObserver() {
         if (commanderObserver) return;
         commanderObserver = new MutationObserver((mutations) => {
-            let touched = false;
-            mutations.forEach(mutation => {
-                mutation.addedNodes.forEach(node => {
-                    if (!(node instanceof HTMLElement)) return;
-                    if (node.matches?.('.item-b')) {
-                        queueDecorateItem(node);
-                        touched = true;
-                    }
-                    if (node.querySelectorAll) {
-                        const items = node.querySelectorAll('.item-b');
-                        if (items.length) {
-                            items.forEach(queueDecorateItem);
-                            touched = true;
-                        }
-                    }
-                });
-            });
-            if (touched) {
-                scheduleCommanderRescan(6);
+            const items = collectCommanderMutationItems(mutations);
+            const queuedCount = queueCommanderItems(items);
+            if (queuedCount) {
+                const hasIncompleteItem = Array.from(items).some(item => (
+                    typeof getCommanderItemAvid !== 'function' || !getCommanderItemAvid(item)
+                ));
+                if (hasIncompleteItem) scheduleCommanderRescan(2);
                 scheduleTrackingPageRefresh(false);
             }
         });
@@ -2271,6 +2284,13 @@
             console.warn('[Creamu] styles', e);
         }
 
+        let dbReady;
+        try {
+            dbReady = initDB();
+        } catch (e) {
+            console.warn('[Creamu] initDB', e);
+        }
+
         try {
             createWorkbenchV3();
         } catch (e) {
@@ -2286,14 +2306,7 @@
 
         ensureCommanderObserver();
         try {
-            runCommanderScanner();
-            scheduleCommanderRescan(8);
-        } catch (e) {
-            console.warn('[Creamu] scanner', e);
-        }
-
-        try {
-            await initDB();
+            await dbReady;
         } catch (e) {
             console.warn('[Creamu] initDB', e);
         }
@@ -2309,15 +2322,17 @@
             await refreshLibraryUI();
             ensureStandaloneCommanderEntry();
             renderDetailResourceCenter();
-            refreshCommanderDecorations?.();
-            void refreshWorkbenchFabBadge();
+            refreshCommanderDecorations?.(document, {
+                scheduleRescan: false,
+                syncTracking: false
+            });
         } catch (e) {
             console.warn('[Creamu] library', e);
         }
 
         try {
-            runCommanderScanner(document.getElementById('grid-b') || document, true);
-            scheduleCommanderRescan(10);
+            const queuedCount = runCommanderScanner(document.getElementById('grid-b') || document, true);
+            if (queuedCount) scheduleCommanderRescan(10);
         } catch (_) { /* ignore */ }
 
         void Promise.resolve()
@@ -2341,14 +2356,13 @@
         }
 
         window.setTimeout(() => {
-            runCommanderScanner(document.getElementById('grid-b') || document, true);
-            scheduleCommanderRescan(8);
+            const queuedCount = runCommanderScanner(document.getElementById('grid-b') || document, true);
+            if (queuedCount) scheduleCommanderRescan(8);
             renderDetailResourceCenter();
-            void refreshWorkbenchFabBadge();
         }, 900);
         window.setTimeout(() => {
-            runCommanderScanner(document.getElementById('grid-b') || document, true);
-            scheduleCommanderRescan(10);
+            const queuedCount = runCommanderScanner(document.getElementById('grid-b') || document, true);
+            if (queuedCount) scheduleCommanderRescan(10);
             renderDetailResourceCenter();
         }, 2200);
 

@@ -13,5 +13,5 @@ function run(command, args) {
 }
 
 run('npm', ['run', 'build']);
-run(process.execPath, ['scripts/check-metadata.mjs']);
-run(process.execPath, ['tests/run.mjs']);
+run(process.execPath, ['scripts/check-dist.mjs']);
+run(process.execPath, ['tests/e2e/workbench.mjs']);

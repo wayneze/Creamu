@@ -63,8 +63,15 @@ npm run build:scout
 测试与产物校验：
 ```bash
 npm run check
-npm test
-npm run check:dist
+npm run test:e2e
+```
+
+`check` 包含仓库规则与公开单元测试；`test:e2e` 包含构建、产物校验和本地浏览器场景。需要单独检查生成文件时可运行 `npm run check:dist`，它会按当前 manifest 重组源码并比较 `dist`，不依赖 Git 工作区是否干净。
+
+浏览器测试使用本地 fixture，不访问真实站点。首次运行前安装 Chromium：
+
+```bash
+npx playwright install chromium
 ```
 
 源码在 `packages/*/src/parts`，构建为单文件 userscript。

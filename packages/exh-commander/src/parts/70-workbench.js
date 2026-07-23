@@ -46,10 +46,9 @@
     if (!Number.isFinite(left) || !Number.isFinite(top)) return;
     const w = fab.offsetWidth || 34;
     const h = fab.offsetHeight || 34;
-    const nextLeft = Math.max(8, Math.min(window.innerWidth - w - 8, left));
-    const nextTop = Math.max(8, Math.min(window.innerHeight - h - 8, top));
-    fab.style.left = nextLeft + 'px';
-    fab.style.top = nextTop + 'px';
+    const point = clampCreamuWorkbenchPoint({ left, top }, { width: w, height: h }, window);
+    fab.style.left = point.left + 'px';
+    fab.style.top = point.top + 'px';
     fab.style.right = 'auto';
     fab.style.bottom = 'auto';
   }
@@ -78,8 +77,13 @@
       event.preventDefault();
       const w = fab.offsetWidth || 34;
       const h = fab.offsetHeight || 34;
-      fab.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, originLeft + dx)) + 'px';
-      fab.style.top = Math.max(8, Math.min(window.innerHeight - h - 8, originTop + dy)) + 'px';
+      const point = clampCreamuWorkbenchPoint(
+        { left: originLeft + dx, top: originTop + dy },
+        { width: w, height: h },
+        window
+      );
+      fab.style.left = point.left + 'px';
+      fab.style.top = point.top + 'px';
       fab.style.right = 'auto';
       fab.style.bottom = 'auto';
     };
@@ -495,36 +499,44 @@
       panel.style.bottom = 'auto';
       panel.style.width = rect.width + 'px';
       panel.style.height = rect.height + 'px';
-      wbDragging = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+      wbDragging = {
+        startRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+        startPoint: { x: e.clientX, y: e.clientY },
+      };
       panel.classList.add('is-dragging');
       e.preventDefault();
     });
     window.addEventListener('mousemove', (e) => {
       if (wbResizing) {
         const mode = wbResizing.mode || 'w';
-        const rightEdge = Number(wbResizing.rightEdge);
-        const topEdge = Number(wbResizing.topEdge);
-        let newW = Number(wbResizing.startW) || 500;
-        let newH = Number(wbResizing.startH) || 560;
-        if (mode === 'w' || mode === 'corner') {
-          // 左边把手：钉住右边缘
-          newW = Math.min(720, Math.max(360, rightEdge - e.clientX));
-          panel.style.width = newW + 'px';
-          panel.style.left = Math.max(0, Math.round(rightEdge - newW)) + 'px';
-          panel.style.right = 'auto';
-        }
-        if (mode === 'h' || mode === 'corner') {
-          // 底边把手：钉住上边缘
-          newH = Math.min(Math.max(280, window.innerHeight - topEdge - 12), Math.max(280, e.clientY - topEdge));
-          panel.style.height = newH + 'px';
-          panel.style.top = topEdge + 'px';
-          panel.style.bottom = 'auto';
-        }
+        const rect = resizeCreamuWorkbenchRect(
+          wbResizing.startRect,
+          wbResizing.startPoint,
+          { x: e.clientX, y: e.clientY },
+          mode,
+          window,
+          { minWidth: 360, minHeight: 280, maxWidth: 720, margin: 12 }
+        );
+        panel.style.left = rect.left + 'px';
+        panel.style.top = rect.top + 'px';
+        panel.style.width = rect.width + 'px';
+        panel.style.height = rect.height + 'px';
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
         return;
       }
       if (!wbDragging) return;
-      panel.style.left = Math.max(0, e.clientX - wbDragging.dx) + 'px';
-      panel.style.top = Math.max(0, e.clientY - wbDragging.dy) + 'px';
+      const rect = moveCreamuWorkbenchRect(
+        wbDragging.startRect,
+        wbDragging.startPoint,
+        { x: e.clientX, y: e.clientY },
+        window,
+        { minWidth: 360, minHeight: 280, maxWidth: 720, margin: 12 }
+      );
+      panel.style.left = rect.left + 'px';
+      panel.style.top = rect.top + 'px';
+      panel.style.width = rect.width + 'px';
+      panel.style.height = rect.height + 'px';
       panel.style.right = 'auto';
       panel.style.bottom = 'auto';
     });
@@ -574,10 +586,8 @@
         panel.style.height = rect.height + 'px';
         wbResizing = {
           mode: mode,
-          rightEdge: rect.right,
-          topEdge: rect.top,
-          startW: rect.width,
-          startH: rect.height,
+          startRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+          startPoint: { x: e.clientX, y: e.clientY },
           handle: handle,
         };
         handle.classList.add('is-dragging');
@@ -597,36 +607,39 @@
   function clampWorkbenchShellPos(wb, session) {
     if (!wb) return;
     const margin = 12;
-    const w = Math.min(720, Math.max(360, Number(session.width || config.workbench_width) || 500));
     const maxH = Math.max(280, window.innerHeight - margin * 2);
-    let h = Math.round(Number(session.height) || 0);
-    if (!Number.isFinite(h) || h < 280) h = Math.min(maxH, Math.round(window.innerHeight * 0.78));
-    h = Math.min(maxH, Math.max(280, h));
-    wb.style.width = w + 'px';
-    wb.style.height = h + 'px';
+    const defaultWidth = Math.min(720, Math.max(360, Number(config.workbench_width) || 500));
+    const defaultHeight = Math.min(maxH, Math.max(280, Math.round(window.innerHeight * 0.78)));
+    const defaultRect = {
+      left: Math.max(margin, window.innerWidth - defaultWidth - 24),
+      top: Math.max(24, Math.round(window.innerHeight * 0.08)),
+      width: defaultWidth,
+      height: defaultHeight,
+    };
+    const rect = clampCreamuWorkbenchRect({
+      left: session.left,
+      top: session.top,
+      width: session.width || config.workbench_width,
+      height: session.height,
+    }, window, {
+      margin,
+      minWidth: 360,
+      minHeight: 280,
+      maxWidth: 720,
+      defaultRect,
+      fallbackWidth: defaultWidth,
+      fallbackHeight: defaultHeight,
+    });
+    wb.style.width = rect.width + 'px';
+    wb.style.height = rect.height + 'px';
     wb.style.right = 'auto';
     wb.style.bottom = 'auto';
-    if (session.left == null || session.top == null || !Number.isFinite(Number(session.left)) || !Number.isFinite(Number(session.top))) {
-      const left = Math.max(margin, window.innerWidth - w - 24);
-      const top = Math.max(24, Math.round(window.innerHeight * 0.08));
-      wb.style.left = left + 'px';
-      wb.style.top = top + 'px';
-      session.left = left;
-      session.top = top;
-      session.width = w;
-      session.height = h;
-      return;
-    }
-    const maxL = Math.max(margin, window.innerWidth - w - margin);
-    const maxT = Math.max(margin, window.innerHeight - h - margin);
-    const left = Math.round(Math.min(maxL, Math.max(margin, Number(session.left))));
-    const top = Math.round(Math.min(maxT, Math.max(margin, Number(session.top))));
-    wb.style.left = left + 'px';
-    wb.style.top = top + 'px';
-    session.left = left;
-    session.top = top;
-    session.width = w;
-    session.height = h;
+    wb.style.left = rect.left + 'px';
+    wb.style.top = rect.top + 'px';
+    session.left = rect.left;
+    session.top = rect.top;
+    session.width = rect.width;
+    session.height = rect.height;
   }
 
   function forceWorkbenchVisible(wb) {
@@ -643,6 +656,7 @@
     const top = Math.max(24, Math.round(window.innerHeight * 0.08));
     const left = Math.max(12, window.innerWidth - w - 24);
     wb.classList.add('is-open');
+    document.getElementById('jlc-wb-fab')?.classList.add('is-panel-open');
     wb.style.setProperty('display', 'flex', 'important');
     wb.style.setProperty('visibility', 'visible', 'important');
     wb.style.setProperty('opacity', '1', 'important');
@@ -666,6 +680,7 @@
   function forceWorkbenchHidden(wb) {
     if (!wb) return;
     wb.classList.remove('is-open');
+    document.getElementById('jlc-wb-fab')?.classList.remove('is-panel-open');
     wb.style.setProperty('display', 'none', 'important');
   }
 

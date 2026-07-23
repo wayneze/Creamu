@@ -14,9 +14,11 @@
     "build:exh": "npm run build -w @creamu/exh-commander",
     "build:jlc": "npm run build -w @creamu/jlc-commander",
     "build:scout": "npm run build -w @creamu/scout-commander",
+    "check:repo": "node scripts/check-repository.mjs",
+    "check:metadata": "node scripts/check-metadata.mjs",
     "check:dist": "node scripts/check-dist.mjs",
     "test": "node scripts/test.mjs",
-    "check": "npm run test"
+    "check": "npm run check:repo && npm test"
   },
   "workspaces": [
     "packages/exh-commander",

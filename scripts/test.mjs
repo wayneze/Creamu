@@ -13,18 +13,10 @@ function run(command, args) {
   if (result.status !== 0) process.exit(result.status || 1);
 }
 
-// Builds are the public smoke test and validate generated userscript syntax.
 run('npm', ['run', 'build']);
-
-// Published userscripts must match the checked-in build output.
-run(process.execPath, ['scripts/check-dist.mjs']);
-
-// Public contract tests always run in clean checkouts and CI.
+run(process.execPath, ['scripts/check-metadata.mjs']);
 run(process.execPath, ['tests/run.mjs']);
 
-// Private fixtures stay out of the repository; run them when available locally.
 if (existsSync('private/tests/run-all.mjs')) {
   run(process.execPath, ['private/tests/run-all.mjs']);
-} else {
-  console.log('Private tests not present; public build smoke tests completed.');
 }

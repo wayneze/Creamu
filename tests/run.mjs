@@ -2,7 +2,16 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 const root = process.cwd();
-const files = ['tests/webdav.mjs', 'tests/exh/test-domain.mjs'];
+const files = [
+  'tests/shared/workbench-geometry.mjs',
+  'tests/shared/workbench-css.mjs',
+  'tests/webdav.mjs',
+  'tests/exh/test-domain.mjs',
+  'tests/jlc/core.mjs',
+  'tests/jlc/meta-fetching.mjs',
+  'tests/jlc/meta-scheduling.mjs',
+  'packages/scout-commander/scripts/test-core.mjs',
+];
 
 for (const file of files) {
   console.log(`\n>>> ${file}`);

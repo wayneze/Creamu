@@ -1,11 +1,28 @@
 {
-  "version": "3.5.2",
-  "generatedAt": "2026-07-18T18:49:33.483Z",
   "parts": [
     "00-header.meta.js",
     "10-core.js",
     "20-workbench.js",
-    "30-services-rest.js"
+    "30-detail-services.js",
+    "40-tracking-search.js",
+    "45-tracking-state.js",
+    "47-tracking-ui.js",
+    "50-resource-center.js",
+    "60-legacy-ui.js"
   ],
-  "output": "dist/creamu-jlc.user.js"
+  "injectAfter": {
+    "10-core.js": [
+      "packages/shared/creamu-workbench-css.js",
+      "packages/shared/creamu-workbench-geometry.js",
+      "packages/shared/creamu-webdav.js"
+    ]
+  },
+  "output": "dist/creamu-jlc.user.js",
+  "required": [
+    { "label": "workbench", "text": "function openWorkbenchV3" },
+    { "label": "backup export", "text": "function exportBackup" },
+    { "label": "WebDAV", "text": "function createCreamuWebDavSync" },
+    { "label": "workbench styles", "text": "function getCreamuWorkbenchCss" },
+    { "label": "workbench geometry", "text": "function clampCreamuWorkbenchRect" }
+  ]
 }

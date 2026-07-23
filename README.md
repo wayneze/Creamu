@@ -60,9 +60,12 @@ npm run build:jlc
 npm run build:scout
 ```
 
-自动验证使用 `npm test`：先构建三个 userscript 并检查生成文件语法，再运行 `tests/` 中不含本机资料的公开契约测试；本机若存在被忽略的 `private/tests`，会继续运行完整私测。GitHub Actions 会在 Node.js 20/22 上执行同一入口，并额外阻止本地资料和私有导出进入 Git。
-
-发布产物检查使用 `npm run check:dist`，确保 `dist/*.user.js` 与当前源码构建结果一致。
+测试与产物校验：
+```bash
+npm run check
+npm test
+npm run check:dist
+```
 
 源码在 `packages/*/src/parts`，构建为单文件 userscript。
 

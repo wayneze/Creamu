@@ -2593,10 +2593,566 @@ function initScoutWebDav() {
     }
   });
 }
-  /* Creamu shared workbench CSS — single source (from JLC). Both products inject this. */
-  function getCreamuWorkbenchCss() {
-    return "\n        #jlc-wb-fab {\n            position: fixed; bottom: 20px; right: 18px; width: 34px; height: 34px;\n            border-radius: 11px; border: 0 !important; color: #fff !important;\n            background: linear-gradient(#e8a24e, #d4883a) !important;\n            background-color: #d4883a !important;\n            box-shadow: 0 3px 0 #b56e28, 0 8px 16px rgba(140,90,40,.26) !important;\n            z-index: 999999; cursor: grab; touch-action: none; user-select: none;\n            display: flex; align-items: center; justify-content: center; font-size: 14px;\n            opacity: 1 !important;\n            transition: filter .14s ease, box-shadow .14s ease, transform .12s ease;\n        }\n        #jlc-wb-fab:hover { filter: brightness(1.05); }\n        #jlc-wb-fab:active, #jlc-wb-fab.is-dragging {\n            cursor: grabbing; transform: translateY(2px);\n            box-shadow: 0 2px 0 #b56e28, 0 4px 10px rgba(140,90,40,.22);\n            filter: brightness(.98);\n        }\n        #jlc-wb-fab .jlc-wb-fab-badge {\n            position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px; padding: 0 3px;\n            border-radius: 999px; background: #5c3a1a; border: 1.5px solid #f6efe3; color: #fff;\n            font-size: 9px; font-weight: 700; display: none; align-items: center; justify-content: center;\n            box-shadow: 0 1px 0 rgba(0,0,0,.12);\n        }\n        #jlc-wb-fab.has-updates .jlc-wb-fab-badge { display: inline-flex; }\n\n        #jlc-wb {\n            position: fixed; left: auto; top: auto; right: 48px; bottom: auto;\n            width: min(520px, calc(100vw - 64px));\n            height: min(78vh, 800px); max-height: none; min-width: 360px; min-height: 280px;\n            display: none; flex-direction: column; z-index: 999998; overflow: hidden;\n            background: #f6efe3; color: #4a3728; border-radius: 22px; border: 1px solid #e4d4bc;\n            box-shadow: 0 18px 50px rgba(90,60,30,.22); font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;\n            font-size: 14.5px;\n        }\n        #jlc-wb.is-open { display: flex; }\n        #jlc-wb.is-dragging, #jlc-wb.is-resizing { opacity: .98; user-select: none; }\n        #jlc-wb * { box-sizing: border-box; }\n\n        #jlc-wb .jlc-wb-header {\n            display: flex; align-items: center; justify-content: space-between; gap: 10px;\n            padding: 16px 18px 12px; background: transparent; border-bottom: 0; flex: 0 0 auto;\n            cursor: move; touch-action: none;\n        }\n        #jlc-wb .jlc-wb-header .jlc-wb-header-actions,\n        #jlc-wb .jlc-wb-header .jlc-wb-header-actions * { cursor: pointer; }\n        #jlc-wb .jlc-wb-title { font-weight: 800; font-size: 18px; color: #6b4a2e; letter-spacing: .2px; }\n        #jlc-wb .jlc-wb-subtitle { font-size: 12px; color: #a08468; margin-top: 3px; }\n        #jlc-wb .jlc-wb-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }\n\n        #jlc-wb .jlc-wb-icon-btn, #jlc-wb .jlc-wb-chip, #jlc-wb .jlc-wb-btn {\n            appearance: none; border: 1px solid #e0cdae; background: #fffaf2; color: #5a4030;\n            border-radius: 999px; cursor: pointer; font-size: 13px; line-height: 1.25; font-weight: 650;\n        }\n        #jlc-wb .jlc-wb-icon-btn {\n            width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center;\n            background: #fff; font-size: 15px; box-shadow: 0 2px 0 #e6d3b5;\n        }\n        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: #fff; box-shadow: 0 2px 0 #e6d3b5; }\n        #jlc-wb .jlc-wb-chip.is-on { background: #d4883a; border-color: transparent; color: #fff; box-shadow: 0 2px 0 #b56e28; }\n        #jlc-wb .jlc-wb-btn { padding: 9px 13px; border-radius: 12px; box-shadow: 0 2px 0 #e0cdae; }\n        #jlc-wb .jlc-wb-btn.primary { background: #d4883a; border-color: transparent; color: #fff; box-shadow: 0 2px 0 #b56e28; }\n        #jlc-wb .jlc-wb-btn.ghost { background: #fffaf2; }\n        #jlc-wb .jlc-wb-btn.danger { background: #f3d5d0; border-color: #e8b8b0; color: #8a3a32; box-shadow: none; }\n        #jlc-wb .jlc-wb-btn:hover, #jlc-wb .jlc-wb-icon-btn:hover, #jlc-wb .jlc-wb-chip:hover {\n            background: #fff; border-color: #d4bc96; filter: brightness(1.02);\n        }\n        #jlc-wb .jlc-wb-btn.primary:hover { background: #e09848; border-color: transparent; filter: none; }\n        #jlc-wb .jlc-wb-btn[disabled] { opacity: .5; cursor: not-allowed; }\n\n        #jlc-wb .jlc-wb-nav {\n            display: flex; gap: 8px; background: transparent; border-bottom: 0; flex: 0 0 auto;\n            padding: 0 16px 10px;\n        }\n        #jlc-wb .jlc-wb-nav button {\n            flex: 1; border: 0; background: #efe4d2; color: #8a6f55; padding: 10px 10px; cursor: pointer;\n            font-size: 14px; font-weight: 700; transition: .18s; border-radius: 12px;\n        }\n        #jlc-wb .jlc-wb-nav button.active {\n            color: #fff; background: #d4883a; box-shadow: 0 2px 0 #b56e28;\n        }\n\n        #jlc-wb .jlc-wb-body {\n            flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column;\n            padding: 0; background: transparent;\n        }\n        #jlc-wb [data-jlc-wb-page] {\n            flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;\n        }\n        #jlc-wb [data-jlc-wb-page][hidden] { display: none !important; }\n        #jlc-wb #jlc-wb-tracking-root,\n        #jlc-wb #exc-wb-tracking-root,\n        #jlc-wb #exc-wb-works-root,\n        #jlc-wb [data-jlc-wb-page] > * {\n            flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;\n        }\n        #jlc-wb #jlc-wb-view-root {\n            flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px;\n        }\n        #jlc-wb #jlc-wb-library-root,\n        #jlc-wb #jlc-wb-filter-root {\n            flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px;\n        }\n\n        #jlc-wb .jlc-wb-footer {\n            flex: 0 0 auto; border-top: 1px solid #eadcc6; padding: 12px 14px; background: rgba(255,255,255,.45);\n            display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;\n        }\n        #jlc-wb .jlc-wb-footer-summary { font-size: 12.5px; color: #9a7d60; line-height: 1.45; max-width: 52%; }\n\n        #jlc-wb .jlc-wb-toolbar {\n            flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px;\n            padding: 4px 14px 10px; background: transparent; border-bottom: 0;\n            position: static;\n        }\n        #jlc-wb .jlc-wb-toolbar-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }\n        #jlc-wb .jlc-wb-list-scroll {\n            flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto;\n            /* 底边留白：少条目时「更多」菜单向下仍有空间；仍不够时 JS 会 is-up 上翻 */\n            padding: 4px 14px 96px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;\n        }\n        #jlc-wb .jlc-wb-list-scroll::-webkit-scrollbar { width: 8px; }\n        #jlc-wb .jlc-wb-list-scroll::-webkit-scrollbar-thumb {\n            background: rgba(140,100,50,.22); border-radius: 999px;\n        }\n\n        #jlc-wb .jlc-wb-search {\n            flex: 1 1 180px; min-width: 0; padding: 10px 14px; border-radius: 14px; border: 1px solid #e4d4bc;\n            background: #fff; color: #4a3728; font-size: 14.5px; box-shadow: 0 2px 0 #eadcc6;\n        }\n        #jlc-wb .jlc-wb-search:focus { outline: none; border-color: #d4883a; background: #fff; }\n        #jlc-wb select.jlc-wb-select,\n        #jlc-wb select {\n            color-scheme: light;\n            background: #fffdf8 !important;\n            color: #4a3728 !important;\n        }\n        #jlc-wb select option,\n        #jlc-wb select.jlc-wb-select option {\n            background: #fffdf8 !important;\n            color: #4a3728 !important;\n        }\n        #jlc-wb select.jlc-wb-select {\n            padding: 9px 11px; border-radius: 12px; border: 1px solid #e4d4bc; background: #fff; color: #4a3728; font-size: 13.5px;\n            box-shadow: 0 2px 0 #eadcc6;\n        }\n\n        #jlc-wb .jlc-wb-group {\n            border: 0; border-radius: 16px; overflow: visible; margin-bottom: 18px; background: transparent;\n        }\n        #jlc-wb .jlc-wb-group-toggle {\n            width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;\n            background: transparent; color: #7a5a3c; border: 0; padding: 10px 6px 10px;\n            cursor: pointer; font-size: 13.5px; font-weight: 750;\n            border-radius: 0; margin: 0 0 2px; line-height: 1.35;\n            min-height: 36px;\n        }\n        #jlc-wb .jlc-wb-group.collapsed .jlc-wb-group-toggle { border-radius: 0; }\n        #jlc-wb .jlc-wb-group-toggle small {\n            color: #9a7d60; font-weight: 650; background: #efe4d2; padding: 3px 9px; border-radius: 999px; font-size: 12px;\n            flex: 0 0 auto;\n        }\n        #jlc-wb .jlc-wb-group-body {\n            padding: 2px 0 4px; display: flex; flex-direction: column; gap: 12px; overflow: visible;\n        }\n        #jlc-wb .jlc-wb-group.collapsed .jlc-wb-group-body { display: none; }\n\n        #jlc-wb .jlc-wb-item {\n            position: relative; border-radius: 18px; padding: 12px 12px 12px 12px;\n            background: #fffdf8; border: 1px solid #efe0cc; overflow: visible;\n            cursor: pointer; transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, transform .12s ease;\n            box-shadow: 0 3px 0 #ead7bb;\n        }\n        #jlc-wb .jlc-wb-item:hover {\n            border-color: #e0c9a8; background: #fff;\n            box-shadow: 0 6px 16px rgba(120,80,30,.12); z-index: 3;\n        }\n        #jlc-wb .jlc-wb-item::before { display: none; }\n        #jlc-wb .jlc-wb-item.is-focus {\n            border-color: #d4883a; box-shadow: 0 0 0 2px rgba(212,136,58,.22), 0 4px 0 #e0c9a8;\n            background: #fff8ee;\n        }\n        #jlc-wb .jlc-wb-item.is-current { border-color: #8eb6e8; }\n        /* 菜单打开时抬高整卡，避免被下方 Open 按钮盖住 */\n        #jlc-wb .jlc-wb-item.is-menu-open {\n            z-index: 50;\n            position: relative;\n        }\n\n        #jlc-wb .jlc-wb-item-row {\n            display: flex; align-items: center; gap: 12px; min-width: 0;\n        }\n        #jlc-wb .jlc-wb-cover {\n            flex: 0 0 auto; width: 54px; height: 54px; border-radius: 14px;\n            background: #efe4d2; border: 1px solid #e4d4bc; overflow: hidden;\n            display: flex; align-items: center; justify-content: center; position: relative;\n        }\n        #jlc-wb .jlc-wb-cover.is-avatar { border-radius: 50%; }\n        #jlc-wb .jlc-wb-cover.is-poster { border-radius: 12px; }\n        #jlc-wb .jlc-wb-cover img {\n            width: 100%; height: 100%; object-fit: cover; display: block; background: #f0e6d6;\n        }\n        #jlc-wb .jlc-wb-cover img.jlc-wb-lrr-thumb {\n            position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;\n        }\n        #jlc-wb .jlc-wb-cover { position: relative; }\n        #jlc-wb .jlc-wb-item-actions {\n            display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center;\n        }\n        #jlc-wb .jlc-wb-item-actions .jlc-wb-btn {\n            display: inline-flex; align-items: center; justify-content: center; text-decoration: none;\n            padding: 7px 11px; font-size: 12.5px;\n        }\n        #jlc-wb .jlc-wb-cover-fallback {\n            font-size: 18px; font-weight: 800; color: #a07850; line-height: 1;\n        }\n        #jlc-wb .jlc-wb-cover[data-group=\"actor\"] { background: #f3e2ef; }\n        #jlc-wb .jlc-wb-cover[data-group=\"director\"] { background: #e4eef8; }\n        #jlc-wb .jlc-wb-cover[data-group=\"maker\"],\n        #jlc-wb .jlc-wb-cover[data-group=\"studio\"] { background: #e8f0e4; }\n        #jlc-wb .jlc-wb-cover[data-group=\"series\"] { background: #f7ebe0; }\n        #jlc-wb .jlc-wb-cover[data-group=\"tag\"] { background: #f0ebe0; }\n        #jlc-wb .jlc-wb-cover[data-group=\"keyword\"] { background: #efe8f5; }\n\n        #jlc-wb .jlc-wb-item-body { flex: 1 1 auto; min-width: 0; }\n        #jlc-wb .jlc-wb-item-title-row {\n            display: flex; align-items: flex-start; gap: 8px; margin-bottom: 4px;\n        }\n        #jlc-wb .jlc-wb-item-title {\n            flex: 1 1 auto; min-width: 0; font-size: 14.5px; font-weight: 750; color: #4a3728;\n            line-height: 1.35; margin: 0; word-break: break-word;\n            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;\n        }\n        #jlc-wb .jlc-wb-leaf {\n            flex: 0 0 auto; max-width: 72px; padding: 2px 8px; border-radius: 999px;\n            font-size: 11px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n            background: #efe4d2; color: #8a6f55;\n        }\n        #jlc-wb .jlc-wb-leaf.tone-red { background: #fde2df; color: #b42318; }\n        #jlc-wb .jlc-wb-leaf.tone-green { background: #e2f5e4; color: #2f6b3a; }\n        #jlc-wb .jlc-wb-leaf.tone-yellow { background: #fff1d6; color: #9a6700; }\n        #jlc-wb .jlc-wb-leaf.tone-gray { background: #efe4d2; color: #8a6f55; }\n        #jlc-wb .jlc-wb-item-meta {\n            display: flex; flex-direction: column; gap: 2px;\n            margin-bottom: 5px; min-width: 0;\n        }\n        #jlc-wb .jlc-wb-item-meta-line {\n            font-size: 12.5px; color: #9a7d60; line-height: 1.4;\n            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n            min-width: 0;\n        }\n        #jlc-wb .jlc-wb-item-meta-line.is-avid {\n            color: #7a6048; font-weight: 650;\n        }\n        #jlc-wb .jlc-wb-item-pills {\n            display: flex; flex-wrap: wrap; gap: 5px; align-items: center;\n        }\n        #jlc-wb .jlc-wb-item-side {\n            flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;\n            position: relative; z-index: 2;\n        }\n        #jlc-wb .jlc-wb-open-btn {\n            appearance: none; border: 0; cursor: pointer;\n            min-width: 64px; padding: 8px 14px; border-radius: 999px;\n            background: linear-gradient(#e8a24e, #d4883a); color: #fff; font-weight: 800; font-size: 13px;\n            box-shadow: 0 3px 0 #b56e28; transition: transform .12s ease, filter .12s ease;\n        }\n        #jlc-wb .jlc-wb-open-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }\n        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 #b56e28; }\n        #jlc-wb .jlc-wb-more-btn {\n            appearance: none; border: 0; background: transparent; color: #b09070;\n            width: 28px; height: 22px; border-radius: 8px; cursor: pointer; font-size: 16px; line-height: 1;\n            font-weight: 800; letter-spacing: 1px;\n        }\n        #jlc-wb .jlc-wb-more-btn:hover, #jlc-wb .jlc-wb-more-btn.is-open {\n            background: #efe4d2; color: #6b4a2e;\n        }\n        #jlc-wb .jlc-wb-item-menu {\n            position: absolute; top: calc(100% + 4px); right: 0; min-width: 132px;\n            background: #fffdf8; border: 1px solid #e4d4bc; border-radius: 12px;\n            box-shadow: 0 12px 28px rgba(90,60,30,.2); padding: 6px; z-index: 80;\n            display: flex; flex-direction: column; gap: 2px;\n        }\n        #jlc-wb .jlc-wb-item-menu.is-up {\n            top: auto; bottom: calc(100% + 4px);\n        }\n        #jlc-wb .jlc-wb-item-menu[hidden] { display: none !important; }\n        #jlc-wb .jlc-wb-item-menu button {\n            appearance: none; border: 0; background: transparent; text-align: left;\n            padding: 8px 10px; border-radius: 8px; cursor: pointer; color: #5a4030;\n            font-size: 13px; font-weight: 650;\n        }\n        #jlc-wb .jlc-wb-item-menu button:hover { background: #f3e9d8; }\n        #jlc-wb .jlc-wb-item-menu button.is-danger { color: #b42318; }\n\n        #jlc-wb .jlc-status-pill, #jlc-wb .jlc-site-pill {\n            display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;\n            font-size: 11.5px; font-weight: 700; border: 1px solid transparent;\n        }\n        #jlc-wb .jlc-site-pill { background: #f3e9d8; color: #8a6f55; border-color: #eadcc6; }\n        #jlc-wb .jlc-site-pill.is-current { background: #e7f1ff; color: #175cd3; border-color: #c2dbff; }\n        /* 上次：默认琥珀；按打开时效加深/减弱 */\n        #jlc-wb .jlc-site-pill.is-last { background: #fff4db; color: #9a6700; border-color: #f0d7a0; }\n        #jlc-wb .jlc-site-pill.is-last.recency-fresh {\n            background: #ffe8c2; color: #b54708; border-color: #f5c77a; font-weight: 800;\n        }\n        #jlc-wb .jlc-site-pill.is-last.recency-warm {\n            background: #fff0d0; color: #9a6700; border-color: #ebc98a;\n        }\n        #jlc-wb .jlc-site-pill.is-last.recency-mid {\n            background: #f6efe2; color: #8a7048; border-color: #e4d4bc;\n        }\n        #jlc-wb .jlc-site-pill.is-last.recency-cool {\n            background: #f0ebe4; color: #9a8a78; border-color: #e0d6c8;\n        }\n        #jlc-wb .jlc-wb-item-meta-line .jlc-wb-pagehint,\n        #jlc-wb .jlc-wb-pagehint {\n            color: #a89078; font-weight: 550;\n        }\n        #jlc-wb .jlc-wb-item-meta-line.is-sub {\n            color: #a89078; font-weight: 550;\n        }\n        #jlc-wb .jlc-status-pill.tone-gray { background: #efe4d2; color: #8a6f55; }\n        #jlc-wb .jlc-status-pill.tone-green { background: #e2f5e4; color: #2f6b3a; }\n        #jlc-wb .jlc-status-pill.tone-red { background: #fde2df; color: #b42318; }\n        #jlc-wb .jlc-status-pill.tone-yellow { background: #fff1d6; color: #9a6700; }\n\n        #jlc-wb .jlc-wb-empty {\n            padding: 20px; border: 1px dashed #e0cdae; border-radius: 16px; color: #9a7d60;\n            background: rgba(255,255,255,.55); font-size: 14.5px; line-height: 1.65;\n        }\n\n        #jlc-wb #jlc-wb-view-root .jlc-wb-view-block,\n        #jlc-wb #jlc-wb-library-root .jlc-wb-view-block,\n        #jlc-wb #jlc-wb-filter-root .jlc-wb-view-block {\n            background: #fffdf8; border: 1px solid #efe0cc; border-radius: 16px; padding: 14px; margin-bottom: 14px;\n            box-shadow: 0 3px 0 #ead7bb;\n        }\n        #jlc-wb #jlc-wb-view-root .jlc-wb-view-title,\n        #jlc-wb #jlc-wb-library-root .jlc-wb-view-title,\n        #jlc-wb #jlc-wb-filter-root .jlc-wb-view-title {\n            font-size: 12px; color: #d4883a; font-weight: 750; letter-spacing: .5px; margin: 0 0 12px;\n            text-transform: uppercase;\n        }\n        #jlc-wb .legacy-row,\n        #jlc-wb .jlc-wb-settings .legacy-row {\n            background: #fffaf2; border: 1px solid #e4d4bc; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;\n        }\n        #jlc-wb .legacy-toggle,\n        #jlc-wb .jlc-wb-settings .legacy-toggle {\n            display: flex; align-items: center; justify-content: space-between; gap: 12px;\n        }\n        #jlc-wb .legacy-toggle > span,\n        #jlc-wb .jlc-wb-settings .legacy-toggle > span { color: #4a3728; font-size: 14.5px; }\n        #jlc-wb .legacy-toggle input[type=\"checkbox\"],\n        #jlc-wb .jlc-wb-settings .legacy-toggle input[type=\"checkbox\"] {\n            width: 20px; height: 20px; margin: 0; accent-color: #d4883a; cursor: pointer;\n        }\n        #jlc-wb .legacy-row.disabled { opacity: .45; }\n        #jlc-wb .legacy-range,\n        #jlc-wb .jlc-wb-settings .legacy-range { display: flex; align-items: center; gap: 10px; }\n        #jlc-wb .legacy-range input[type=\"range\"],\n        #jlc-wb .jlc-wb-settings .legacy-range input[type=\"range\"] {\n            flex: 1; margin: 0; background: transparent; border: 0; accent-color: #d4883a;\n        }\n        #jlc-wb .legacy-note,\n        #jlc-wb .jlc-wb-settings .legacy-note { font-size: 13px; color: #9a7d60; line-height: 1.55; margin-top: 8px; }\n        #jlc-wb .jlc-wb-view-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }\n        #jlc-wb .jlc-wb-view-actions .jlc-wb-btn { width: 100%; justify-content: center; }\n\n        #jlc-wb .jlc-wb-settings {\n            display: none; position: absolute; inset: 0; z-index: 5; background: rgba(90,60,30,.28);\n        }\n        #jlc-wb .jlc-wb-settings.is-open { display: block; }\n        #jlc-wb .jlc-wb-settings-panel {\n            position: absolute; top: 0; right: 0; width: min(100%, 430px); height: 100%;\n            display: flex; flex-direction: column; background: #f6efe3; border-left: 1px solid #e4d4bc;\n        }\n        #jlc-wb .jlc-wb-settings-head {\n            flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center;\n            gap: 8px; padding: 14px 16px; border-bottom: 1px solid #eadcc6; background: #fffaf2; font-size: 15px; color: #4a3728;\n        }\n        #jlc-wb .jlc-wb-settings-nav {\n            flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px;\n            border-bottom: 1px solid #eadcc6; background: #f3e9d8;\n        }\n        #jlc-wb .jlc-wb-settings-nav button {\n            appearance: none; border: 1px solid #e0cdae; background: #fff; color: #8a6f55;\n            border-radius: 999px; padding: 8px 12px; cursor: pointer; font-size: 13.5px; font-weight: 700;\n        }\n        #jlc-wb .jlc-wb-settings-nav button.active {\n            background: #d4883a; border-color: transparent; color: #fff;\n        }\n        #jlc-wb .jlc-wb-settings-body {\n            flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 16px 20px; background: #f6efe3;\n        }\n        #jlc-wb .jlc-wb-settings-section { display: none; }\n        #jlc-wb .jlc-wb-settings-section.is-active { display: block; }\n        #jlc-wb .jlc-wb-settings h3 {\n            margin: 0 0 12px; font-size: 13px; color: #d4883a; letter-spacing: 1px; text-transform: uppercase;\n        }\n        #jlc-wb .jlc-wb-settings label,\n        #jlc-wb #jlc-wb-library-root label,\n        #jlc-wb #jlc-wb-filter-root label {\n            display: block; font-size: 12px; color: #9a7d60; margin-top: 12px; text-transform: uppercase; letter-spacing: 1px;\n        }\n        #jlc-wb .jlc-wb-settings input[type=\"text\"],\n        #jlc-wb .jlc-wb-settings input[type=\"password\"],\n        #jlc-wb .jlc-wb-settings input[type=\"number\"],\n        #jlc-wb .jlc-wb-settings textarea,\n        #jlc-wb .jlc-wb-settings select,\n        #jlc-wb #jlc-wb-library-root input[type=\"text\"],\n        #jlc-wb #jlc-wb-library-root input[type=\"password\"],\n        #jlc-wb #jlc-wb-library-root input[type=\"number\"],\n        #jlc-wb #jlc-wb-library-root textarea,\n        #jlc-wb #jlc-wb-library-root select,\n        #jlc-wb #jlc-wb-filter-root input[type=\"text\"],\n        #jlc-wb #jlc-wb-filter-root textarea {\n            width: 100%; padding: 12px; margin-top: 8px; border-radius: 12px; border: 1px solid #e4d4bc;\n            background: #fff; color: #4a3728; font-size: 14px;\n        }\n        #jlc-wb .jlc-wb-settings input:focus,\n        #jlc-wb .jlc-wb-settings textarea:focus,\n        #jlc-wb .jlc-wb-settings select:focus,\n        #jlc-wb #jlc-wb-library-root input:focus,\n        #jlc-wb #jlc-wb-library-root textarea:focus,\n        #jlc-wb #jlc-wb-library-root select:focus {\n            border-color: #d4883a; outline: none; background: #fff;\n        }\n        #jlc-wb .jlc-wb-settings .stat-box,\n        #jlc-wb #jlc-wb-library-root .stat-box {\n            display: flex; justify-content: space-around; background: #fffdf8; border: 1px solid #efe0cc;\n            border-radius: 14px; padding: 14px; margin-bottom: 14px;\n        }\n        #jlc-wb .jlc-wb-settings .stat-item,\n        #jlc-wb #jlc-wb-library-root .stat-item { text-align: center; }\n        #jlc-wb .jlc-wb-settings .stat-item b,\n        #jlc-wb #jlc-wb-library-root .stat-item b { display: block; color: #d4883a; font-size: 22px; margin-bottom: 4px; }\n        #jlc-wb .jlc-wb-settings .stat-item span,\n        #jlc-wb #jlc-wb-library-root .stat-item span { font-size: 11px; color: #9a7d60; }\n        #jlc-wb .person-item {\n            background: #fffdf8; padding: 12px 14px; border-radius: 12px; margin-bottom: 8px;\n            display: flex; justify-content: space-between; align-items: center; border: 1px solid #efe0cc; font-size: 14px;\n            color: #4a3728;\n        }\n        #jlc-wb .person-item:hover { border-color: #e0c9a8; background: #fff; }\n        #jlc-wb .person-item span.remove { color: #d4883a; cursor: pointer; font-size: 18px; padding: 0 8px; }\n\n        #jlc-tracking-pagebar.jlc-wb-pagebar {\n            background: rgba(255,253,248,.97); border: 1px solid #e4d4bc; color: #4a3728;\n            box-shadow: 0 10px 24px rgba(90,60,30,.12);\n        }\n        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-title { color: #4a3728; }\n        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagehint {\n            color: #a89078 !important; font-weight: 550; font-size: 12px;\n        }\n        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-meta { color: #9a7d60; }\n        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button {\n            appearance: none; border: 1px solid #e0cdae; background: #fffaf2; color: #5a4030;\n            border-radius: 999px; padding: 7px 12px; cursor: pointer; font-size: 13px; font-weight: 650;\n        }\n        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.primary {\n            background: #d4883a; border-color: transparent; color: #fff;\n        }\n        /* 奶油条上的继续断点：沿用断点红，压过 ghost 默认样式 */\n        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.jlc-bp-continue {\n            background: linear-gradient(135deg, #ff5f56, #e54840); border: 0; color: #fff;\n            font-weight: 800; box-shadow: 0 3px 0 #b8322b, 0 8px 18px rgba(255,95,86,.22);\n        }\n\n        #jlc-wb .jlc-wb-resize-w {\n            position: absolute; left: 0; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 8;\n        }\n        #jlc-wb .jlc-wb-resize-h {\n            position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; z-index: 8;\n        }\n        #jlc-wb .jlc-wb-resize-corner {\n            position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; z-index: 9;\n        }\n        #jlc-wb .jlc-wb-resize-corner::after {\n            content: ''; position: absolute; right: 5px; bottom: 5px; width: 9px; height: 9px;\n            border-right: 2px solid rgba(180,130,70,.55); border-bottom: 2px solid rgba(180,130,70,.55);\n            border-radius: 0 0 3px 0;\n        }\n        #jlc-wb .jlc-wb-resize-w:hover, #jlc-wb .jlc-wb-resize-w.is-dragging,\n        #jlc-wb .jlc-wb-resize-h:hover, #jlc-wb .jlc-wb-resize-h.is-dragging {\n            background: rgba(212,136,58,.28);\n        }\n        #jlc-wb .jlc-wb-resize-corner:hover, #jlc-wb .jlc-wb-resize-corner.is-dragging {\n            background: rgba(212,136,58,.18);\n        }\n\n        #jlc-wb .jlc-wb-item-edit {\n            display: none; position: relative; z-index: 6;\n            margin-top: 10px; gap: 8px; align-items: center; flex-wrap: wrap;\n        }\n        #jlc-wb .jlc-wb-item-edit.is-open { display: flex; }\n        #jlc-wb .jlc-wb-item-edit input {\n            flex: 1 1 160px; min-width: 0; padding: 9px 11px; border-radius: 12px;\n            border: 1px solid #e4d4bc; background: #fff; color: #4a3728; font-size: 14px;\n        }\n        #jlc-wb-dialog {\n            position: fixed; inset: 0; z-index: 1000001; display: none; align-items: center; justify-content: center;\n            background: rgba(90,60,30,.35); padding: 20px;\n        }\n        #jlc-wb-dialog.is-open { display: flex; }\n        #jlc-wb-dialog .jlc-wb-dialog-card {\n            width: min(440px, 92vw); background: #fffdf8; border: 1px solid #e4d4bc; border-radius: 18px;\n            padding: 18px; box-shadow: 0 18px 50px rgba(90,60,30,.22); color: #4a3728;\n        }\n        #jlc-wb-dialog h4 { margin: 0 0 8px; font-size: 16px; color: #4a3728; }\n        #jlc-wb-dialog p { margin: 0 0 12px; font-size: 13.5px; color: #9a7d60; line-height: 1.55; }\n        #jlc-wb-dialog input {\n            width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #e4d4bc;\n            background: #fff; color: #4a3728; font-size: 14.5px; margin-bottom: 14px;\n        }\n        #jlc-wb-dialog .jlc-wb-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }\n\n        #jlc-wb #jlc-wb-config-diag {\n            background: #fffdf8 !important; border: 1px solid #efe0cc !important; color: #5a4030 !important;\n        }\n        #jlc-wb #jlc-wb-config-hint {\n            background: #fff7ea !important; border-color: #f0d7a0 !important; color: #9a6700 !important;\n        }\n\n                #jlc-wb .jlc-wb-settings-footer {\n            flex: 0 0 auto; border-top: 1px solid #eadcc6; padding: 12px 14px; background: #fffaf2;\n            display: flex; flex-direction: column; gap: 8px;\n        }\n\n        \n        #jlc-wb .jlc-wb-settings input[type=\"number\"] {\n            -moz-appearance: textfield;\n            appearance: textfield;\n            color-scheme: light;\n        }\n        #jlc-wb .jlc-wb-settings input[type=\"number\"]::-webkit-outer-spin-button,\n        #jlc-wb .jlc-wb-settings input[type=\"number\"]::-webkit-inner-spin-button {\n            -webkit-appearance: none; margin: 0;\n        }\n        /* 按钮缩放：由脚本设置 --jlc-btn-scale（如 0.85）；默认 1 不影响布局 */\n        #jlc-wb-fab,\n        #jlc-wb .jlc-wb-btn,\n        #jlc-wb .jlc-wb-icon-btn,\n        #jlc-wb .jlc-wb-chip,\n        #jlc-wb .jlc-wb-nav button,\n        #jlc-wb .jlc-wb-open-btn,\n        #jlc-wb .jlc-wb-more-btn,\n        #jlc-wb .jlc-wb-settings-nav button,\n        #jlc-wb .jlc-wb-item-menu button,\n        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button,\n        #jlc-wb-dialog .jlc-wb-dialog-actions button {\n            zoom: var(--jlc-btn-scale, 1);\n        }\n\n        @media (max-width: 820px) {\n            #jlc-wb {\n                left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important;\n                width: 100% !important; height: min(86vh, 840px); border-radius: 16px 16px 0 0;\n            }\n            #jlc-wb .jlc-wb-header { cursor: default; }\n            #jlc-wb-fab { width: 42px; height: 42px; font-size: 17px; }\n        }";
-  }
+function getCreamuWorkbenchCss() {
+  return `
+        :where(#jlc-wb, #jlc-wb-fab, #jlc-wb-dialog, #jlc-tracking-pagebar) {
+            --creamu-wb-bg: #f6efe3;
+            --creamu-wb-surface: #fffdf8;
+            --creamu-wb-surface-soft: #fffaf2;
+            --creamu-wb-surface-muted: #efe4d2;
+            --creamu-wb-surface-raised: #fff;
+            --creamu-wb-text: #4a3728;
+            --creamu-wb-text-strong: #5a4030;
+            --creamu-wb-title: #6b4a2e;
+            --creamu-wb-text-muted: #9a7d60;
+            --creamu-wb-text-subtle: #8a6f55;
+            --creamu-wb-border: #e4d4bc;
+            --creamu-wb-border-strong: #e0cdae;
+            --creamu-wb-divider: #eadcc6;
+            --creamu-wb-accent: #d4883a;
+            --creamu-wb-accent-hover: #e09848;
+            --creamu-wb-accent-light: #e8a24e;
+            --creamu-wb-accent-dark: #b56e28;
+            --creamu-wb-on-accent: #fff;
+            --creamu-wb-danger: #b42318;
+        }
+
+        #jlc-wb-fab {
+            position: fixed; bottom: 20px; right: 18px; width: 34px; height: 34px;
+            border-radius: 11px; border: 0 !important; color: #fff !important;
+            background: linear-gradient(var(--creamu-wb-accent-light), var(--creamu-wb-accent)) !important;
+            background-color: var(--creamu-wb-accent) !important;
+            box-shadow: 0 3px 0 #b56e28, 0 8px 16px rgba(140,90,40,.26) !important;
+            z-index: 999999; cursor: grab; touch-action: none; user-select: none;
+            display: flex; align-items: center; justify-content: center; font-size: 14px;
+            opacity: 1 !important;
+            transition: filter .14s ease, box-shadow .14s ease, transform .12s ease;
+        }
+        #jlc-wb-fab:hover { filter: brightness(1.05); }
+        #jlc-wb-fab:active, #jlc-wb-fab.is-dragging {
+            cursor: grabbing; transform: translateY(2px);
+            box-shadow: 0 2px 0 #b56e28, 0 4px 10px rgba(140,90,40,.22);
+            filter: brightness(.98);
+        }
+        #jlc-wb-fab .jlc-wb-fab-badge {
+            position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px; padding: 0 3px;
+            border-radius: 999px; background: #5c3a1a; border: 1.5px solid #f6efe3; color: var(--creamu-wb-on-accent);
+            font-size: 9px; font-weight: 700; display: none; align-items: center; justify-content: center;
+            box-shadow: 0 1px 0 rgba(0,0,0,.12);
+        }
+        #jlc-wb-fab.has-updates .jlc-wb-fab-badge { display: inline-flex; }
+
+        #jlc-wb {
+            position: fixed; left: auto; top: auto; right: 48px; bottom: auto;
+            width: min(520px, calc(100vw - 64px));
+            height: min(78vh, 800px); max-height: none; min-width: 360px; min-height: 280px;
+            display: none; flex-direction: column; z-index: 999998; overflow: hidden;
+            box-sizing: border-box;
+            background: var(--creamu-wb-bg); color: var(--creamu-wb-text); border-radius: 22px; border: 1px solid var(--creamu-wb-border);
+            box-shadow: 0 18px 50px rgba(90,60,30,.22); font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            font-size: 14.5px;
+        }
+        #jlc-wb.is-open { display: flex; }
+        #jlc-wb.is-dragging, #jlc-wb.is-resizing { opacity: .98; user-select: none; }
+        #jlc-wb * { box-sizing: border-box; }
+
+        #jlc-wb .jlc-wb-header {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 16px 18px 12px; background: transparent; border-bottom: 0; flex: 0 0 auto;
+            cursor: move; touch-action: none;
+        }
+        #jlc-wb .jlc-wb-header .jlc-wb-header-actions,
+        #jlc-wb .jlc-wb-header .jlc-wb-header-actions * { cursor: pointer; }
+        #jlc-wb .jlc-wb-title { font-weight: 800; font-size: 18px; color: var(--creamu-wb-title); letter-spacing: .2px; }
+        #jlc-wb .jlc-wb-subtitle { font-size: 12px; color: #a08468; margin-top: 3px; }
+        #jlc-wb .jlc-wb-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+
+        #jlc-wb .jlc-wb-icon-btn, #jlc-wb .jlc-wb-chip, #jlc-wb .jlc-wb-btn {
+            appearance: none; border: 1px solid var(--creamu-wb-border-strong); background: var(--creamu-wb-surface-soft); color: var(--creamu-wb-text-strong);
+            border-radius: 999px; cursor: pointer; font-size: 13px; line-height: 1.25; font-weight: 650;
+        }
+        #jlc-wb .jlc-wb-icon-btn {
+            width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+            background: var(--creamu-wb-surface-raised); font-size: 15px; box-shadow: 0 2px 0 #e6d3b5;
+        }
+        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: var(--creamu-wb-surface-raised); box-shadow: 0 2px 0 #e6d3b5; }
+        #jlc-wb .jlc-wb-chip.is-on { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 #b56e28; }
+        #jlc-wb .jlc-wb-btn { padding: 9px 13px; border-radius: 12px; box-shadow: 0 2px 0 #e0cdae; }
+        #jlc-wb .jlc-wb-btn.primary { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 #b56e28; }
+        #jlc-wb .jlc-wb-btn.ghost { background: var(--creamu-wb-surface-soft); }
+        #jlc-wb .jlc-wb-btn.danger { background: #f3d5d0; border-color: #e8b8b0; color: #8a3a32; box-shadow: none; }
+        #jlc-wb .jlc-wb-btn:hover, #jlc-wb .jlc-wb-icon-btn:hover, #jlc-wb .jlc-wb-chip:hover {
+            background: var(--creamu-wb-surface-raised); border-color: #d4bc96; filter: brightness(1.02);
+        }
+        #jlc-wb .jlc-wb-btn.primary:hover { background: var(--creamu-wb-accent-hover); border-color: transparent; filter: none; }
+        #jlc-wb .jlc-wb-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+        #jlc-wb .jlc-wb-nav {
+            display: flex; gap: 8px; background: transparent; border-bottom: 0; flex: 0 0 auto;
+            padding: 0 16px 10px;
+        }
+        #jlc-wb .jlc-wb-nav button {
+            flex: 1; border: 0; background: var(--creamu-wb-surface-muted); color: var(--creamu-wb-text-subtle); padding: 10px 10px; cursor: pointer;
+            font-size: 14px; font-weight: 700; transition: .18s; border-radius: 12px;
+        }
+        #jlc-wb .jlc-wb-nav button.active {
+            color: var(--creamu-wb-on-accent); background: var(--creamu-wb-accent); box-shadow: 0 2px 0 #b56e28;
+        }
+
+        #jlc-wb .jlc-wb-body {
+            flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column;
+            padding: 0; background: transparent;
+        }
+        #jlc-wb [data-jlc-wb-page] {
+            flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+        }
+        #jlc-wb [data-jlc-wb-page][hidden] { display: none !important; }
+        #jlc-wb #jlc-wb-tracking-root,
+        #jlc-wb #exc-wb-tracking-root,
+        #jlc-wb #exc-wb-works-root,
+        #jlc-wb [data-jlc-wb-page] > * {
+            flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
+        }
+        #jlc-wb #jlc-wb-view-root {
+            flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px;
+        }
+        #jlc-wb #jlc-wb-library-root,
+        #jlc-wb #jlc-wb-filter-root {
+            flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px;
+        }
+
+        #jlc-wb .jlc-wb-footer {
+            flex: 0 0 auto; border-top: 1px solid var(--creamu-wb-divider); padding: 12px 14px; background: rgba(255,255,255,.45);
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+        }
+        #jlc-wb .jlc-wb-footer-summary { font-size: 12.5px; color: var(--creamu-wb-text-muted); line-height: 1.45; max-width: 52%; }
+
+        #jlc-wb .jlc-wb-toolbar {
+            flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px;
+            padding: 4px 14px 10px; background: transparent; border-bottom: 0;
+            position: static;
+        }
+        #jlc-wb .jlc-wb-toolbar-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        #jlc-wb .jlc-wb-list-scroll {
+            flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto;
+            /* 底边留白：少条目时「更多」菜单向下仍有空间；仍不够时 JS 会 is-up 上翻 */
+            padding: 4px 14px 96px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+        }
+        #jlc-wb .jlc-wb-list-scroll::-webkit-scrollbar { width: 8px; }
+        #jlc-wb .jlc-wb-list-scroll::-webkit-scrollbar-thumb {
+            background: rgba(140,100,50,.22); border-radius: 999px;
+        }
+
+        #jlc-wb .jlc-wb-search {
+            flex: 1 1 180px; min-width: 0; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--creamu-wb-border);
+            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14.5px; box-shadow: 0 2px 0 #eadcc6;
+        }
+        #jlc-wb .jlc-wb-search:focus { outline: none; border-color: var(--creamu-wb-accent); background: var(--creamu-wb-surface-raised); }
+        #jlc-wb select.jlc-wb-select,
+        #jlc-wb select {
+            color-scheme: light;
+            background: var(--creamu-wb-surface) !important;
+            color: var(--creamu-wb-text) !important;
+        }
+        #jlc-wb select option,
+        #jlc-wb select.jlc-wb-select option {
+            background: var(--creamu-wb-surface) !important;
+            color: var(--creamu-wb-text) !important;
+        }
+        #jlc-wb select.jlc-wb-select {
+            padding: 9px 11px; border-radius: 12px; border: 1px solid var(--creamu-wb-border); background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 13.5px;
+            box-shadow: 0 2px 0 #eadcc6;
+        }
+
+        #jlc-wb .jlc-wb-group {
+            border: 0; border-radius: 16px; overflow: visible; margin-bottom: 18px; background: transparent;
+        }
+        #jlc-wb .jlc-wb-group-toggle {
+            width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            background: transparent; color: #7a5a3c; border: 0; padding: 10px 6px 10px;
+            cursor: pointer; font-size: 13.5px; font-weight: 750;
+            border-radius: 0; margin: 0 0 2px; line-height: 1.35;
+            min-height: 36px;
+        }
+        #jlc-wb .jlc-wb-group.collapsed .jlc-wb-group-toggle { border-radius: 0; }
+        #jlc-wb .jlc-wb-group-toggle small {
+            color: var(--creamu-wb-text-muted); font-weight: 650; background: var(--creamu-wb-surface-muted); padding: 3px 9px; border-radius: 999px; font-size: 12px;
+            flex: 0 0 auto;
+        }
+        #jlc-wb .jlc-wb-group-body {
+            padding: 2px 0 4px; display: flex; flex-direction: column; gap: 12px; overflow: visible;
+        }
+        #jlc-wb .jlc-wb-group.collapsed .jlc-wb-group-body { display: none; }
+
+        #jlc-wb .jlc-wb-item {
+            position: relative; border-radius: 18px; padding: 12px 12px 12px 12px;
+            background: var(--creamu-wb-surface); border: 1px solid #efe0cc; overflow: visible;
+            cursor: pointer; transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, transform .12s ease;
+            box-shadow: 0 3px 0 #ead7bb;
+        }
+        #jlc-wb .jlc-wb-item:hover {
+            border-color: #e0c9a8; background: var(--creamu-wb-surface-raised);
+            box-shadow: 0 6px 16px rgba(120,80,30,.12); z-index: 3;
+        }
+        #jlc-wb .jlc-wb-item::before { display: none; }
+        #jlc-wb .jlc-wb-item.is-focus {
+            border-color: var(--creamu-wb-accent); box-shadow: 0 0 0 2px rgba(212,136,58,.22), 0 4px 0 #e0c9a8;
+            background: #fff8ee;
+        }
+        #jlc-wb .jlc-wb-item.is-current { border-color: #8eb6e8; }
+        /* 菜单打开时抬高整卡，避免被下方 Open 按钮盖住 */
+        #jlc-wb .jlc-wb-item.is-menu-open {
+            z-index: 50;
+            position: relative;
+        }
+
+        #jlc-wb .jlc-wb-item-row {
+            display: flex; align-items: center; gap: 12px; min-width: 0;
+        }
+        #jlc-wb .jlc-wb-cover {
+            flex: 0 0 auto; width: 54px; height: 54px; border-radius: 14px;
+            background: var(--creamu-wb-surface-muted); border: 1px solid var(--creamu-wb-border); overflow: hidden;
+            display: flex; align-items: center; justify-content: center; position: relative;
+        }
+        #jlc-wb .jlc-wb-cover.is-avatar { border-radius: 50%; }
+        #jlc-wb .jlc-wb-cover.is-poster { border-radius: 12px; }
+        #jlc-wb .jlc-wb-cover img {
+            width: 100%; height: 100%; object-fit: cover; display: block; background: #f0e6d6;
+        }
+        #jlc-wb .jlc-wb-cover img.jlc-wb-lrr-thumb {
+            position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+        }
+        #jlc-wb .jlc-wb-cover { position: relative; }
+        #jlc-wb .jlc-wb-item-actions {
+            display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center;
+        }
+        #jlc-wb .jlc-wb-item-actions .jlc-wb-btn {
+            display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+            padding: 7px 11px; font-size: 12.5px;
+        }
+        #jlc-wb .jlc-wb-cover-fallback {
+            font-size: 18px; font-weight: 800; color: #a07850; line-height: 1;
+        }
+        #jlc-wb .jlc-wb-cover[data-group="actor"] { background: #f3e2ef; }
+        #jlc-wb .jlc-wb-cover[data-group="director"] { background: #e4eef8; }
+        #jlc-wb .jlc-wb-cover[data-group="maker"],
+        #jlc-wb .jlc-wb-cover[data-group="studio"] { background: #e8f0e4; }
+        #jlc-wb .jlc-wb-cover[data-group="series"] { background: #f7ebe0; }
+        #jlc-wb .jlc-wb-cover[data-group="tag"] { background: #f0ebe0; }
+        #jlc-wb .jlc-wb-cover[data-group="keyword"] { background: #efe8f5; }
+
+        #jlc-wb .jlc-wb-item-body { flex: 1 1 auto; min-width: 0; }
+        #jlc-wb .jlc-wb-item-title-row {
+            display: flex; align-items: flex-start; gap: 8px; margin-bottom: 4px;
+        }
+        #jlc-wb .jlc-wb-item-title {
+            flex: 1 1 auto; min-width: 0; font-size: 14.5px; font-weight: 750; color: var(--creamu-wb-text);
+            line-height: 1.35; margin: 0; word-break: break-word;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        #jlc-wb .jlc-wb-leaf {
+            flex: 0 0 auto; max-width: 72px; padding: 2px 8px; border-radius: 999px;
+            font-size: 11px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            background: var(--creamu-wb-surface-muted); color: var(--creamu-wb-text-subtle);
+        }
+        #jlc-wb .jlc-wb-leaf.tone-red { background: #fde2df; color: var(--creamu-wb-danger); }
+        #jlc-wb .jlc-wb-leaf.tone-green { background: #e2f5e4; color: #2f6b3a; }
+        #jlc-wb .jlc-wb-leaf.tone-yellow { background: #fff1d6; color: #9a6700; }
+        #jlc-wb .jlc-wb-leaf.tone-gray { background: var(--creamu-wb-surface-muted); color: var(--creamu-wb-text-subtle); }
+        #jlc-wb .jlc-wb-item-meta {
+            display: flex; flex-direction: column; gap: 2px;
+            margin-bottom: 5px; min-width: 0;
+        }
+        #jlc-wb .jlc-wb-item-meta-line {
+            font-size: 12.5px; color: var(--creamu-wb-text-muted); line-height: 1.4;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            min-width: 0;
+        }
+        #jlc-wb .jlc-wb-item-meta-line.is-avid {
+            color: #7a6048; font-weight: 650;
+        }
+        #jlc-wb .jlc-wb-item-pills {
+            display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+        }
+        #jlc-wb .jlc-wb-item-side {
+            flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+            position: relative; z-index: 2;
+        }
+        #jlc-wb .jlc-wb-open-btn {
+            appearance: none; border: 0; cursor: pointer;
+            min-width: 64px; padding: 8px 14px; border-radius: 999px;
+            background: linear-gradient(var(--creamu-wb-accent-light), var(--creamu-wb-accent)); color: var(--creamu-wb-on-accent); font-weight: 800; font-size: 13px;
+            box-shadow: 0 3px 0 #b56e28; transition: transform .12s ease, filter .12s ease;
+        }
+        #jlc-wb .jlc-wb-open-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
+        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 #b56e28; }
+        #jlc-wb .jlc-wb-more-btn {
+            appearance: none; border: 0; background: transparent; color: #b09070;
+            width: 28px; height: 22px; border-radius: 8px; cursor: pointer; font-size: 16px; line-height: 1;
+            font-weight: 800; letter-spacing: 1px;
+        }
+        #jlc-wb .jlc-wb-more-btn:hover, #jlc-wb .jlc-wb-more-btn.is-open {
+            background: var(--creamu-wb-surface-muted); color: var(--creamu-wb-title);
+        }
+        #jlc-wb .jlc-wb-item-menu {
+            position: absolute; top: calc(100% + 4px); right: 0; min-width: 132px;
+            background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-border); border-radius: 12px;
+            box-shadow: 0 12px 28px rgba(90,60,30,.2); padding: 6px; z-index: 80;
+            display: flex; flex-direction: column; gap: 2px;
+        }
+        #jlc-wb .jlc-wb-item-menu.is-up {
+            top: auto; bottom: calc(100% + 4px);
+        }
+        #jlc-wb .jlc-wb-item-menu[hidden] { display: none !important; }
+        #jlc-wb .jlc-wb-item-menu button {
+            appearance: none; border: 0; background: transparent; text-align: left;
+            padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--creamu-wb-text-strong);
+            font-size: 13px; font-weight: 650;
+        }
+        #jlc-wb .jlc-wb-item-menu button:hover { background: #f3e9d8; }
+        #jlc-wb .jlc-wb-item-menu button.is-danger { color: var(--creamu-wb-danger); }
+
+        #jlc-wb .jlc-status-pill, #jlc-wb .jlc-site-pill {
+            display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;
+            font-size: 11.5px; font-weight: 700; border: 1px solid transparent;
+        }
+        #jlc-wb .jlc-site-pill { background: #f3e9d8; color: var(--creamu-wb-text-subtle); border-color: #eadcc6; }
+        #jlc-wb .jlc-site-pill.is-current { background: #e7f1ff; color: #175cd3; border-color: #c2dbff; }
+        /* 上次：默认琥珀；按打开时效加深/减弱 */
+        #jlc-wb .jlc-site-pill.is-last { background: #fff4db; color: #9a6700; border-color: #f0d7a0; }
+        #jlc-wb .jlc-site-pill.is-last.recency-fresh {
+            background: #ffe8c2; color: #b54708; border-color: #f5c77a; font-weight: 800;
+        }
+        #jlc-wb .jlc-site-pill.is-last.recency-warm {
+            background: #fff0d0; color: #9a6700; border-color: #ebc98a;
+        }
+        #jlc-wb .jlc-site-pill.is-last.recency-mid {
+            background: #f6efe2; color: #8a7048; border-color: #e4d4bc;
+        }
+        #jlc-wb .jlc-site-pill.is-last.recency-cool {
+            background: #f0ebe4; color: #9a8a78; border-color: #e0d6c8;
+        }
+        #jlc-wb .jlc-wb-item-meta-line .jlc-wb-pagehint,
+        #jlc-wb .jlc-wb-pagehint {
+            color: #a89078; font-weight: 550;
+        }
+        #jlc-wb .jlc-wb-item-meta-line.is-sub {
+            color: #a89078; font-weight: 550;
+        }
+        #jlc-wb .jlc-status-pill.tone-gray { background: var(--creamu-wb-surface-muted); color: var(--creamu-wb-text-subtle); }
+        #jlc-wb .jlc-status-pill.tone-green { background: #e2f5e4; color: #2f6b3a; }
+        #jlc-wb .jlc-status-pill.tone-red { background: #fde2df; color: var(--creamu-wb-danger); }
+        #jlc-wb .jlc-status-pill.tone-yellow { background: #fff1d6; color: #9a6700; }
+
+        #jlc-wb .jlc-wb-empty {
+            padding: 20px; border: 1px dashed #e0cdae; border-radius: 16px; color: var(--creamu-wb-text-muted);
+            background: rgba(255,255,255,.55); font-size: 14.5px; line-height: 1.65;
+        }
+
+        #jlc-wb #jlc-wb-view-root .jlc-wb-view-block,
+        #jlc-wb #jlc-wb-library-root .jlc-wb-view-block,
+        #jlc-wb #jlc-wb-filter-root .jlc-wb-view-block {
+            background: var(--creamu-wb-surface); border: 1px solid #efe0cc; border-radius: 16px; padding: 14px; margin-bottom: 14px;
+            box-shadow: 0 3px 0 #ead7bb;
+        }
+        #jlc-wb #jlc-wb-view-root .jlc-wb-view-title,
+        #jlc-wb #jlc-wb-library-root .jlc-wb-view-title,
+        #jlc-wb #jlc-wb-filter-root .jlc-wb-view-title {
+            font-size: 12px; color: var(--creamu-wb-accent); font-weight: 750; letter-spacing: .5px; margin: 0 0 12px;
+            text-transform: uppercase;
+        }
+        #jlc-wb .legacy-row,
+        #jlc-wb .jlc-wb-settings .legacy-row {
+            background: var(--creamu-wb-surface-soft); border: 1px solid var(--creamu-wb-border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
+        }
+        #jlc-wb .legacy-toggle,
+        #jlc-wb .jlc-wb-settings .legacy-toggle {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        }
+        #jlc-wb .legacy-toggle > span,
+        #jlc-wb .jlc-wb-settings .legacy-toggle > span { color: var(--creamu-wb-text); font-size: 14.5px; }
+        #jlc-wb .legacy-toggle input[type="checkbox"],
+        #jlc-wb .jlc-wb-settings .legacy-toggle input[type="checkbox"] {
+            width: 20px; height: 20px; margin: 0; accent-color: var(--creamu-wb-accent); cursor: pointer;
+        }
+        #jlc-wb .legacy-row.disabled { opacity: .45; }
+        #jlc-wb .legacy-range,
+        #jlc-wb .jlc-wb-settings .legacy-range { display: flex; align-items: center; gap: 10px; }
+        #jlc-wb .legacy-range input[type="range"],
+        #jlc-wb .jlc-wb-settings .legacy-range input[type="range"] {
+            flex: 1; margin: 0; background: transparent; border: 0; accent-color: var(--creamu-wb-accent);
+        }
+        #jlc-wb .legacy-note,
+        #jlc-wb .jlc-wb-settings .legacy-note { font-size: 13px; color: var(--creamu-wb-text-muted); line-height: 1.55; margin-top: 8px; }
+        #jlc-wb .jlc-wb-view-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+        #jlc-wb .jlc-wb-view-actions .jlc-wb-btn { width: 100%; justify-content: center; }
+
+        #jlc-wb .jlc-wb-settings {
+            display: none; position: absolute; inset: 0; z-index: 5; background: rgba(90,60,30,.28);
+        }
+        #jlc-wb .jlc-wb-settings.is-open { display: block; }
+        #jlc-wb .jlc-wb-settings-panel {
+            position: absolute; top: 0; right: 0; width: min(100%, 430px); height: 100%;
+            display: flex; flex-direction: column; background: var(--creamu-wb-bg); border-left: 1px solid #e4d4bc;
+        }
+        #jlc-wb .jlc-wb-settings-head {
+            flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center;
+            gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--creamu-wb-divider); background: var(--creamu-wb-surface-soft); font-size: 15px; color: var(--creamu-wb-text);
+        }
+        #jlc-wb .jlc-wb-settings-nav {
+            flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px;
+            border-bottom: 1px solid var(--creamu-wb-divider); background: #f3e9d8;
+        }
+        #jlc-wb .jlc-wb-settings-nav button {
+            appearance: none; border: 1px solid var(--creamu-wb-border-strong); background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text-subtle);
+            border-radius: 999px; padding: 8px 12px; cursor: pointer; font-size: 13.5px; font-weight: 700;
+        }
+        #jlc-wb .jlc-wb-settings-nav button.active {
+            background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent);
+        }
+        #jlc-wb .jlc-wb-settings-body {
+            flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 16px 20px; background: var(--creamu-wb-bg);
+        }
+        #jlc-wb .jlc-wb-settings-section { display: none; }
+        #jlc-wb .jlc-wb-settings-section.is-active { display: block; }
+        #jlc-wb .jlc-wb-settings h3 {
+            margin: 0 0 12px; font-size: 13px; color: var(--creamu-wb-accent); letter-spacing: 1px; text-transform: uppercase;
+        }
+        #jlc-wb .jlc-wb-settings label,
+        #jlc-wb #jlc-wb-library-root label,
+        #jlc-wb #jlc-wb-filter-root label {
+            display: block; font-size: 12px; color: var(--creamu-wb-text-muted); margin-top: 12px; text-transform: uppercase; letter-spacing: 1px;
+        }
+        #jlc-wb .jlc-wb-settings input[type="text"],
+        #jlc-wb .jlc-wb-settings input[type="password"],
+        #jlc-wb .jlc-wb-settings input[type="number"],
+        #jlc-wb .jlc-wb-settings textarea,
+        #jlc-wb .jlc-wb-settings select,
+        #jlc-wb #jlc-wb-library-root input[type="text"],
+        #jlc-wb #jlc-wb-library-root input[type="password"],
+        #jlc-wb #jlc-wb-library-root input[type="number"],
+        #jlc-wb #jlc-wb-library-root textarea,
+        #jlc-wb #jlc-wb-library-root select,
+        #jlc-wb #jlc-wb-filter-root input[type="text"],
+        #jlc-wb #jlc-wb-filter-root textarea {
+            width: 100%; padding: 12px; margin-top: 8px; border-radius: 12px; border: 1px solid var(--creamu-wb-border);
+            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14px;
+        }
+        #jlc-wb .jlc-wb-settings input:focus,
+        #jlc-wb .jlc-wb-settings textarea:focus,
+        #jlc-wb .jlc-wb-settings select:focus,
+        #jlc-wb #jlc-wb-library-root input:focus,
+        #jlc-wb #jlc-wb-library-root textarea:focus,
+        #jlc-wb #jlc-wb-library-root select:focus {
+            border-color: var(--creamu-wb-accent); outline: none; background: var(--creamu-wb-surface-raised);
+        }
+        #jlc-wb .jlc-wb-settings .stat-box,
+        #jlc-wb #jlc-wb-library-root .stat-box {
+            display: flex; justify-content: space-around; background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
+            border-radius: 14px; padding: 14px; margin-bottom: 14px;
+        }
+        #jlc-wb .jlc-wb-settings .stat-item,
+        #jlc-wb #jlc-wb-library-root .stat-item { text-align: center; }
+        #jlc-wb .jlc-wb-settings .stat-item b,
+        #jlc-wb #jlc-wb-library-root .stat-item b { display: block; color: var(--creamu-wb-accent); font-size: 22px; margin-bottom: 4px; }
+        #jlc-wb .jlc-wb-settings .stat-item span,
+        #jlc-wb #jlc-wb-library-root .stat-item span { font-size: 11px; color: var(--creamu-wb-text-muted); }
+        #jlc-wb .person-item {
+            background: var(--creamu-wb-surface); padding: 12px 14px; border-radius: 12px; margin-bottom: 8px;
+            display: flex; justify-content: space-between; align-items: center; border: 1px solid #efe0cc; font-size: 14px;
+            color: var(--creamu-wb-text);
+        }
+        #jlc-wb .person-item:hover { border-color: #e0c9a8; background: var(--creamu-wb-surface-raised); }
+        #jlc-wb .person-item span.remove { color: var(--creamu-wb-accent); cursor: pointer; font-size: 18px; padding: 0 8px; }
+
+        #jlc-wb .jlc-wb-resize-w {
+            position: absolute; left: 0; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 8;
+        }
+        #jlc-wb .jlc-wb-resize-h {
+            position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; z-index: 8;
+        }
+        #jlc-wb .jlc-wb-resize-corner {
+            position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; z-index: 9;
+        }
+        #jlc-wb .jlc-wb-resize-corner::after {
+            content: ''; position: absolute; right: 5px; bottom: 5px; width: 9px; height: 9px;
+            border-right: 2px solid rgba(180,130,70,.55); border-bottom: 2px solid rgba(180,130,70,.55);
+            border-radius: 0 0 3px 0;
+        }
+        #jlc-wb .jlc-wb-resize-w:hover, #jlc-wb .jlc-wb-resize-w.is-dragging,
+        #jlc-wb .jlc-wb-resize-h:hover, #jlc-wb .jlc-wb-resize-h.is-dragging {
+            background: rgba(212,136,58,.28);
+        }
+        #jlc-wb .jlc-wb-resize-corner:hover, #jlc-wb .jlc-wb-resize-corner.is-dragging {
+            background: rgba(212,136,58,.18);
+        }
+
+        #jlc-wb .jlc-wb-item-edit {
+            display: none; position: relative; z-index: 6;
+            margin-top: 10px; gap: 8px; align-items: center; flex-wrap: wrap;
+        }
+        #jlc-wb .jlc-wb-item-edit.is-open { display: flex; }
+        #jlc-wb .jlc-wb-item-edit input {
+            flex: 1 1 160px; min-width: 0; padding: 9px 11px; border-radius: 12px;
+            border: 1px solid var(--creamu-wb-border); background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14px;
+        }
+        #jlc-wb-dialog {
+            position: fixed; inset: 0; z-index: 1000001; display: none; align-items: center; justify-content: center;
+            background: rgba(90,60,30,.35); padding: 20px;
+        }
+        #jlc-wb-dialog.is-open { display: flex; }
+        #jlc-wb-dialog .jlc-wb-dialog-card {
+            width: min(440px, 92vw); background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-border); border-radius: 18px;
+            padding: 18px; box-shadow: 0 18px 50px rgba(90,60,30,.22); color: var(--creamu-wb-text);
+        }
+        #jlc-wb-dialog h4 { margin: 0 0 8px; font-size: 16px; color: var(--creamu-wb-text); }
+        #jlc-wb-dialog p { margin: 0 0 12px; font-size: 13.5px; color: var(--creamu-wb-text-muted); line-height: 1.55; }
+        #jlc-wb-dialog input {
+            width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--creamu-wb-border);
+            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14.5px; margin-bottom: 14px;
+        }
+        #jlc-wb-dialog .jlc-wb-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+        #jlc-wb .jlc-wb-settings-footer {
+            flex: 0 0 auto; border-top: 1px solid var(--creamu-wb-divider); padding: 12px 14px; background: var(--creamu-wb-surface-soft);
+            display: flex; flex-direction: column; gap: 8px;
+        }
+
+        #jlc-wb .jlc-wb-settings input[type="number"] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+            color-scheme: light;
+        }
+        #jlc-wb .jlc-wb-settings input[type="number"]::-webkit-outer-spin-button,
+        #jlc-wb .jlc-wb-settings input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none; margin: 0;
+        }
+        /* 按钮缩放：由脚本设置 --jlc-btn-scale（如 0.85）；默认 1 不影响布局 */
+        #jlc-wb-fab,
+        #jlc-wb .jlc-wb-btn,
+        #jlc-wb .jlc-wb-icon-btn,
+        #jlc-wb .jlc-wb-chip,
+        #jlc-wb .jlc-wb-nav button,
+        #jlc-wb .jlc-wb-open-btn,
+        #jlc-wb .jlc-wb-more-btn,
+        #jlc-wb .jlc-wb-settings-nav button,
+        #jlc-wb .jlc-wb-item-menu button,
+        #jlc-wb-dialog .jlc-wb-dialog-actions button {
+            zoom: var(--jlc-btn-scale, 1);
+        }
+
+        @media (max-width: 820px) {
+            #jlc-wb-fab.is-panel-open {
+                opacity: 0 !important; visibility: hidden !important; pointer-events: none !important;
+            }
+            #jlc-wb {
+                left: 0 !important; right: 0 !important; top: auto !important; bottom: 0 !important;
+                width: 100% !important; height: min(86vh, 840px); border-radius: 16px 16px 0 0;
+            }
+            #jlc-wb .jlc-wb-header { cursor: default; }
+            #jlc-wb-fab { width: 42px; height: 42px; font-size: 17px; }
+        }`;
+}
 
 function injectCreamuWorkbenchStyles(opts) {
     opts = opts || {};
@@ -2611,6 +3167,144 @@ function injectCreamuWorkbenchStyles(opts) {
     styleEl.textContent = getCreamuWorkbenchCss() + (extra ? '\n' + extra : '');
     return styleEl;
   }
+function parseCreamuPixel(value) {
+  if (value == null || value === '') return NaN;
+  if (typeof value === 'number') return value;
+  return parseFloat(String(value).replace(/px$/i, ''));
+}
+
+function getCreamuViewportSize(viewport) {
+  const width = Number(viewport?.innerWidth ?? viewport?.width);
+  const height = Number(viewport?.innerHeight ?? viewport?.height);
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : 1280,
+    height: Number.isFinite(height) && height > 0 ? height : 720,
+  };
+}
+
+function getCreamuDefaultWorkbenchRect(viewport, options = {}) {
+  const size = getCreamuViewportSize(viewport);
+  const minWidth = Number(options.minWidth) || 360;
+  const minHeight = Number(options.minHeight) || 280;
+  const preferredMaxWidth = Number(options.preferredMaxWidth) || 520;
+  const preferredMaxHeight = Number(options.preferredMaxHeight) || 780;
+  const widthPadding = Number(options.widthPadding) || 96;
+  const heightPadding = Number(options.heightPadding) || 80;
+  const heightRatio = Number(options.heightRatio) || 0.76;
+  const rightOffset = Number(options.rightOffset) || 48;
+  const minLeft = Number(options.minLeft) || 24;
+  const minTop = Number(options.minTop) || 32;
+  const topRatio = Number(options.topRatio) || 0.12;
+  const width = Math.min(preferredMaxWidth, Math.max(minWidth, size.width - widthPadding));
+  const height = Math.max(
+    minHeight,
+    Math.min(size.height * heightRatio, preferredMaxHeight, size.height - heightPadding)
+  );
+
+  return {
+    left: Math.max(minLeft, Math.round(size.width - width - rightOffset)),
+    top: Math.max(minTop, Math.round((size.height - height) * topRatio)),
+    width: Math.round(width),
+    height: Math.round(height),
+  };
+}
+
+function clampCreamuWorkbenchRect(rect, viewport, options = {}) {
+  const size = getCreamuViewportSize(viewport);
+  const margin = Number.isFinite(Number(options.margin)) ? Number(options.margin) : 12;
+  const minWidth = Number(options.minWidth) || 360;
+  const minHeight = Number(options.minHeight) || 280;
+  const availableWidth = Math.max(minWidth, size.width - margin * 2);
+  const availableHeight = Math.max(minHeight, size.height - margin * 2);
+  const configuredMaxWidth = Number(options.maxWidth);
+  const configuredMaxHeight = Number(options.maxHeight);
+  const maxWidth = Number.isFinite(configuredMaxWidth)
+    ? Math.min(availableWidth, Math.max(minWidth, configuredMaxWidth))
+    : availableWidth;
+  const maxHeight = Number.isFinite(configuredMaxHeight)
+    ? Math.min(availableHeight, Math.max(minHeight, configuredMaxHeight))
+    : availableHeight;
+  const defaultRect = options.defaultRect || getCreamuDefaultWorkbenchRect(size, options);
+
+  let width = Math.round(parseCreamuPixel(rect?.width));
+  let height = Math.round(parseCreamuPixel(rect?.height));
+  if (!Number.isFinite(width) || width <= 0) width = Number(options.fallbackWidth) || defaultRect.width;
+  if (!Number.isFinite(height) || height <= 0) height = Number(options.fallbackHeight) || defaultRect.height;
+  width = Math.min(maxWidth, Math.max(minWidth, width));
+  height = Math.min(maxHeight, Math.max(minHeight, height));
+
+  let left = parseCreamuPixel(rect?.left);
+  let top = parseCreamuPixel(rect?.top);
+  if (!Number.isFinite(left)) left = defaultRect.left;
+  if (!Number.isFinite(top)) top = defaultRect.top;
+  const maxLeft = Math.max(margin, size.width - width - margin);
+  const maxTop = Math.max(margin, size.height - height - margin);
+
+  return {
+    left: Math.round(Math.min(maxLeft, Math.max(margin, left))),
+    top: Math.round(Math.min(maxTop, Math.max(margin, top))),
+    width,
+    height,
+  };
+}
+
+function clampCreamuWorkbenchPoint(point, elementSize, viewport, options = {}) {
+  const left = parseCreamuPixel(point?.left);
+  const top = parseCreamuPixel(point?.top);
+  if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+  const size = getCreamuViewportSize(viewport);
+  const margin = Number.isFinite(Number(options.margin)) ? Number(options.margin) : 8;
+  const width = Math.max(0, parseCreamuPixel(elementSize?.width) || 0);
+  const height = Math.max(0, parseCreamuPixel(elementSize?.height) || 0);
+  return {
+    left: Math.min(Math.max(margin, left), Math.max(margin, size.width - width - margin)),
+    top: Math.min(Math.max(margin, top), Math.max(margin, size.height - height - margin)),
+  };
+}
+
+function moveCreamuWorkbenchRect(rect, startPoint, currentPoint, viewport, options = {}) {
+  const startX = Number(startPoint?.x);
+  const startY = Number(startPoint?.y);
+  const currentX = Number(currentPoint?.x);
+  const currentY = Number(currentPoint?.y);
+  const dx = Number.isFinite(startX) && Number.isFinite(currentX) ? currentX - startX : 0;
+  const dy = Number.isFinite(startY) && Number.isFinite(currentY) ? currentY - startY : 0;
+  return clampCreamuWorkbenchRect({
+    left: parseCreamuPixel(rect?.left) + dx,
+    top: parseCreamuPixel(rect?.top) + dy,
+    width: rect?.width,
+    height: rect?.height,
+  }, viewport, options);
+}
+
+function resizeCreamuWorkbenchRect(rect, startPoint, currentPoint, mode, viewport, options = {}) {
+  const base = clampCreamuWorkbenchRect(rect, viewport, options);
+  const startX = Number(startPoint?.x);
+  const startY = Number(startPoint?.y);
+  const currentX = Number(currentPoint?.x);
+  const currentY = Number(currentPoint?.y);
+  const dx = Number.isFinite(startX) && Number.isFinite(currentX) ? currentX - startX : 0;
+  const dy = Number.isFinite(startY) && Number.isFinite(currentY) ? currentY - startY : 0;
+  const next = { ...base };
+
+  if (mode === 'w') {
+    next.left = base.left + dx;
+    next.width = base.width - dx;
+  } else if (mode === 'corner') {
+    next.width = base.width + dx;
+    next.height = base.height + dy;
+  } else if (mode === 'h') {
+    next.height = base.height + dy;
+  }
+
+  const resized = clampCreamuWorkbenchRect(next, viewport, options);
+  if (mode !== 'w') return resized;
+  const right = base.left + base.width;
+  return clampCreamuWorkbenchRect({
+    ...resized,
+    left: right - resized.width,
+  }, viewport, options);
+}
   /* Creamu WebDAV sync (generic vault file over WebDAV / 坚果云等) */
   const CREAMU_WD_DEFAULT_PATH = '/Creamu';
 
@@ -2707,6 +3401,7 @@ function injectCreamuWorkbenchStyles(opts) {
     const vaultName = product + '.vault.json';
     let pushTimer = null;
     let busy = false;
+    let retryCount = 0;
 
     function notify(msg, isErr) {
       if (typeof host.notify === 'function') host.notify(msg, !!isErr);
@@ -2922,18 +3617,28 @@ function injectCreamuWorkbenchStyles(opts) {
       m.local_revision = (Number(m.local_revision) || 0) + 1;
       saveMeta(m);
       const st = settings();
-      if (st.enabled && st.auto && isConfigured()) schedulePush(8000);
+      if (st.enabled && st.auto && isConfigured()) {
+        retryCount = 0;
+        schedulePush(8000);
+      }
     }
 
     function schedulePush(ms) {
       if (pushTimer) clearTimeout(pushTimer);
       pushTimer = setTimeout(() => {
         pushTimer = null;
-        void syncNow({ reason: 'auto' }).catch((e) => {
-          const m = loadMeta();
-          m.last_error = (e && e.message) || String(e);
-          saveMeta(m);
-        });
+        void syncNow({ reason: 'auto' })
+          .then((result) => {
+            if (result && result.action === 'busy') schedulePush(2000);
+            else retryCount = 0;
+          })
+          .catch((e) => {
+            const m = loadMeta();
+            m.last_error = (e && e.message) || String(e);
+            saveMeta(m);
+            retryCount++;
+            if (retryCount <= 5) schedulePush(Math.min(60000, 2000 * 2 ** (retryCount - 1)));
+          });
       }, ms || 8000);
     }
 
@@ -2970,12 +3675,15 @@ function injectCreamuWorkbenchStyles(opts) {
       const rev = Math.max(1, Number(m.local_revision) || 1);
       const vault = await buildVault(rev);
       await uploadVault(vault);
-      m.dirty = false;
-      m.local_revision = rev;
-      m.last_sync = Date.now();
-      m.last_action = 'push';
-      m.last_error = '';
-      saveMeta(m);
+      const latest = loadMeta();
+      const changedDuringPush = Number(latest.local_revision) > rev;
+      latest.dirty = changedDuringPush;
+      latest.local_revision = Math.max(rev, Number(latest.local_revision) || 0);
+      latest.last_sync = Date.now();
+      latest.last_action = changedDuringPush ? 'push-pending' : 'push';
+      latest.last_error = '';
+      saveMeta(latest);
+      if (changedDuringPush) schedulePush(1000);
       return vault;
     }
 
@@ -6144,67 +6852,34 @@ html.scout-cream-site body.creamu-site-xnxx #video-player-bg {
 }
 `;
 }
-// 30-workbench.js
-
-function getDefaultWorkbenchRect() {
-  const width = Math.min(520, Math.max(360, window.innerWidth - 96));
-  const height = Math.min(window.innerHeight * 0.76, 780, window.innerHeight - 80);
-  const left = Math.max(24, Math.round(window.innerWidth - width - 48));
-  const top = Math.max(32, Math.round((window.innerHeight - height) * 0.12));
-  return {
-    left,
-    top,
-    width: Math.round(width),
-    height: Math.round(Math.max(280, height))
-  };
-}
-
-function clampWorkbenchRect(left, top, width, height) {
-  const margin = 12;
-  const maxW = Math.max(360, window.innerWidth - margin * 2);
-  const maxH = Math.max(280, window.innerHeight - margin * 2);
-  let w = Math.round(Number(width));
-  let h = Math.round(Number(height));
-  if (!Number.isFinite(w) || w <= 0) w = 520;
-  if (!Number.isFinite(h) || h <= 0) h = 560;
-  w = Math.min(maxW, Math.max(360, w));
-  h = Math.min(maxH, Math.max(280, h));
-  let l = Number(left);
-  let t = Number(top);
-  if (!Number.isFinite(l)) l = getDefaultWorkbenchRect().left;
-  if (!Number.isFinite(t)) t = getDefaultWorkbenchRect().top;
-  l = Math.round(Math.min(Math.max(margin, l), Math.max(margin, window.innerWidth - w - margin)));
-  t = Math.round(Math.min(Math.max(margin, t), Math.max(margin, window.innerHeight - h - margin)));
-  return { left: l, top: t, width: w, height: h };
-}
+// @@creamu-part:page-enhancements
 
 /** 将工作台放到视口内；无有效记忆位置时用默认几何 */
 function applyScoutWorkbenchGeometry(wb, patch = {}) {
   if (!wb) return null;
-  const def = getDefaultWorkbenchRect();
+  const def = getCreamuDefaultWorkbenchRect(window);
   const savedPos = GM_getValue('scout_wb_pos', null) || {};
   const savedSize = GM_getValue('scout_wb_size', null) || {};
 
-  const parsePx = (v) => {
-    if (v == null || v === '') return NaN;
-    if (typeof v === 'number') return v;
-    return parseFloat(String(v).replace(/px$/i, ''));
-  };
-
   const nextWidth = patch.width != null
     ? patch.width
-    : (parsePx(savedSize.width) || parsePx(wb.style.width) || def.width);
+    : (parseCreamuPixel(savedSize.width) || parseCreamuPixel(wb.style.width) || def.width);
   const nextHeight = patch.height != null
     ? patch.height
-    : (parsePx(savedSize.height) || parsePx(wb.style.height) || def.height);
+    : (parseCreamuPixel(savedSize.height) || parseCreamuPixel(wb.style.height) || def.height);
   const nextLeft = patch.left != null
     ? patch.left
-    : (parsePx(savedPos.left) || parsePx(wb.style.left));
+    : (parseCreamuPixel(savedPos.left) || parseCreamuPixel(wb.style.left));
   const nextTop = patch.top != null
     ? patch.top
-    : (parsePx(savedPos.top) || parsePx(wb.style.top));
+    : (parseCreamuPixel(savedPos.top) || parseCreamuPixel(wb.style.top));
 
-  const rect = clampWorkbenchRect(nextLeft, nextTop, nextWidth, nextHeight);
+  const rect = clampCreamuWorkbenchRect({
+    left: nextLeft,
+    top: nextTop,
+    width: nextWidth,
+    height: nextHeight
+  }, window);
   wb.style.left = rect.left + 'px';
   wb.style.top = rect.top + 'px';
   wb.style.right = 'auto';
@@ -6259,21 +6934,17 @@ function clampScoutFabPosition(fab) {
     dockMobileFabStack();
     return;
   }
-  const parsePx = (v) => {
-    if (v == null || v === '') return NaN;
-    if (typeof v === 'number') return v;
-    return parseFloat(String(v).replace(/px$/i, ''));
-  };
-  let left = parsePx(fab.style.left);
-  let top = parsePx(fab.style.top);
+  const left = parseCreamuPixel(fab.style.left);
+  const top = parseCreamuPixel(fab.style.top);
   // 仍用默认 right/bottom 时不必钳制
   if (!Number.isFinite(left) || !Number.isFinite(top)) return;
-  const w = fab.offsetWidth || 34;
-  const h = fab.offsetHeight || 34;
-  left = Math.max(8, Math.min(window.innerWidth - w - 8, left));
-  top = Math.max(8, Math.min(window.innerHeight - h - 8, top));
-  fab.style.left = left + 'px';
-  fab.style.top = top + 'px';
+  const point = clampCreamuWorkbenchPoint(
+    { left, top },
+    { width: fab.offsetWidth || 34, height: fab.offsetHeight || 34 },
+    window
+  );
+  fab.style.left = point.left + 'px';
+  fab.style.top = point.top + 'px';
   fab.style.right = 'auto';
   fab.style.bottom = 'auto';
 }
@@ -6319,10 +6990,13 @@ function makeDraggable(el, isFab = false) {
 
       const w = el.offsetWidth || 34;
       const h = el.offsetHeight || 34;
-      const nextLeft = Math.max(8, Math.min(window.innerWidth - w - 8, originLeft + dx));
-      const nextTop = Math.max(8, Math.min(window.innerHeight - h - 8, originTop + dy));
-      el.style.left = nextLeft + 'px';
-      el.style.top = nextTop + 'px';
+      const point = clampCreamuWorkbenchPoint(
+        { left: originLeft + dx, top: originTop + dy },
+        { width: w, height: h },
+        window
+      );
+      el.style.left = point.left + 'px';
+      el.style.top = point.top + 'px';
       el.style.right = 'auto';
       el.style.bottom = 'auto';
     };
@@ -6384,12 +7058,16 @@ function makeHeaderDraggable(wbEl, headerEl) {
 
     const onMove = (ev) => {
       if (!dragging) return;
-      applyScoutWorkbenchGeometry(wbEl, {
-        left: originLeft + (ev.clientX - startX),
-        top: originTop + (ev.clientY - startY),
+      const rect = moveCreamuWorkbenchRect({
+        left: originLeft,
+        top: originTop,
         width: lockedW,
         height: lockedH
-      });
+      }, { x: startX, y: startY }, {
+        x: ev.clientX,
+        y: ev.clientY
+      }, window);
+      applyScoutWorkbenchGeometry(wbEl, rect);
     };
 
     const onUp = () => {
@@ -6430,28 +7108,16 @@ function makeResizable(wbEl) {
     wbEl.classList.add('is-resizing');
 
     const doResize = (ev) => {
-      let nextLeft = startLeft;
-      let nextTop = startTop;
-      let nextW = startWidth;
-      let nextH = startHeight;
-      if (direction === 'corner' || direction === 'w') {
-        const dx = ev.clientX - startX;
-        if (direction === 'w') {
-          nextW = startWidth - dx;
-          nextLeft = startLeft + dx;
-        } else {
-          nextW = startWidth + dx;
-        }
-      }
-      if (direction === 'corner' || direction === 'h') {
-        nextH = startHeight + (ev.clientY - startY);
-      }
-      applyScoutWorkbenchGeometry(wbEl, {
-        left: nextLeft,
-        top: nextTop,
-        width: nextW,
-        height: nextH
-      });
+      const rect = resizeCreamuWorkbenchRect({
+        left: startLeft,
+        top: startTop,
+        width: startWidth,
+        height: startHeight
+      }, { x: startX, y: startY }, {
+        x: ev.clientX,
+        y: ev.clientY
+      }, direction, window);
+      applyScoutWorkbenchGeometry(wbEl, rect);
     };
 
     const stopResize = () => {
@@ -7321,7 +7987,7 @@ function enhancePageTags() {
       a.appendChild(wrapper);
     });
   } finally {
-    // 延后清除，吞掉本轮 DOM 变更触发的 observer
+    // 延后清除，避免自身 DOM 更新再次触发 observer
     setTimeout(() => {
       window.__scoutUiMutating = false;
     }, 50);
@@ -7655,6 +8321,7 @@ function enhancePagePublisher() {
 }
 
 // 
+// @@creamu-part:32-combo-page
 function getComboTokens() {
   const v = GM_getValue('scout_combo_tokens', null);
   if (Array.isArray(v)) return v.map(s => compactText(s)).filter(Boolean);
@@ -7982,6 +8649,7 @@ function renderComboPage() {
 }
 
 // 
+// @@creamu-part:34-library-pages
 function renderLexiconPage() {
   const container = document.querySelector('[data-jlc-wb-page="lexicon"]');
   if (!container) return;
@@ -8462,6 +9130,7 @@ function renderWorksPage() {
 // 同 query 折叠为一卡；组级「续看」优先当前站
 
 /** 打开某站断点页；无 track 时按 query 搜第 1 页 */
+// @@creamu-part:36-tracking-page
 function openTrackAtBreakpoint(track, site, query) {
   const siteNorm = String(site || (track && track.site) || '') || (typeof detectSite === 'function' ? detectSite() : '');
   const q = String((track && track.query) || query || '').trim();
@@ -8863,6 +9532,7 @@ function renderBlocksPage() {
 }
 
 // 
+// @@creamu-part:38-settings
 function setScoutSettingsOpen(open, tab) {
   const drawer = document.getElementById('jlc-wb-settings');
   if (!drawer) return;
@@ -9271,6 +9941,7 @@ function renderSettingsPage(section) {
 }
 
 // 
+// @@creamu-part:40-workbench-shell
 function initScoutWorkbench() {
   if (typeof injectCreamuWorkbenchStyles === 'function') {
     injectCreamuWorkbenchStyles({
@@ -9404,6 +10075,7 @@ function initScoutWorkbench() {
   function openScoutWorkbench(tabName) {
     applyScoutWorkbenchGeometry(wb);
     wb.classList.add('is-open');
+    fab.classList.add('is-panel-open');
     // PC 端不要锁 body 滚动：部分站点会因此产生遮罩/焦点异常，表现为“点了没开”
     if (window.matchMedia && window.matchMedia('(max-width: 820px)').matches) {
       document.body.style.overflow = 'hidden';
@@ -9415,6 +10087,7 @@ function initScoutWorkbench() {
   function closeScoutWorkbench() {
     setScoutSettingsOpen(false);
     wb.classList.remove('is-open');
+    fab.classList.remove('is-panel-open');
     document.body.style.overflow = '';
   }
 
@@ -9499,7 +10172,7 @@ function initScoutWorkbench() {
 
   renderComboPage();
 }
-// 40-boot.js
+// @@creamu-part:boot
 
 function findBreakpointVideoElement(track) {
   const els = getVideoElements();

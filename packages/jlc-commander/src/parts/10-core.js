@@ -131,8 +131,8 @@
     const DEFAULT_CONFIG = {
         emby_url: '',
         emby_key: '',
-        metatube_url: 'http://192.168.100.214:1234',
-        fav_tags: ['女优', '巨乳', '丝袜', '人妻', '母女', '潮吹'],
+        metatube_url: '',
+        fav_tags: [],
         hate_tags: [],
         custom_persons: [],
         resource_center: true,
@@ -262,6 +262,7 @@
         const defaults = DEFAULT_CONFIG.fav_tags.join(',');
         return !compactText(cfg.emby_url || '')
             && !compactText(cfg.emby_key || '')
+            && !compactText(cfg.metatube_url || '')
             && tags === defaults;
     }
 
@@ -1248,12 +1249,13 @@
         return !!foldedSrc && !!foldedKey && foldedSrc.includes(foldedKey);
     }
 
-    async function requestJSON(url) {
+    async function requestJSON(url, timeout = 15000) {
+        const requestTimeout = Math.max(250, Number(timeout) || 15000);
         return new Promise(r => {
             GM_xmlhttpRequest({
                 method: 'GET',
                 url,
-                timeout: 15000,
+                timeout: requestTimeout,
                 onload: (res) => {
                     try {
                         r(JSON.parse(res.responseText));
@@ -2719,6 +2721,14 @@
             || null;
     }
 
+    const META_REQUEST_TIMEOUT = 8000;
+    const META_FETCH_BUDGET_MS = 8000;
+
+    function getMetaRequestTimeout(deadline) {
+        const remaining = Math.max(0, Number(deadline) - Date.now());
+        return Math.min(META_REQUEST_TIMEOUT, remaining);
+    }
+
     function getMetaSearchProviderCandidates(avid) {
         const code = String(avid || '').trim().toUpperCase();
         const providers = [];
@@ -2762,9 +2772,9 @@
         if (/^SOD/.test(code)) push('SOD');
         if (isLikelyMgsAvid(code)) push('MGS');
 
-        push('FANZA');
-        push('JAV321');
         push('JavBus');
+        push('JAV321');
+        push('FANZA');
         push('DUGA');
         return providers;
     }
@@ -2784,33 +2794,44 @@
         };
     }
 
-    async function fetchMetaDetail(base, rawMeta) {
+    async function fetchMetaDetail(base, rawMeta, deadline) {
         const meta = normalizeMetaRecord(rawMeta);
         if (!meta?.provider || !meta?.id) return meta;
         const needDetail = !(meta.genres?.length);
         if (!needDetail) return meta;
-        const infoPayload = await requestJSON(`${base}/v1/movies/${encodeURIComponent(meta.provider)}/${encodeURIComponent(meta.id)}`);
+        const timeout = getMetaRequestTimeout(deadline);
+        if (timeout <= 0) return meta;
+        const infoPayload = await requestJSON(
+            `${base}/v1/movies/${encodeURIComponent(meta.provider)}/${encodeURIComponent(meta.id)}`,
+            timeout
+        );
         const info = normalizeMetaRecord(extractMetaTubeData(infoPayload));
         return mergeMetaRecords(meta, info) || meta;
     }
 
-    async function fetchMetaWithProvider(base, avid, provider) {
+    async function fetchMetaWithProvider(base, avid, provider, deadline) {
         if (!provider) return null;
-        const searchPayload = await requestJSON(`${base}/v1/movies/search?q=${encodeURIComponent(avid)}&provider=${encodeURIComponent(provider)}`);
+        const timeout = getMetaRequestTimeout(deadline);
+        if (timeout <= 0) return null;
+        const searchPayload = await requestJSON(
+            `${base}/v1/movies/search?q=${encodeURIComponent(avid)}&provider=${encodeURIComponent(provider)}`,
+            timeout
+        );
         const searchResults = extractMetaTubeData(searchPayload);
         const hit = pickMetaSearchHit(searchResults, avid);
         if (!hit) return null;
-        return fetchMetaDetail(base, hit);
+        return fetchMetaDetail(base, hit, deadline);
     }
 
     async function fetchMeta(avid, seedMeta = null) {
         if (!config.metatube_url) return null;
         const base = config.metatube_url.replace(/\/$/, '');
+        const deadline = Date.now() + META_FETCH_BUDGET_MS;
         const seed = normalizeMetaRecord(seedMeta);
         let fallback = null;
 
         if (seed?.provider && seed?.id) {
-            const seeded = await fetchMetaDetail(base, seed);
+            const seeded = await fetchMetaDetail(base, seed, deadline);
             if (seeded?.genres?.length) return seeded;
             fallback = mergeMetaRecords(fallback, seeded) || seeded;
         } else if (seed) {
@@ -2819,28 +2840,30 @@
 
         const providers = getMetaSearchProviderCandidates(avid);
         for (const provider of providers) {
-            const hit = await fetchMetaWithProvider(base, avid, provider);
+            if (getMetaRequestTimeout(deadline) <= 0) break;
+            const hit = await fetchMetaWithProvider(base, avid, provider, deadline);
             if (!hit) continue;
             if (hit?.genres?.length) return mergeMetaRecords(fallback, hit) || hit;
             fallback = mergeMetaRecords(fallback, hit) || hit;
         }
 
-        const searchPayload = await requestJSON(`${base}/v1/movies/search?q=${encodeURIComponent(avid)}`);
+        const timeout = getMetaRequestTimeout(deadline);
+        if (timeout <= 0) return fallback;
+        const searchPayload = await requestJSON(`${base}/v1/movies/search?q=${encodeURIComponent(avid)}`, timeout);
         const searchResults = extractMetaTubeData(searchPayload);
         const hit = pickMetaSearchHit(searchResults, avid);
         if (!hit) return fallback;
-        const detailed = await fetchMetaDetail(base, hit);
+        const detailed = await fetchMetaDetail(base, hit, deadline);
         return mergeMetaRecords(fallback, detailed) || detailed || fallback;
     }
 
     const META_FETCH_CONCURRENCY = 8;
-    const META_FETCH_RETRY_LIMIT = 3;
+    const META_FETCH_RETRY_LIMIT = 1;
     const META_FETCH_RETRY_DELAY = 900;
     const META_IMMEDIATE_MARGIN_PX = 1200;
     const META_PREFETCH_MARGIN_PX = 1200;
+    const META_IMMEDIATE_SWEEP_DELAY = 32;
     const META_DEFERRED_SWEEP_DELAY = 120;
-    const META_BACKGROUND_DRAIN_DELAY = 1800;
-    const META_BACKGROUND_BATCH_SIZE = 3;
     const DECORATE_CONCURRENCY = 8;
     const DECORATE_VISIBLE_LIMIT = 12;
     const decorateQueue = [];
@@ -2852,7 +2875,7 @@
     let metaFetchActiveCount = 0;
     let metaViewportObserver = null;
     let metaDeferredSweepTimer = null;
-    let metaBackgroundDrainTimer = null;
+    let metaDeferredSweepDueAt = 0;
     let metaSweepEventsBound = false;
     let rescanTimer = null;
     let rescanBudget = 0;
@@ -2883,7 +2906,6 @@
         resourceScreenshotInfoCache.delete(key);
         resourceMagnetCache.delete(key);
     }
-
 
     function getResourceToggleStates(currentConfig = config) {
         return {
@@ -3615,14 +3637,26 @@
         return isItemNearViewport(item, META_IMMEDIATE_MARGIN_PX);
     }
 
-    function pickDeferredMetaBatch(items, limit = META_BACKGROUND_BATCH_SIZE) {
-        const picked = [];
-        Array.from(items || []).forEach(item => {
-            if (picked.length >= limit) return;
-            if (!item?._jlcMetaPending) return;
-            picked.push(item);
-        });
-        return picked;
+    function getRectViewportPriority(rect, viewportHeight) {
+        if (!rect) return 0;
+        const height = Number(viewportHeight) || 900;
+        const top = Number(rect.top);
+        const bottom = Number(rect.bottom);
+        if (Number.isFinite(bottom) && bottom < 0) return height + Math.abs(bottom);
+        if (Number.isFinite(top) && top > height) return top;
+        return Number.isFinite(top) ? Math.max(0, top) : 0;
+    }
+
+    function getItemViewportPriority(item) {
+        if (!item || typeof item.getBoundingClientRect !== 'function') return 0;
+        const viewportHeight = window.innerHeight || document.documentElement?.clientHeight || 900;
+        return getRectViewportPriority(item.getBoundingClientRect(), viewportHeight);
+    }
+
+    function sortMetaItemsByViewport(items) {
+        return Array.from(items || []).sort((left, right) => (
+            getItemViewportPriority(left) - getItemViewportPriority(right)
+        ));
     }
 
     function clearDeferredMetaItem(item) {
@@ -3630,78 +3664,46 @@
         metaDeferredItems.delete(item);
         if (metaViewportObserver) metaViewportObserver.unobserve(item);
         delete item._jlcMetaPending;
-        if (!metaDeferredItems.size && metaBackgroundDrainTimer) {
-            window.clearTimeout(metaBackgroundDrainTimer);
-            metaBackgroundDrainTimer = null;
-        }
-    }
-
-    function scheduleBackgroundMetaDrain(delay = META_BACKGROUND_DRAIN_DELAY) {
-        if (!metaDeferredItems.size || metaBackgroundDrainTimer) return;
-        metaBackgroundDrainTimer = window.setTimeout(() => {
-            metaBackgroundDrainTimer = null;
-            drainDeferredMetaItems();
-        }, delay);
-    }
-
-    function drainDeferredMetaItems() {
-        if (!metaDeferredItems.size) return;
-        if (metaFetchActiveCount >= META_FETCH_CONCURRENCY || metaFetchQueue.length >= META_FETCH_CONCURRENCY) {
-            scheduleBackgroundMetaDrain(900);
-            return;
-        }
-        const batch = pickDeferredMetaBatch(metaDeferredItems, META_BACKGROUND_BATCH_SIZE);
-        if (!batch.length) return;
-        batch.forEach(item => {
-            const pending = item._jlcMetaPending;
-            clearDeferredMetaItem(item);
-            if (!pending || !item?.isConnected) return;
-            requestMetaEnrichment(item, pending.avid, pending.title, false);
-        });
-        if (metaDeferredItems.size) scheduleBackgroundMetaDrain();
     }
 
     function flushDeferredMetaItems(force = false) {
         metaDeferredSweepTimer = null;
-        Array.from(metaDeferredItems).forEach(item => {
-            if (!item?.isConnected) {
+        metaDeferredSweepDueAt = 0;
+        sortMetaItemsByViewport(metaDeferredItems).forEach(item => {
+                if (!item?.isConnected) {
+                    clearDeferredMetaItem(item);
+                    return;
+                }
+                const pending = item._jlcMetaPending;
+                if (!pending) {
+                    clearDeferredMetaItem(item);
+                    return;
+                }
+                if (!force && !isItemNearViewport(item)) return;
                 clearDeferredMetaItem(item);
-                return;
-            }
-            const pending = item._jlcMetaPending;
-            if (!pending) {
-                clearDeferredMetaItem(item);
-                return;
-            }
-            if (!force && !isItemNearViewport(item)) return;
-            clearDeferredMetaItem(item);
-            requestMetaEnrichment(item, pending.avid, pending.title, true);
-        });
-        if (metaDeferredItems.size) scheduleBackgroundMetaDrain();
+                requestMetaEnrichment(item, pending.avid, pending.title, isItemImmediateViewport(item));
+            });
     }
 
     function scheduleDeferredMetaSweep(delay = META_DEFERRED_SWEEP_DELAY) {
-        if (metaDeferredSweepTimer) return;
-        metaDeferredSweepTimer = window.setTimeout(() => flushDeferredMetaItems(false), delay);
+        const wait = Math.max(0, Number(delay) || 0);
+        const dueAt = Date.now() + wait;
+        if (metaDeferredSweepTimer) {
+            if (dueAt >= metaDeferredSweepDueAt) return;
+            window.clearTimeout(metaDeferredSweepTimer);
+        }
+        metaDeferredSweepDueAt = dueAt;
+        metaDeferredSweepTimer = window.setTimeout(() => flushDeferredMetaItems(false), wait);
     }
 
     function ensureMetaViewportObserver() {
         if (metaViewportObserver || !('IntersectionObserver' in window)) return;
         metaViewportObserver = new IntersectionObserver(entries => {
-            let touched = false;
-            entries.forEach(entry => {
-                if (!entry.isIntersecting && entry.intersectionRatio <= 0) return;
-                const item = entry.target;
-                const pending = item?._jlcMetaPending;
-                clearDeferredMetaItem(item);
-                if (!pending) return;
-                touched = true;
-                requestMetaEnrichment(item, pending.avid, pending.title, true);
-            });
-            if (touched) scheduleDeferredMetaSweep(60);
+            const touched = entries.some(entry => entry.isIntersecting || entry.intersectionRatio > 0);
+            if (touched) scheduleDeferredMetaSweep(META_IMMEDIATE_SWEEP_DELAY);
         }, {
             root: null,
-            rootMargin: `${META_PREFETCH_MARGIN_PX}px 0px ${META_PREFETCH_MARGIN_PX * 2}px 0px`,
+            rootMargin: `${META_PREFETCH_MARGIN_PX}px 0px ${META_PREFETCH_MARGIN_PX}px 0px`,
             threshold: 0.01
         });
     }
@@ -3713,27 +3715,21 @@
         window.addEventListener('scroll', trigger, { passive: true });
         window.addEventListener('resize', trigger, { passive: true });
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) {
-                scheduleDeferredMetaSweep(60);
-                scheduleBackgroundMetaDrain(600);
-            }
+            if (!document.hidden) scheduleDeferredMetaSweep(60);
         });
     }
 
     function scheduleMetaEnrichment(item, avid, title) {
         if (!item || !item.isConnected || !config.metatube_url) return;
-        if (isItemImmediateViewport(item)) {
-            clearDeferredMetaItem(item);
-            requestMetaEnrichment(item, avid, title, true);
-            return;
-        }
         item.dataset.jlcMetaState = 'deferred';
         item._jlcMetaPending = { avid, title };
         metaDeferredItems.add(item);
         ensureMetaViewportObserver();
+        bindMetaSweepEvents();
         if (metaViewportObserver) metaViewportObserver.observe(item);
-        scheduleDeferredMetaSweep();
-        scheduleBackgroundMetaDrain();
+        scheduleDeferredMetaSweep(
+            isItemImmediateViewport(item) ? META_IMMEDIATE_SWEEP_DELAY : META_DEFERRED_SWEEP_DELAY
+        );
     }
 
     function refreshCommanderDecorations(scope = document) {
@@ -3751,15 +3747,25 @@
         if (items.length) scheduleCommanderRescan(8);
         scheduleTrackingPageRefresh(false);
     }
+    function enqueueStablePriority(queue, item, prioritized, isPrioritized) {
+        if (!prioritized) {
+            queue.push(item);
+            return;
+        }
+        const index = queue.findIndex(entry => !isPrioritized(entry));
+        if (index < 0) queue.push(item);
+        else queue.splice(index, 0, item);
+    }
+
     function prioritizeMetaTask(avid) {
         const task = metaQueuedTasks.get(avid);
         if (!task) return;
         const index = metaFetchQueue.indexOf(task);
-        if (index > 0) {
+        if (index >= 0) {
             metaFetchQueue.splice(index, 1);
-            metaFetchQueue.unshift(task);
+            task.prioritized = true;
+            enqueueStablePriority(metaFetchQueue, task, true, entry => entry.prioritized);
         }
-        task.prioritized = true;
     }
 
     function pumpMetaFetchQueue() {
@@ -3783,7 +3789,6 @@
             }).then(task.resolve).finally(() => {
                 metaFetchActiveCount -= 1;
                 pumpMetaFetchQueue();
-                if (!metaFetchQueue.length && metaDeferredItems.size) scheduleBackgroundMetaDrain(900);
             });
         }
     }
@@ -3795,8 +3800,7 @@
         }
         const promise = new Promise(resolve => {
             const task = { avid, resolve, prioritized: !!prioritize };
-            if (prioritize) metaFetchQueue.unshift(task);
-            else metaFetchQueue.push(task);
+            enqueueStablePriority(metaFetchQueue, task, prioritize, entry => entry.prioritized);
             metaQueuedTasks.set(avid, task);
             pumpMetaFetchQueue();
         }).finally(() => {
@@ -4159,15 +4163,17 @@
     function queueDecorateItem(item, prioritize = false) {
         if (!item || !item.isConnected || item.dataset.jlcQueued === '1' || item.classList.contains('jlc-final-done')) return;
         item.dataset.jlcQueued = '1';
-        if (prioritize === true) decorateQueue.unshift(item);
-        else decorateQueue.push(item);
+        item._jlcDecorPrioritized = prioritize === true;
+        enqueueStablePriority(decorateQueue, item, prioritize, entry => entry._jlcDecorPrioritized === true);
         pumpDecorateQueue();
     }
 
     function pumpDecorateQueue() {
         while (decorateActiveCount < DECORATE_CONCURRENCY && decorateQueue.length) {
             const item = decorateQueue.shift();
-            if (!item || !item.isConnected) continue;
+            if (!item) continue;
+            delete item._jlcDecorPrioritized;
+            if (!item.isConnected) continue;
             decorateActiveCount += 1;
             Promise.resolve().then(() => decorate(item)).catch(err => {
                 console.warn('[Commander] decorate failed', err);
@@ -4185,5 +4191,3 @@
         if (items.length) scheduleTrackingPageRefresh(false);
         return items.length;
     }
-
-    

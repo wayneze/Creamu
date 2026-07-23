@@ -10,29 +10,18 @@ Desktop.ini
 .vscode/
 *.code-workspace
 
-# secrets & personal dumps
+# environment and exports
 .env
 .env.*
 *.pem
 *backup*.json
 *secret*
-**/local/
-**/private/
 
-# local-only notes, drafts, and exports
-.local/
-.notes/
-**/notes.local/
-**/drafts.local/
+# local overrides
 *.bak.*
-
-# machine-specific files
 **/*-local.*
 *.local.*
 
 # logs
 npm-debug.log*
 *.log
-
-# optional local notes
-TODO.local.md

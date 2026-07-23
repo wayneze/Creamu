@@ -379,10 +379,9 @@
 
   function injectBaseStyles() {
     if (typeof injectCreamuWorkbenchStyles !== 'function') {
-      console.warn('[Creamu·ExH] shared workbench CSS missing — rebuild with packages/shared/creamu-workbench-css.js');
+      console.warn('[Creamu·ExH] workbench styles unavailable');
       return;
     }
-    // 工作台样式唯一来源：JLC 同款 shared；下面只挂 ExH 页内扩展
     injectCreamuWorkbenchStyles({
       styleId: 'jlc-wb-style-exc',
       extraCss: `

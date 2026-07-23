@@ -14,7 +14,7 @@ function btoaPolyfill(str) {
   return Buffer.from(String(str), 'binary').toString('base64');
 }
 
-function loadWebDav(httpHandler) {
+function loadWebDav(httpHandler, timers = {}) {
   const store = new Map();
   const notifies = [];
   const httpLog = [];
@@ -66,8 +66,8 @@ function loadWebDav(httpHandler) {
     Object,
     Array,
     Error,
-    setTimeout,
-    clearTimeout,
+    setTimeout: timers.setTimeout || setTimeout,
+    clearTimeout: timers.clearTimeout || clearTimeout,
     btoa: typeof btoa !== 'undefined' ? btoa : btoaPolyfill,
     unescape: (s) => s,
     encodeURIComponent,
@@ -364,6 +364,101 @@ await test('同 rev 且 dirty → 推送并升 revision', async () => {
   const up = JSON.parse(stored);
   assert.strictEqual(up.revision, 3);
   assert.deepStrictEqual(up.payload, { a: 2 });
+});
+
+await test('自动同步遇到 busy 后重试', async () => {
+  let getCount = 0;
+  const env = loadWebDav(async (req) => {
+    if (req.method === 'GET') {
+      getCount++;
+      if (getCount === 1) await new Promise((resolve) => setTimeout(resolve, 80));
+      return { status: 404, responseText: '' };
+    }
+    if (req.method === 'PUT') return { status: 201, responseText: '' };
+    if (req.method === 'MKCOL') return { status: 201, responseText: '' };
+    return { status: 405, responseText: '' };
+  });
+  const h = env.create();
+  const first = h.sync.syncNow({ reason: 'manual' });
+  h.sync.schedulePush(1);
+  await first;
+  await new Promise((resolve) => setTimeout(resolve, 2200));
+  assert.ok(getCount >= 2, 'getCount=' + getCount);
+});
+
+await test('上传期间的新修改保持 dirty 并继续同步', async () => {
+  let stored = '';
+  let releasePut;
+  let signalPut;
+  const putStarted = new Promise((resolve) => {
+    signalPut = resolve;
+  });
+  const putReleased = new Promise((resolve) => {
+    releasePut = resolve;
+  });
+  let putCount = 0;
+  const env = loadWebDav(async (req) => {
+    if (req.method === 'GET') {
+      return stored
+        ? { status: 200, responseText: stored }
+        : { status: 404, responseText: '' };
+    }
+    if (req.method === 'PUT') {
+      putCount++;
+      stored = req.data;
+      if (putCount === 1) {
+        signalPut();
+        await putReleased;
+      }
+      return { status: 201, responseText: '' };
+    }
+    if (req.method === 'MKCOL') return { status: 201, responseText: '' };
+    return { status: 405, responseText: '' };
+  });
+  const h = env.create({ payload: { value: 1 }, settings: { auto: true } });
+  h.sync.markLocalDirty();
+  const first = h.sync.syncNow({ reason: 'manual' });
+  await putStarted;
+  h.setPayload({ value: 2 });
+  h.sync.markLocalDirty();
+  releasePut();
+  await first;
+  assert.strictEqual(h.sync.loadMeta().dirty, true);
+  assert.strictEqual(h.sync.loadMeta().last_action, 'push-pending');
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  assert.ok(putCount >= 2, 'putCount=' + putCount);
+  assert.deepStrictEqual(JSON.parse(stored).payload, { value: 2 });
+  assert.strictEqual(h.sync.loadMeta().dirty, false);
+});
+
+await test('自动同步失败按上限退避重试', async () => {
+  const timers = [];
+  const env = loadWebDav(
+    () => ({ status: 500, responseText: '' }),
+    {
+      setTimeout(fn, ms) {
+        const timer = { fn, ms };
+        timers.push(timer);
+        return timer;
+      },
+      clearTimeout(timer) {
+        const index = timers.indexOf(timer);
+        if (index >= 0) timers.splice(index, 1);
+      },
+    }
+  );
+  const h = env.create({ settings: { auto: true } });
+  h.sync.markLocalDirty();
+  timers.splice(0).forEach((timer) => timer.fn());
+  for (const expectedDelay of [2000, 4000, 8000, 16000, 32000]) {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(timers.length, 1);
+    assert.strictEqual(timers[0].ms, expectedDelay);
+    const timer = timers.shift();
+    timer.fn();
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(timers.length, 0);
 });
 
 if (!process.exitCode) {

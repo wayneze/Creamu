@@ -48,29 +48,77 @@
         return pct;
     }
 
+    function getJlcWorkbenchCss() {
+        return `
+        #jlc-wb .jlc-wb-tag-editor {
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        #jlc-wb .jlc-wb-tag-list {
+            display: flex; flex-wrap: wrap; gap: 6px; min-height: 8px;
+        }
+        #jlc-wb .jlc-wb-tag {
+            display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px;
+            background: var(--creamu-wb-surface-raised); border: 1px solid var(--creamu-wb-border-strong);
+            color: var(--creamu-wb-text-strong); font-size: 12.5px; font-weight: 650;
+            box-shadow: 0 2px 0 var(--creamu-wb-divider);
+        }
+        #jlc-wb .jlc-wb-tag button {
+            appearance: none; border: 0; background: transparent; color: #b09070;
+            cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; font-weight: 800;
+        }
+        #jlc-wb .jlc-wb-tag button:hover { color: var(--creamu-wb-danger); }
+        #jlc-wb .jlc-wb-tag-input {
+            width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--creamu-wb-border);
+            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14px;
+            box-shadow: 0 2px 0 var(--creamu-wb-divider);
+        }
+        #jlc-wb .jlc-wb-tag-input:focus { outline: none; border-color: var(--creamu-wb-accent); }
+        #jlc-wb .jlc-wb-settings-section #jlc-wb-view-root {
+            padding: 0; overflow: visible; flex: none; min-height: 0;
+        }
+        #jlc-wb #jlc-wb-config-diag {
+            background: var(--creamu-wb-surface) !important; border: 1px solid #efe0cc !important;
+            color: var(--creamu-wb-text-strong) !important;
+        }
+        #jlc-wb #jlc-wb-config-hint {
+            background: #fff7ea !important; border-color: #f0d7a0 !important; color: #9a6700 !important;
+        }
+        #jlc-tracking-pagebar.jlc-wb-pagebar {
+            background: rgba(255,253,248,.97); border: 1px solid var(--creamu-wb-border);
+            color: var(--creamu-wb-text); box-shadow: 0 10px 24px rgba(90,60,30,.12);
+        }
+        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-title {
+            color: var(--creamu-wb-text);
+        }
+        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagehint {
+            color: #a89078 !important; font-weight: 550; font-size: 12px;
+        }
+        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-meta {
+            color: var(--creamu-wb-text-muted);
+        }
+        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button {
+            appearance: none; border: 1px solid var(--creamu-wb-border-strong);
+            background: var(--creamu-wb-surface-soft); color: var(--creamu-wb-text-strong);
+            border-radius: 999px; padding: 7px 12px; cursor: pointer; font-size: 13px; font-weight: 650;
+            zoom: var(--jlc-btn-scale, 1);
+        }
+        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.primary {
+            background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent);
+        }
+        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.jlc-bp-continue {
+            background: linear-gradient(135deg, #ff5f56, #e54840); border: 0; color: var(--creamu-wb-on-accent);
+            font-weight: 800; box-shadow: 0 3px 0 #b8322b, 0 8px 18px rgba(255,95,86,.22);
+        }`;
+    }
+
     function initWorkbenchV3Styles() {
         if (typeof injectCreamuWorkbenchStyles !== 'function') {
-            console.warn('[Creamu·JLC] shared workbench CSS missing — rebuild with packages/shared/creamu-workbench-css.js');
+            console.warn('[Creamu·JLC] workbench styles unavailable');
             return;
         }
-        // 与 ExH 共用 packages/shared/creamu-workbench-css.js（本文件为源样式定义方）
         injectCreamuWorkbenchStyles({
             styleId: 'jlc-wb-style',
-            extraCss: [
-                '#jlc-wb .jlc-wb-tag-editor { display:flex; flex-direction:column; gap:8px; }',
-                '#jlc-wb .jlc-wb-tag-list { display:flex; flex-wrap:wrap; gap:6px; min-height:8px; }',
-                '#jlc-wb .jlc-wb-tag { display:inline-flex; align-items:center; gap:4px; padding:5px 10px; border-radius:999px;',
-                '  background:#fff; border:1px solid #e0cdae; color:#5a4030; font-size:12.5px; font-weight:650;',
-                '  box-shadow:0 2px 0 #eadcc6; }',
-                '#jlc-wb .jlc-wb-tag button { appearance:none; border:0; background:transparent; color:#b09070;',
-                '  cursor:pointer; font-size:14px; line-height:1; padding:0 0 0 2px; font-weight:800; }',
-                '#jlc-wb .jlc-wb-tag button:hover { color:#b42318; }',
-                '#jlc-wb .jlc-wb-tag-input { width:100%; padding:10px 12px; border-radius:12px; border:1px solid #e4d4bc;',
-                '  background:#fff; color:#4a3728; font-size:14px; box-shadow:0 2px 0 #eadcc6; }',
-                '#jlc-wb .jlc-wb-tag-input:focus { outline:none; border-color:#d4883a; }',
-                /* 设置→显示：去掉 view-root 再套一层 padding/卡片感 */
-                '#jlc-wb .jlc-wb-settings-section #jlc-wb-view-root { padding:0; overflow:visible; flex:none; min-height:0; }'
-            ].join('')
+            extraCss: getJlcWorkbenchCss()
         });
         applyUiBtnScale();
     }
@@ -397,50 +445,16 @@
         if (!shell) return;
         captureWorkbenchScroll();
         shell.classList.remove('is-open');
+        document.getElementById('jlc-wb-fab')?.classList.remove('is-panel-open');
         persistWorkbenchSession({ panelOpen: false, settingsOpen: false });
         setWorkbenchSettingsOpen(false);
-    }
-
-    
-    function getDefaultWorkbenchRect() {
-        const width = Math.min(520, Math.max(360, window.innerWidth - 96));
-        const height = Math.min(window.innerHeight * 0.76, 780, window.innerHeight - 80);
-        // 默认别贴边：右侧留约 48px，垂直约 12% 处
-        const left = Math.max(24, Math.round(window.innerWidth - width - 48));
-        const top = Math.max(32, Math.round((window.innerHeight - height) * 0.12));
-        return {
-            left,
-            top,
-            width: Math.round(width),
-            height: Math.round(height)
-        };
-    }
-
-    function clampWorkbenchRect(left, top, width, height) {
-        const margin = 12;
-        const maxW = Math.max(360, window.innerWidth - margin * 2);
-        const maxH = Math.max(280, window.innerHeight - margin * 2);
-        // 尺寸一律取整，避免 getBoundingClientRect 亚像素回写导致“越拖越宽”
-        let w = Math.round(Number(width));
-        let h = Math.round(Number(height));
-        if (!Number.isFinite(w) || w <= 0) w = 520;
-        if (!Number.isFinite(h) || h <= 0) h = 560;
-        w = Math.min(maxW, Math.max(360, w));
-        h = Math.min(maxH, Math.max(280, h));
-        let l = Number(left);
-        let t = Number(top);
-        if (!Number.isFinite(l)) l = getDefaultWorkbenchRect().left;
-        if (!Number.isFinite(t)) t = getDefaultWorkbenchRect().top;
-        l = Math.round(Math.min(Math.max(margin, l), Math.max(margin, window.innerWidth - w - margin)));
-        t = Math.round(Math.min(Math.max(margin, t), Math.max(margin, window.innerHeight - h - margin)));
-        return { left: l, top: t, width: w, height: h };
     }
 
     function applyWorkbenchShellGeometry(patch = {}, options = {}) {
         const shell = getWorkbenchEl();
         if (!shell) return null;
         const session = getWorkbenchSession();
-        const def = getDefaultWorkbenchRect();
+        const def = getCreamuDefaultWorkbenchRect(window);
         // 宽高只信任 session / 显式 patch，禁止用 live getBoundingClientRect 反写（会越拖越胀）
         const nextWidth = patch.width != null
             ? patch.width
@@ -454,7 +468,12 @@
         const nextTop = patch.top != null
             ? patch.top
             : (session.shellTop != null && Number.isFinite(Number(session.shellTop)) ? session.shellTop : def.top);
-        const rect = clampWorkbenchRect(nextLeft, nextTop, nextWidth, nextHeight);
+        const rect = clampCreamuWorkbenchRect({
+            left: nextLeft,
+            top: nextTop,
+            width: nextWidth,
+            height: nextHeight
+        }, window);
         shell.style.left = rect.left + 'px';
         shell.style.top = rect.top + 'px';
         shell.style.right = 'auto';
@@ -487,10 +506,9 @@
         if (!Number.isFinite(left) || !Number.isFinite(top)) return;
         const w = fab.offsetWidth || 34;
         const h = fab.offsetHeight || 34;
-        const nextLeft = Math.max(8, Math.min(window.innerWidth - w - 8, left));
-        const nextTop = Math.max(8, Math.min(window.innerHeight - h - 8, top));
-        fab.style.left = nextLeft + 'px';
-        fab.style.top = nextTop + 'px';
+        const point = clampCreamuWorkbenchPoint({ left, top }, { width: w, height: h }, window);
+        fab.style.left = point.left + 'px';
+        fab.style.top = point.top + 'px';
         fab.style.right = 'auto';
         fab.style.bottom = 'auto';
     }
@@ -516,10 +534,13 @@
             if (!moved) return;
             const w = fab.offsetWidth || 34;
             const h = fab.offsetHeight || 34;
-            const nextLeft = Math.max(8, Math.min(window.innerWidth - w - 8, originLeft + dx));
-            const nextTop = Math.max(8, Math.min(window.innerHeight - h - 8, originTop + dy));
-            fab.style.left = nextLeft + 'px';
-            fab.style.top = nextTop + 'px';
+            const point = clampCreamuWorkbenchPoint(
+                { left: originLeft + dx, top: originTop + dy },
+                { width: w, height: h },
+                window
+            );
+            fab.style.left = point.left + 'px';
+            fab.style.top = point.top + 'px';
             fab.style.right = 'auto';
             fab.style.bottom = 'auto';
         };
@@ -583,15 +604,16 @@
         let lockedHeight = 0;
         const onMove = (event) => {
             if (!dragging) return;
-            const dx = event.clientX - startX;
-            const dy = event.clientY - startY;
-            // 拖动只改位置；宽高用按下时锁定值，避免 rect.width 亚像素越拖越宽
-            applyWorkbenchShellGeometry({
-                left: originLeft + dx,
-                top: originTop + dy,
+            const rect = moveCreamuWorkbenchRect({
+                left: originLeft,
+                top: originTop,
                 width: lockedWidth,
                 height: lockedHeight
-            }, { skipPersist: true });
+            }, { x: startX, y: startY }, {
+                x: event.clientX,
+                y: event.clientY
+            }, window);
+            applyWorkbenchShellGeometry(rect, { skipPersist: true });
         };
         const onUp = () => {
             if (!dragging) return;
@@ -646,29 +668,16 @@
             let startTop = 0;
             const onMove = (event) => {
                 if (!dragging) return;
-                const dx = event.clientX - startX;
-                const dy = event.clientY - startY;
-                const patch = {
+                const rect = resizeCreamuWorkbenchRect({
                     left: startLeft,
                     top: startTop,
                     width: startW,
                     height: startH
-                };
-                if (mode === 'w' || mode === 'corner') {
-                    // 左边把手：向左拖变宽（左缘左移 + 宽度增加）
-                    if (handle.classList.contains('jlc-wb-resize-w')) {
-                        const delta = startX - event.clientX;
-                        patch.left = startLeft - delta;
-                        patch.width = startW + delta;
-                    } else {
-                        // 右下角：向右拖变宽
-                        patch.width = startW + dx;
-                    }
-                }
-                if (mode === 'h' || mode === 'corner') {
-                    patch.height = startH + dy;
-                }
-                applyWorkbenchShellGeometry(patch, { skipPersist: true });
+                }, { x: startX, y: startY }, {
+                    x: event.clientX,
+                    y: event.clientY
+                }, mode, window);
+                applyWorkbenchShellGeometry(rect, { skipPersist: true });
             };
             const onUp = () => {
                 if (!dragging) return;
@@ -1158,6 +1167,7 @@
         const session = getWorkbenchSession();
         const nav = compactText(tabId || '') ? mapped.nav : (session.nav || 'tracking');
         shell.classList.add('is-open');
+        document.getElementById('jlc-wb-fab')?.classList.add('is-panel-open');
         applyWorkbenchShellGeometry();
         persistWorkbenchSession({ panelOpen: true, nav });
         activateWorkbenchNav(nav, { forceRender: true });
@@ -1830,7 +1840,7 @@
             } else {
                 config.emby_key = '';
             }
-            config.metatube_url = mtVal || previous.metatube_url || DEFAULT_CONFIG.metatube_url;
+            config.metatube_url = mtVal;
             // 心动标签：只要 textarea 存在就采用其内容（允许用户清空）
             if (shell.querySelector('#jlc-wb-i-fav')) {
                 config.fav_tags = favList;
@@ -2059,7 +2069,7 @@
             + '      <section class="jlc-wb-settings-section" data-jlc-settings-panel="services">'
             + '        <h3>Emby / MetaTube</h3>'
             + '        <div id="jlc-wb-config-diag" class="legacy-note" style="margin:0 0 12px;padding:10px 12px;background:#1a222c;border:1px solid #334;border-radius:10px;color:#cde;line-height:1.6;"></div>'
-            + '        <label>Emby 内网地址</label><input id="jlc-wb-i-url" type="text" placeholder="http://192.168.1.50:8096">'
+            + '        <label>Emby 地址</label><input id="jlc-wb-i-url" type="text" placeholder="http://emby.example:8096">'
             + '        <label>Emby API Key</label><input id="jlc-wb-i-key" type="password">'
             + '        <div class="legacy-note">密钥框留空=不修改已保存值；只有输入新内容才会覆盖。</div>'
             + '        <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-sync" style="width:100%;margin-top:8px;">🔄 立即同步 Emby</button>'
@@ -2351,6 +2361,3 @@
             }).catch(() => {});
         }
     }
-
-
-    

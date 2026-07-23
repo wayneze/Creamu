@@ -94,6 +94,7 @@
     const vaultName = product + '.vault.json';
     let pushTimer = null;
     let busy = false;
+    let retryCount = 0;
 
     function notify(msg, isErr) {
       if (typeof host.notify === 'function') host.notify(msg, !!isErr);
@@ -309,18 +310,28 @@
       m.local_revision = (Number(m.local_revision) || 0) + 1;
       saveMeta(m);
       const st = settings();
-      if (st.enabled && st.auto && isConfigured()) schedulePush(8000);
+      if (st.enabled && st.auto && isConfigured()) {
+        retryCount = 0;
+        schedulePush(8000);
+      }
     }
 
     function schedulePush(ms) {
       if (pushTimer) clearTimeout(pushTimer);
       pushTimer = setTimeout(() => {
         pushTimer = null;
-        void syncNow({ reason: 'auto' }).catch((e) => {
-          const m = loadMeta();
-          m.last_error = (e && e.message) || String(e);
-          saveMeta(m);
-        });
+        void syncNow({ reason: 'auto' })
+          .then((result) => {
+            if (result && result.action === 'busy') schedulePush(2000);
+            else retryCount = 0;
+          })
+          .catch((e) => {
+            const m = loadMeta();
+            m.last_error = (e && e.message) || String(e);
+            saveMeta(m);
+            retryCount++;
+            if (retryCount <= 5) schedulePush(Math.min(60000, 2000 * 2 ** (retryCount - 1)));
+          });
       }, ms || 8000);
     }
 
@@ -357,12 +368,15 @@
       const rev = Math.max(1, Number(m.local_revision) || 1);
       const vault = await buildVault(rev);
       await uploadVault(vault);
-      m.dirty = false;
-      m.local_revision = rev;
-      m.last_sync = Date.now();
-      m.last_action = 'push';
-      m.last_error = '';
-      saveMeta(m);
+      const latest = loadMeta();
+      const changedDuringPush = Number(latest.local_revision) > rev;
+      latest.dirty = changedDuringPush;
+      latest.local_revision = Math.max(rev, Number(latest.local_revision) || 0);
+      latest.last_sync = Date.now();
+      latest.last_action = changedDuringPush ? 'push-pending' : 'push';
+      latest.last_error = '';
+      saveMeta(latest);
+      if (changedDuringPush) schedulePush(1000);
       return vault;
     }
 

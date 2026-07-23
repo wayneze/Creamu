@@ -1,19 +1,31 @@
 {
-  "version": "0.1.2",
-  "description": "Scout parts build order; inject shared after 10-core.",
   "parts": [
     "00-header.meta.js",
     "10-core.js",
     "20-sites.js",
     "25-theme.js",
-    "30-workbench.js",
-    "40-boot.js"
+    "30-page-enhancements.js",
+    "32-combo-page.js",
+    "34-library-pages.js",
+    "36-tracking-page.js",
+    "38-settings.js",
+    "40-workbench-shell.js",
+    "50-boot.js"
   ],
   "injectAfter": {
     "10-core.js": [
       "packages/shared/creamu-workbench-css.js",
+      "packages/shared/creamu-workbench-geometry.js",
       "packages/shared/creamu-webdav.js"
     ]
   },
-  "output": "dist/creamu-scout.user.js"
+  "output": "dist/creamu-scout.user.js",
+  "required": [
+    { "label": "site detection", "text": "function detectSite" },
+    { "label": "workbench", "text": "function initScoutWorkbench" },
+    { "label": "boot", "text": "function bootCreamuScout" },
+    { "label": "WebDAV", "text": "function createCreamuWebDavSync" },
+    { "label": "workbench styles", "text": "function getCreamuWorkbenchCss" },
+    { "label": "workbench geometry", "text": "function clampCreamuWorkbenchRect" }
+  ]
 }

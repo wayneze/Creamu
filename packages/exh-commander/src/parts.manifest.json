@@ -9,5 +9,21 @@
     "60-ui-page.js",
     "70-workbench.js",
     "80-boot.js"
+  ],
+  "injectAfter": {
+    "10-core.js": [
+      "packages/shared/creamu-workbench-css.js",
+      "packages/shared/creamu-workbench-geometry.js",
+      "packages/shared/creamu-webdav.js"
+    ]
+  },
+  "output": "dist/creamu-exh.user.js",
+  "required": [
+    { "label": "site detection", "text": "function detectSite" },
+    { "label": "workbench", "text": "function createWorkbench" },
+    { "label": "boot", "text": "function boot" },
+    { "label": "WebDAV", "text": "function createCreamuWebDavSync" },
+    { "label": "workbench styles", "text": "function getCreamuWorkbenchCss" },
+    { "label": "workbench geometry", "text": "function clampCreamuWorkbenchRect" }
   ]
 }

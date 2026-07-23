@@ -21,8 +21,13 @@
 | `10-core.js` | 词库 / 屏蔽 / 作品 / 追更 / 已点 / 导入导出 |
 | `20-sites.js` | 三站适配与分页 |
 | `25-theme.js` | 主题样式 |
-| `30-workbench.js` | 工作台 UI |
-| `40-boot.js` | 启动与页面生命周期 |
+| `30-page-enhancements.js` | 页面增强、工作台几何、屏蔽与标签视觉状态 |
+| `32-combo-page.js` | 组合搜索页 |
+| `34-library-pages.js` | 词库、发布者与作品页 |
+| `36-tracking-page.js` | 追更与屏蔽列表页 |
+| `38-settings.js` | 设置页与导入导出入口 |
+| `40-workbench-shell.js` | 工作台壳层与共享样式接线 |
+| `50-boot.js` | 启动、生命周期、预览与详情手势 |
 
 ## 构建与测试
 

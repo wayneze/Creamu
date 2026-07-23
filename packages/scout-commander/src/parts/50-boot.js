@@ -1,4 +1,4 @@
-// 40-boot.js
+// @@creamu-part:boot
 
 function findBreakpointVideoElement(track) {
   const els = getVideoElements();

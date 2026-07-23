@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const source = fs.readFileSync('packages/jlc-commander/src/parts/10-core.js', 'utf8');
+const source = fs.readFileSync('packages/jlc-commander/src/parts/15-meta-fetch.js', 'utf8');
+const decorationSource = fs.readFileSync('packages/jlc-commander/src/parts/18-commander-decoration.js', 'utf8');
 
 const providerSource = source.match(
   /function getMetaSearchProviderCandidates[\s\S]*?(?=\n\s*function mergeMetaRecords)/
@@ -27,7 +28,7 @@ const budgetMatch = source.match(/const META_FETCH_BUDGET_MS = (\d+);/);
 assert.ok(budgetMatch, 'metadata fetch budget not found');
 assert.ok(Number(budgetMatch[1]) <= 10_000, 'metadata fetch budget must keep list enrichment bounded');
 
-const retryMatch = source.match(/const META_FETCH_RETRY_LIMIT = (\d+);/);
+const retryMatch = decorationSource.match(/const META_FETCH_RETRY_LIMIT = (\d+);/);
 assert.ok(retryMatch, 'metadata retry limit not found');
 assert.equal(Number(retryMatch[1]), 1, 'a failed list enrichment must not replay the complete provider chain');
 
@@ -53,7 +54,7 @@ assert.equal(missCacheContext.hasRecentMetaMiss(missKey, 1000 + 59_999), true);
 assert.equal(missCacheContext.hasRecentMetaMiss(missKey, 1000 + 60_000), false);
 assert.equal(missCacheContext.metaMissCache.size, 0, 'expired miss entries should be removed');
 
-const queueSource = source.match(
+const queueSource = decorationSource.match(
   /function queueMetaFetch[\s\S]*?(?=\n\s*function setItemReleaseDate)/
 );
 assert.ok(queueSource, 'metadata queue implementation not found');
@@ -121,7 +122,7 @@ assert.equal(fetched.value.number, 'ABP-001');
 assert.deepEqual(fetched.events, [['clear', 'http://meta.test\nABP-001']]);
 assert.equal(fetched.state.metaInflight.size, 0, 'completed hits should leave no inflight entry');
 
-const fetchSource = source.match(/async function fetchMeta\([\s\S]*?(?=\n\s*const META_FETCH_CONCURRENCY)/);
+const fetchSource = source.match(/async function fetchMeta\([\s\S]*$/);
 assert.ok(fetchSource, 'metadata fetch implementation not found');
 assert.match(fetchSource[0], /getMetaRequestTimeout\(deadline\)/);
 

@@ -2,7 +2,16 @@
   "parts": [
     "00-header.meta.js",
     "10-core.js",
+    "12-resource-services.js",
+    "13-settings-bridge.js",
+    "14-data-portability.js",
+    "15-meta-fetch.js",
+    "18-commander-decoration.js",
     "20-workbench.js",
+    "21-workbench-tracking.js",
+    "22-workbench-settings.js",
+    "23-workbench-shell.js",
+    "24-app-runtime.js",
     "30-detail-services.js",
     "40-tracking-search.js",
     "45-tracking-state.js",
@@ -11,7 +20,7 @@
     "60-legacy-ui.js"
   ],
   "injectAfter": {
-    "10-core.js": [
+    "18-commander-decoration.js": [
       "packages/shared/creamu-workbench-css.js",
       "packages/shared/creamu-workbench-geometry.js",
       "packages/shared/creamu-workbench-interactions.js",
@@ -25,6 +34,17 @@
     { "label": "WebDAV", "text": "function createCreamuWebDavSync" },
     { "label": "workbench styles", "text": "function getCreamuWorkbenchCss" },
     { "label": "workbench geometry", "text": "function clampCreamuWorkbenchRect" },
-    { "label": "workbench interactions", "text": "function bindCreamuWorkbenchDrag" }
+    { "label": "workbench interactions", "text": "function bindCreamuWorkbenchDrag" },
+    { "label": "resource requests", "text": "async function requestPage" },
+    { "label": "resource cache", "text": "function clearDetailResourceCaches" },
+    { "label": "settings bridge", "text": "function getLegacySettingsSchema" },
+    { "label": "backup restore", "text": "async function applyBackupPayload" },
+    { "label": "metadata fetch", "text": "async function fetchMeta" },
+    { "label": "metadata queue", "text": "function queueMetaFetch" },
+    { "label": "decoration scanner", "text": "function runCommanderScanner" },
+    { "label": "tracking workbench", "text": "async function renderWorkbenchTrackingList" },
+    { "label": "workbench settings", "text": "function bindWorkbenchSettingsEvents" },
+    { "label": "workbench shell", "text": "function createWorkbenchV3" },
+    { "label": "app runtime", "text": "async function startIntegratedApp" }
   ]
 }

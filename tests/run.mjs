@@ -11,8 +11,11 @@ const files = [
   'tests/jlc/core.mjs',
   'tests/jlc/dom-scanning.mjs',
   'tests/jlc/idb-batching.mjs',
+  'tests/jlc/resource-services.mjs',
+  'tests/jlc/data-portability.mjs',
   'tests/jlc/meta-fetching.mjs',
   'tests/jlc/meta-scheduling.mjs',
+  'tests/jlc/workbench-navigation.mjs',
   'packages/scout-commander/scripts/test-core.mjs',
 ];
 

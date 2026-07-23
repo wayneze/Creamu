@@ -9,10 +9,11 @@ function extract(source, pattern, label) {
 }
 
 const coreSource = fs.readFileSync('packages/jlc-commander/src/parts/10-core.js', 'utf8');
+const decorationSource = fs.readFileSync('packages/jlc-commander/src/parts/18-commander-decoration.js', 'utf8');
 assert.doesNotMatch(coreSource, /#jlc-(?:trigger|panel)/, 'legacy panel styles must stay out of the active core');
 assert.doesNotMatch(coreSource, /\.jlc-setting-entry/, 'removed settings entry styles must not return');
 const collectSource = extract(
-  coreSource,
+  decorationSource,
   /function collectCommanderItems[\s\S]*?(?=\n\s*function isRectNearViewport)/,
   'commander item collection'
 );
@@ -45,9 +46,9 @@ assert.deepEqual(
   ['first', 'second']
 );
 
-const workbenchSource = fs.readFileSync('packages/jlc-commander/src/parts/20-workbench.js', 'utf8');
+const runtimeSource = fs.readFileSync('packages/jlc-commander/src/parts/24-app-runtime.js', 'utf8');
 const mutationSource = extract(
-  workbenchSource,
+  runtimeSource,
   /function collectCommanderMutationItems[\s\S]*?(?=\n\s*function ensureCommanderObserver)/,
   'commander mutation collection'
 );
@@ -96,6 +97,6 @@ const mutationItems = collectCommanderMutationItems([
 assert.deepEqual(Array.from(mutationItems, item => item.id), ['added', 'second']);
 assert.equal(subtreeQueries, 1, 'only the outer added container should scan for item descendants');
 assert.equal(mutationItems.has(completedItem), false, 'completed item decorations must not requeue the item');
-assert.match(workbenchSource, /hasIncompleteItem/, 'observer should reserve polling for incomplete items');
+assert.match(runtimeSource, /hasIncompleteItem/, 'observer should reserve polling for incomplete items');
 
 console.log('JLC DOM scanning tests OK');

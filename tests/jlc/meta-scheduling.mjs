@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const source = fs.readFileSync('packages/jlc-commander/src/parts/10-core.js', 'utf8');
+const source = fs.readFileSync('packages/jlc-commander/src/parts/18-commander-decoration.js', 'utf8');
 
 function extract(pattern, label) {
   const match = source.match(pattern);

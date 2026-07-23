@@ -1257,7 +1257,7 @@
             "'": '&#39;'
         }[ch]));
     }
-
+// @@creamu-part:12-resource-services
     function uniqueLinkObjects(list) {
         const seen = new Set();
         const baseHref = typeof location !== 'undefined' && location?.href ? location.href : 'https://www.javlibrary.com/';
@@ -2690,210 +2690,6 @@
         return (await probeMediaUrl(url)).ok;
     }
 
-    function pickMetaSearchHit(results, avid) {
-        const list = (Array.isArray(results) ? results : []).map(normalizeMetaRecord);
-        const target = normalizeCode(avid);
-        return list.find(x => normalizeCode(x?.number) === target)
-            || list.find(x => normalizeCode(x?.id) === target)
-            || list.find(x => normalizeCode(x?.code) === target)
-            || list[0]
-            || null;
-    }
-
-    const META_REQUEST_TIMEOUT = 8000;
-    const META_FETCH_BUDGET_MS = 8000;
-    const META_MISS_TTL_MS = 60000;
-    const metaMissCache = new Map();
-
-    function getMetaRequestTimeout(deadline) {
-        const remaining = Math.max(0, Number(deadline) - Date.now());
-        return Math.min(META_REQUEST_TIMEOUT, remaining);
-    }
-
-    function getMetaSearchProviderCandidates(avid) {
-        const code = String(avid || '').trim().toUpperCase();
-        const providers = [];
-        const push = (provider) => {
-            if (provider && !providers.includes(provider)) providers.push(provider);
-        };
-
-        if (/^FC2(?:-|_)?PPV/.test(code) || /^FC2(?:-|_)?\d+/.test(code) || /^FC2PPV/.test(code)) {
-            push('FC2PPVDB');
-            push('fc2hub');
-            push('FC2');
-            push('JAV321');
-            return providers;
-        }
-        if (/^HEYZO/.test(code)) {
-            push('HEYZO');
-            push('JAV321');
-            return providers;
-        }
-        if (/^(CARIB|CARIBBEAN)/.test(code)) {
-            push('Caribbeancom');
-            push('CaribbeancomPR');
-            return providers;
-        }
-        if (/^(10MU|10MUSUME)/.test(code)) {
-            push('10musume');
-            return providers;
-        }
-        if (/^(PACO|PACOPACOMAMA)/.test(code)) {
-            push('PACOPACOMAMA');
-            return providers;
-        }
-        if (/^(MURA|MURAMURA)/.test(code)) {
-            push('MURAMURA');
-            return providers;
-        }
-        if (/^C0930/.test(code)) push('C0930');
-        if (/^H0930/.test(code)) push('H0930');
-        if (/^H4610/.test(code)) push('H4610');
-        if (/^KIN8/.test(code)) push('KIN8');
-        if (/^SOD/.test(code)) push('SOD');
-        if (isLikelyMgsAvid(code)) push('MGS');
-
-        push('JavBus');
-        push('JAV321');
-        push('FANZA');
-        push('DUGA');
-        return providers;
-    }
-
-    function mergeMetaRecords(primary, secondary) {
-        const base = normalizeMetaRecord(primary);
-        const extra = normalizeMetaRecord(secondary);
-        if (!base && !extra) return null;
-        if (!base) return extra;
-        if (!extra) return base;
-        return {
-            ...base,
-            ...extra,
-            genres: extra.genres?.length ? extra.genres : (base.genres || []),
-            actors: extra.actors?.length ? extra.actors : (base.actors || []),
-            releaseDate: extra.releaseDate || base.releaseDate || ''
-        };
-    }
-
-    async function fetchMetaDetail(base, rawMeta, deadline) {
-        const meta = normalizeMetaRecord(rawMeta);
-        if (!meta?.provider || !meta?.id) return meta;
-        const needDetail = !(meta.genres?.length);
-        if (!needDetail) return meta;
-        const timeout = getMetaRequestTimeout(deadline);
-        if (timeout <= 0) return meta;
-        const infoPayload = await requestJSON(
-            `${base}/v1/movies/${encodeURIComponent(meta.provider)}/${encodeURIComponent(meta.id)}`,
-            timeout
-        );
-        const info = normalizeMetaRecord(extractMetaTubeData(infoPayload));
-        return mergeMetaRecords(meta, info) || meta;
-    }
-
-    async function fetchMetaWithProvider(base, avid, provider, deadline) {
-        if (!provider) return null;
-        const timeout = getMetaRequestTimeout(deadline);
-        if (timeout <= 0) return null;
-        const searchPayload = await requestJSON(
-            `${base}/v1/movies/search?q=${encodeURIComponent(avid)}&provider=${encodeURIComponent(provider)}`,
-            timeout
-        );
-        const searchResults = extractMetaTubeData(searchPayload);
-        const hit = pickMetaSearchHit(searchResults, avid);
-        if (!hit) return null;
-        return fetchMetaDetail(base, hit, deadline);
-    }
-
-    function normalizeMetaBase(value) {
-        return String(value || '').trim().replace(/\/+$/, '');
-    }
-
-    function getMetaFetchKey(avid, base = config.metatube_url) {
-        const normalizedBase = normalizeMetaBase(base);
-        const normalizedAvid = normalizeCode(avid);
-        return normalizedBase && normalizedAvid ? `${normalizedBase}\n${normalizedAvid}` : '';
-    }
-
-    function hasRecentMetaMiss(key, now = Date.now()) {
-        if (!key) return false;
-        const expiresAt = Number(metaMissCache.get(key) || 0);
-        if (expiresAt > now) return true;
-        metaMissCache.delete(key);
-        return false;
-    }
-
-    function rememberMetaMiss(key, now = Date.now()) {
-        if (key) metaMissCache.set(key, now + META_MISS_TTL_MS);
-    }
-
-    function clearMetaMiss(key) {
-        if (key) metaMissCache.delete(key);
-    }
-
-    function clearMetaMissCache() {
-        metaMissCache.clear();
-    }
-
-    async function fetchMeta(avid, seedMeta = null, baseUrl = config.metatube_url) {
-        const base = normalizeMetaBase(baseUrl);
-        if (!base) return null;
-        const deadline = Date.now() + META_FETCH_BUDGET_MS;
-        const seed = normalizeMetaRecord(seedMeta);
-        let fallback = null;
-
-        if (seed?.provider && seed?.id) {
-            const seeded = await fetchMetaDetail(base, seed, deadline);
-            if (seeded?.genres?.length) return seeded;
-            fallback = mergeMetaRecords(fallback, seeded) || seeded;
-        } else if (seed) {
-            fallback = mergeMetaRecords(fallback, seed) || seed;
-        }
-
-        const providers = getMetaSearchProviderCandidates(avid);
-        for (const provider of providers) {
-            if (getMetaRequestTimeout(deadline) <= 0) break;
-            const hit = await fetchMetaWithProvider(base, avid, provider, deadline);
-            if (!hit) continue;
-            if (hit?.genres?.length) return mergeMetaRecords(fallback, hit) || hit;
-            fallback = mergeMetaRecords(fallback, hit) || hit;
-        }
-
-        const timeout = getMetaRequestTimeout(deadline);
-        if (timeout <= 0) return fallback;
-        const searchPayload = await requestJSON(`${base}/v1/movies/search?q=${encodeURIComponent(avid)}`, timeout);
-        const searchResults = extractMetaTubeData(searchPayload);
-        const hit = pickMetaSearchHit(searchResults, avid);
-        if (!hit) return fallback;
-        const detailed = await fetchMetaDetail(base, hit, deadline);
-        return mergeMetaRecords(fallback, detailed) || detailed || fallback;
-    }
-
-    const META_FETCH_CONCURRENCY = 8;
-    const META_FETCH_RETRY_LIMIT = 1;
-    const META_FETCH_RETRY_DELAY = 900;
-    const META_IMMEDIATE_MARGIN_PX = 1200;
-    const META_PREFETCH_MARGIN_PX = 1200;
-    const META_IMMEDIATE_SWEEP_DELAY = 32;
-    const META_DEFERRED_SWEEP_DELAY = 120;
-    const META_DEFERRED_BATCH_SIZE = 16;
-    const DECORATE_CONCURRENCY = 8;
-    const DECORATE_VISIBLE_LIMIT = 12;
-    const DECORATE_BATCH_MIN_SIZE = 8;
-    const decorateQueue = [];
-    const metaFetchQueue = [];
-    const metaInflight = new Map();
-    const metaQueuedTasks = new Map();
-    const metaDeferredItems = new Set();
-    const metaNearViewportItems = new Set();
-    let decorateActiveCount = 0;
-    let metaFetchActiveCount = 0;
-    let metaViewportObserver = null;
-    let metaDeferredSweepTimer = null;
-    let metaDeferredSweepDueAt = 0;
-    let metaSweepEventsBound = false;
-    let rescanTimer = null;
-    let rescanBudget = 0;
-    const COMMANDER_RESCAN_INTERVAL = 700;
     const resourceTrailerCache = new Map();
     const resourceScreenshotCache = new Map();
     const resourceScreenshotInfoCache = new Map();
@@ -2939,7 +2735,7 @@
             if (input) input.checked = !!value;
         });
     }
-
+// @@creamu-part:13-settings-bridge
     function syncCommanderConfigInputs() {
         const map = {
             'jlc-i-url': config.emby_url || '',
@@ -3112,7 +2908,7 @@
         fillPersonList(document.getElementById('jlc-person-list'));
         fillPersonList(document.getElementById('jlc-wb-person-list'));
     }
-
+// @@creamu-part:14-data-portability
     function applyImportedConfig(rawConfig) {
         if (!rawConfig || typeof rawConfig !== 'object') {
             return { ok: false, summary: '备份里没有 config 字段' };
@@ -3594,6 +3390,211 @@
         };
         inp.click();
     }
+// @@creamu-part:15-meta-fetch
+    function pickMetaSearchHit(results, avid) {
+        const list = (Array.isArray(results) ? results : []).map(normalizeMetaRecord);
+        const target = normalizeCode(avid);
+        return list.find(x => normalizeCode(x?.number) === target)
+            || list.find(x => normalizeCode(x?.id) === target)
+            || list.find(x => normalizeCode(x?.code) === target)
+            || list[0]
+            || null;
+    }
+
+    const META_REQUEST_TIMEOUT = 8000;
+    const META_FETCH_BUDGET_MS = 8000;
+    const META_MISS_TTL_MS = 60000;
+    const metaMissCache = new Map();
+
+    function getMetaRequestTimeout(deadline) {
+        const remaining = Math.max(0, Number(deadline) - Date.now());
+        return Math.min(META_REQUEST_TIMEOUT, remaining);
+    }
+
+    function getMetaSearchProviderCandidates(avid) {
+        const code = String(avid || '').trim().toUpperCase();
+        const providers = [];
+        const push = (provider) => {
+            if (provider && !providers.includes(provider)) providers.push(provider);
+        };
+
+        if (/^FC2(?:-|_)?PPV/.test(code) || /^FC2(?:-|_)?\d+/.test(code) || /^FC2PPV/.test(code)) {
+            push('FC2PPVDB');
+            push('fc2hub');
+            push('FC2');
+            push('JAV321');
+            return providers;
+        }
+        if (/^HEYZO/.test(code)) {
+            push('HEYZO');
+            push('JAV321');
+            return providers;
+        }
+        if (/^(CARIB|CARIBBEAN)/.test(code)) {
+            push('Caribbeancom');
+            push('CaribbeancomPR');
+            return providers;
+        }
+        if (/^(10MU|10MUSUME)/.test(code)) {
+            push('10musume');
+            return providers;
+        }
+        if (/^(PACO|PACOPACOMAMA)/.test(code)) {
+            push('PACOPACOMAMA');
+            return providers;
+        }
+        if (/^(MURA|MURAMURA)/.test(code)) {
+            push('MURAMURA');
+            return providers;
+        }
+        if (/^C0930/.test(code)) push('C0930');
+        if (/^H0930/.test(code)) push('H0930');
+        if (/^H4610/.test(code)) push('H4610');
+        if (/^KIN8/.test(code)) push('KIN8');
+        if (/^SOD/.test(code)) push('SOD');
+        if (isLikelyMgsAvid(code)) push('MGS');
+
+        push('JavBus');
+        push('JAV321');
+        push('FANZA');
+        push('DUGA');
+        return providers;
+    }
+
+    function mergeMetaRecords(primary, secondary) {
+        const base = normalizeMetaRecord(primary);
+        const extra = normalizeMetaRecord(secondary);
+        if (!base && !extra) return null;
+        if (!base) return extra;
+        if (!extra) return base;
+        return {
+            ...base,
+            ...extra,
+            genres: extra.genres?.length ? extra.genres : (base.genres || []),
+            actors: extra.actors?.length ? extra.actors : (base.actors || []),
+            releaseDate: extra.releaseDate || base.releaseDate || ''
+        };
+    }
+
+    async function fetchMetaDetail(base, rawMeta, deadline) {
+        const meta = normalizeMetaRecord(rawMeta);
+        if (!meta?.provider || !meta?.id) return meta;
+        const needDetail = !(meta.genres?.length);
+        if (!needDetail) return meta;
+        const timeout = getMetaRequestTimeout(deadline);
+        if (timeout <= 0) return meta;
+        const infoPayload = await requestJSON(
+            `${base}/v1/movies/${encodeURIComponent(meta.provider)}/${encodeURIComponent(meta.id)}`,
+            timeout
+        );
+        const info = normalizeMetaRecord(extractMetaTubeData(infoPayload));
+        return mergeMetaRecords(meta, info) || meta;
+    }
+
+    async function fetchMetaWithProvider(base, avid, provider, deadline) {
+        if (!provider) return null;
+        const timeout = getMetaRequestTimeout(deadline);
+        if (timeout <= 0) return null;
+        const searchPayload = await requestJSON(
+            `${base}/v1/movies/search?q=${encodeURIComponent(avid)}&provider=${encodeURIComponent(provider)}`,
+            timeout
+        );
+        const searchResults = extractMetaTubeData(searchPayload);
+        const hit = pickMetaSearchHit(searchResults, avid);
+        if (!hit) return null;
+        return fetchMetaDetail(base, hit, deadline);
+    }
+
+    function normalizeMetaBase(value) {
+        return String(value || '').trim().replace(/\/+$/, '');
+    }
+
+    function getMetaFetchKey(avid, base = config.metatube_url) {
+        const normalizedBase = normalizeMetaBase(base);
+        const normalizedAvid = normalizeCode(avid);
+        return normalizedBase && normalizedAvid ? `${normalizedBase}\n${normalizedAvid}` : '';
+    }
+
+    function hasRecentMetaMiss(key, now = Date.now()) {
+        if (!key) return false;
+        const expiresAt = Number(metaMissCache.get(key) || 0);
+        if (expiresAt > now) return true;
+        metaMissCache.delete(key);
+        return false;
+    }
+
+    function rememberMetaMiss(key, now = Date.now()) {
+        if (key) metaMissCache.set(key, now + META_MISS_TTL_MS);
+    }
+
+    function clearMetaMiss(key) {
+        if (key) metaMissCache.delete(key);
+    }
+
+    function clearMetaMissCache() {
+        metaMissCache.clear();
+    }
+
+    async function fetchMeta(avid, seedMeta = null, baseUrl = config.metatube_url) {
+        const base = normalizeMetaBase(baseUrl);
+        if (!base) return null;
+        const deadline = Date.now() + META_FETCH_BUDGET_MS;
+        const seed = normalizeMetaRecord(seedMeta);
+        let fallback = null;
+
+        if (seed?.provider && seed?.id) {
+            const seeded = await fetchMetaDetail(base, seed, deadline);
+            if (seeded?.genres?.length) return seeded;
+            fallback = mergeMetaRecords(fallback, seeded) || seeded;
+        } else if (seed) {
+            fallback = mergeMetaRecords(fallback, seed) || seed;
+        }
+
+        const providers = getMetaSearchProviderCandidates(avid);
+        for (const provider of providers) {
+            if (getMetaRequestTimeout(deadline) <= 0) break;
+            const hit = await fetchMetaWithProvider(base, avid, provider, deadline);
+            if (!hit) continue;
+            if (hit?.genres?.length) return mergeMetaRecords(fallback, hit) || hit;
+            fallback = mergeMetaRecords(fallback, hit) || hit;
+        }
+
+        const timeout = getMetaRequestTimeout(deadline);
+        if (timeout <= 0) return fallback;
+        const searchPayload = await requestJSON(`${base}/v1/movies/search?q=${encodeURIComponent(avid)}`, timeout);
+        const searchResults = extractMetaTubeData(searchPayload);
+        const hit = pickMetaSearchHit(searchResults, avid);
+        if (!hit) return fallback;
+        const detailed = await fetchMetaDetail(base, hit, deadline);
+        return mergeMetaRecords(fallback, detailed) || detailed || fallback;
+    }
+// @@creamu-part:18-commander-decoration
+    const META_FETCH_CONCURRENCY = 8;
+    const META_FETCH_RETRY_LIMIT = 1;
+    const META_FETCH_RETRY_DELAY = 900;
+    const META_IMMEDIATE_MARGIN_PX = 1200;
+    const META_PREFETCH_MARGIN_PX = 1200;
+    const META_IMMEDIATE_SWEEP_DELAY = 32;
+    const META_DEFERRED_SWEEP_DELAY = 120;
+    const META_DEFERRED_BATCH_SIZE = 16;
+    const DECORATE_CONCURRENCY = 8;
+    const DECORATE_VISIBLE_LIMIT = 12;
+    const DECORATE_BATCH_MIN_SIZE = 8;
+    const decorateQueue = [];
+    const metaFetchQueue = [];
+    const metaInflight = new Map();
+    const metaQueuedTasks = new Map();
+    const metaDeferredItems = new Set();
+    const metaNearViewportItems = new Set();
+    let decorateActiveCount = 0;
+    let metaFetchActiveCount = 0;
+    let metaViewportObserver = null;
+    let metaDeferredSweepTimer = null;
+    let metaDeferredSweepDueAt = 0;
+    let metaSweepEventsBound = false;
+    let rescanTimer = null;
+    let rescanBudget = 0;
+    const COMMANDER_RESCAN_INTERVAL = 700;
 
     function isPlaceholderCover(src, title = '') {
         const sample = `${String(src || '')} ${String(title || '')}`.toLowerCase();
@@ -6555,7 +6556,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             };
         });
     }
-
+// @@creamu-part:21-workbench-tracking
     const WB_VIRT_THRESHOLD = 99999; // 关闭虚高虚拟列表，避免底部空滚
     let WB_VIRT_ITEM_H = 112;
     let WB_VIRT_GROUP_H = 44;
@@ -7408,7 +7409,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             });
         }
     }
-
+// @@creamu-part:22-workbench-settings
     function renderWorkbenchViewSettings() {
         const container = document.getElementById('jlc-wb-view-root');
         if (!container) return;
@@ -7743,7 +7744,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             refreshCommanderDecorations();
         });
     }
-
+// @@creamu-part:23-workbench-shell
     function createWorkbenchV3() {
         initWorkbenchV3Styles();
 
@@ -8006,7 +8007,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             await refreshWorkbenchFabBadge();
         }
     }
-
+// @@creamu-part:24-app-runtime
     function collectCommanderMutationItems(mutations) {
         const items = new Set();
         const isPendingItem = (item) => item

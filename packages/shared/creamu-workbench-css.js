@@ -1,5 +1,15 @@
-function getCreamuWorkbenchCss() {
-  return `
+function replaceCreamuWorkbenchSelectors(css, options = {}) {
+    const replacements = [
+        ['#jlc-wb-dialog', options.dialogSelector || '#jlc-wb-dialog'],
+        ['#jlc-tracking-pagebar', options.pagebarSelector || '#jlc-tracking-pagebar'],
+        ['#jlc-wb-fab', options.fabSelector || '#jlc-wb-fab'],
+        ['#jlc-wb', options.panelSelector || '#jlc-wb'],
+    ];
+    return replacements.reduce((result, [from, to]) => result.split(from).join(to), String(css || ''));
+}
+
+function getCreamuWorkbenchCss(options = {}) {
+  const css = `
         :where(#jlc-wb, #jlc-wb-fab, #jlc-wb-dialog, #jlc-tracking-pagebar) {
             --creamu-wb-bg: #f6efe3;
             --creamu-wb-surface: #fffdf8;
@@ -557,6 +567,7 @@ function getCreamuWorkbenchCss() {
             #jlc-wb .jlc-wb-header { cursor: default; }
             #jlc-wb-fab { width: 42px; height: 42px; font-size: 17px; }
         }`;
+  return replaceCreamuWorkbenchSelectors(css, options);
 }
 
 function injectCreamuWorkbenchStyles(opts) {
@@ -568,8 +579,8 @@ function injectCreamuWorkbenchStyles(opts) {
       styleEl.id = id;
       (document.head || document.documentElement).appendChild(styleEl);
     }
-    const extra = opts.extraCss || '';
-    const css = getCreamuWorkbenchCss() + (extra ? '\n' + extra : '');
+    const extra = replaceCreamuWorkbenchSelectors(opts.extraCss || '', opts);
+    const css = getCreamuWorkbenchCss(opts) + (extra ? '\n' + extra : '');
     if (styleEl.textContent !== css) styleEl.textContent = css;
     return styleEl;
   }

@@ -95,194 +95,50 @@ function clampScoutFabPosition(fab) {
   fab.style.bottom = 'auto';
 }
 
-// 
 function makeDraggable(el, isFab = false) {
-  if (!el || el.dataset.scoutDragBound === '1') return;
-  el.dataset.scoutDragBound = '1';
-
-  let dragging = false;
-  let moved = false;
-  let startX = 0;
-  let startY = 0;
-  let originLeft = 0;
-  let originTop = 0;
-
-  el.addEventListener('pointerdown', (e) => {
-    if (e.button != null && e.button !== 0) return;
-    // 徽章/按钮点击不抢拖动手势，仍可冒泡到 click 开面板
-    if (e.target.closest('button') || e.target.closest('input')) return;
-    // 手机 FAB 贴右下固定，禁止拖走（否则一滚就找不到）
-    if (isFab && isScoutNarrowViewport()) return;
-
-    dragging = true;
-    moved = false;
-    startX = e.clientX;
-    startY = e.clientY;
-    const rect = el.getBoundingClientRect();
-    originLeft = rect.left;
-    originTop = rect.top;
-    try { el.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
-
-    const onMove = (ev) => {
-      if (!dragging) return;
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
-      if (!moved && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-        moved = true;
-        el.classList.add('is-dragging');
-        el.dataset.suppressClick = '1';
-      }
-      if (!moved) return;
-
-      const w = el.offsetWidth || 34;
-      const h = el.offsetHeight || 34;
-      const point = clampCreamuWorkbenchPoint(
-        { left: originLeft + dx, top: originTop + dy },
-        { width: w, height: h },
-        window
-      );
+  if (!el) return;
+  bindCreamuFabDrag(el, {
+    boundKey: 'scoutDragBound',
+    threshold: 6,
+    thresholdMode: 'axis',
+    isDragDisabled: () => isFab && isScoutNarrowViewport(),
+    shouldIgnoreDrag: (event) => !!event.target?.closest?.('button, input'),
+    applyPosition: (point) => {
       el.style.left = point.left + 'px';
       el.style.top = point.top + 'px';
       el.style.right = 'auto';
       el.style.bottom = 'auto';
-    };
-
-    const onUp = () => {
-      if (!dragging) return;
-      dragging = false;
-      el.classList.remove('is-dragging');
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-
-      if (moved) {
-        if (isFab) {
-          GM_setValue('scout_fab_pos', { left: el.style.left, top: el.style.top });
-        } else {
-          GM_setValue('scout_wb_pos', { left: el.style.left, top: el.style.top });
-        }
-        // click 在 pointerup 之后；下一帧再清 suppress，避免拖完误开
-        setTimeout(() => {
-          delete el.dataset.suppressClick;
-        }, 0);
-      }
-      moved = false;
-    };
-
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    },
+    savePosition: () => {
+      const key = isFab ? 'scout_fab_pos' : 'scout_wb_pos';
+      GM_setValue(key, { left: el.style.left, top: el.style.top });
+    },
+    bindClick: false
   });
 }
 
 function makeHeaderDraggable(wbEl, headerEl) {
-  if (!headerEl || headerEl.dataset.scoutDragBound === '1') return;
-  headerEl.dataset.scoutDragBound = '1';
-
-  let dragging = false;
-  let startX = 0;
-  let startY = 0;
-  let originLeft = 0;
-  let originTop = 0;
-  let lockedW = 0;
-  let lockedH = 0;
-
-  headerEl.addEventListener('pointerdown', (e) => {
-    if (e.button != null && e.button !== 0) return;
-    if (e.target.closest('.jlc-wb-header-actions')) return;
-
-    dragging = true;
-    wbEl.classList.add('is-dragging');
-    startX = e.clientX;
-    startY = e.clientY;
-    const rect = wbEl.getBoundingClientRect();
-    originLeft = rect.left;
-    originTop = rect.top;
-    lockedW = Math.round(rect.width);
-    lockedH = Math.round(rect.height);
-    try { headerEl.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
-
-    const onMove = (ev) => {
-      if (!dragging) return;
-      const rect = moveCreamuWorkbenchRect({
-        left: originLeft,
-        top: originTop,
-        width: lockedW,
-        height: lockedH
-      }, { x: startX, y: startY }, {
-        x: ev.clientX,
-        y: ev.clientY
-      }, window);
-      applyScoutWorkbenchGeometry(wbEl, rect);
-    };
-
-    const onUp = () => {
-      if (!dragging) return;
-      dragging = false;
-      wbEl.classList.remove('is-dragging');
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      GM_setValue('scout_wb_pos', { left: wbEl.style.left, top: wbEl.style.top });
-    };
-
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+  bindCreamuWorkbenchDrag(wbEl, {
+    header: headerEl,
+    boundKey: 'scoutHeaderDragBound',
+    shouldIgnoreDrag: (event) => !!event.target?.closest?.('.jlc-wb-header-actions'),
+    applyRect: (rect) => applyScoutWorkbenchGeometry(wbEl, rect),
+    onEnd: () => GM_setValue('scout_wb_pos', { left: wbEl.style.left, top: wbEl.style.top }),
+    lockBodySelection: false
   });
 }
 
 function makeResizable(wbEl) {
-  if (!wbEl || wbEl.dataset.scoutResizeBound === '1') return;
-  wbEl.dataset.scoutResizeBound = '1';
-
-  const resizeCorner = wbEl.querySelector('.jlc-wb-resize-corner');
-  const resizeW = wbEl.querySelector('.jlc-wb-resize-w');
-  const resizeH = wbEl.querySelector('.jlc-wb-resize-h');
-
-  const initResize = (e, direction) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const rect = wbEl.getBoundingClientRect();
-    const startWidth = rect.width;
-    const startHeight = rect.height;
-    const startLeft = rect.left;
-    const startTop = rect.top;
-    const startX = e.clientX;
-    const startY = e.clientY;
-
-    wbEl.classList.add('is-resizing');
-
-    const doResize = (ev) => {
-      const rect = resizeCreamuWorkbenchRect({
-        left: startLeft,
-        top: startTop,
-        width: startWidth,
-        height: startHeight
-      }, { x: startX, y: startY }, {
-        x: ev.clientX,
-        y: ev.clientY
-      }, direction, window);
-      applyScoutWorkbenchGeometry(wbEl, rect);
-    };
-
-    const stopResize = () => {
-      wbEl.classList.remove('is-resizing');
-      window.removeEventListener('pointermove', doResize);
-      window.removeEventListener('pointerup', stopResize);
-      window.removeEventListener('pointercancel', stopResize);
+  bindCreamuWorkbenchResize(wbEl, {
+    boundKey: 'scoutPanelResizeBound',
+    handleBoundPrefix: 'scoutResizeHandle',
+    applyRect: (rect) => applyScoutWorkbenchGeometry(wbEl, rect),
+    onEnd: () => {
       GM_setValue('scout_wb_size', { width: wbEl.style.width, height: wbEl.style.height });
       GM_setValue('scout_wb_pos', { left: wbEl.style.left, top: wbEl.style.top });
-    };
-
-    window.addEventListener('pointermove', doResize);
-    window.addEventListener('pointerup', stopResize);
-    window.addEventListener('pointercancel', stopResize);
-  };
-
-  if (resizeCorner) resizeCorner.addEventListener('pointerdown', (e) => initResize(e, 'corner'));
-  if (resizeW) resizeW.addEventListener('pointerdown', (e) => initResize(e, 'w'));
-  if (resizeH) resizeH.addEventListener('pointerdown', (e) => initResize(e, 'h'));
+    },
+    lockBodySelection: false
+  });
 }
 
 /** 清除列表卡屏蔽呈现（类名 + 内联，避免被主题 !important 盖掉） */

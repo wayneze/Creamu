@@ -76,6 +76,8 @@ npx playwright install chromium
 
 源码在 `packages/*/src/parts`，构建为单文件 userscript。
 
+三个工作台共用 `packages/shared/creamu-workbench-geometry.js`、`packages/shared/creamu-workbench-interactions.js` 和 `packages/shared/creamu-workbench-css.js`。产品包只负责页面内容、数据存储和主题扩展；位置约束、拖动、缩放与样式注入由共享层统一维护。
+
 ## License
 
 MIT

@@ -16,6 +16,7 @@
     "10-core.js": [
       "packages/shared/creamu-workbench-css.js",
       "packages/shared/creamu-workbench-geometry.js",
+      "packages/shared/creamu-workbench-interactions.js",
       "packages/shared/creamu-webdav.js"
     ]
   },
@@ -26,6 +27,7 @@
     { "label": "boot", "text": "function bootCreamuScout" },
     { "label": "WebDAV", "text": "function createCreamuWebDavSync" },
     { "label": "workbench styles", "text": "function getCreamuWorkbenchCss" },
-    { "label": "workbench geometry", "text": "function clampCreamuWorkbenchRect" }
+    { "label": "workbench geometry", "text": "function clampCreamuWorkbenchRect" },
+    { "label": "workbench interactions", "text": "function bindCreamuWorkbenchDrag" }
   ]
 }

@@ -56,6 +56,52 @@ async function openAndCheckTitle(page, matcher, timeout = 15000) {
   assert.match(title || '', matcher, 'unexpected workbench title');
 }
 
+async function exerciseWorkbenchGeometry(page, markers) {
+  const bindingState = await page.evaluate((keys) => {
+    const fab = document.getElementById('jlc-wb-fab');
+    const panel = document.getElementById('jlc-wb');
+    const header = panel?.querySelector('.jlc-wb-header');
+    return {
+      fab: fab?.dataset?.[keys.fab],
+      panel: panel?.dataset?.[keys.panel],
+      header: header?.dataset?.[keys.header],
+    };
+  }, markers);
+  assert.deepEqual(bindingState, { fab: '1', panel: '1', header: '1' });
+
+  const panel = page.locator('#jlc-wb');
+  const header = page.locator('#jlc-wb .jlc-wb-header');
+  const beforeDrag = await panel.boundingBox();
+  const headerBox = await header.boundingBox();
+  assert.ok(beforeDrag && headerBox, 'workbench drag targets should have layout boxes');
+  const dragX = headerBox.x + 24;
+  const dragY = headerBox.y + Math.min(24, headerBox.height / 2);
+  await page.mouse.move(dragX, dragY);
+  await page.mouse.down();
+  await page.mouse.move(dragX - 36, dragY + 18, { steps: 4 });
+  await page.mouse.up();
+  const afterDrag = await panel.boundingBox();
+  assert.ok(afterDrag, 'workbench should remain visible after dragging');
+  assert.ok(afterDrag.x < beforeDrag.x - 10, 'workbench should move with the shared drag binding');
+
+  const corner = page.locator('#jlc-wb .jlc-wb-resize-corner');
+  const beforeResize = await panel.boundingBox();
+  const cornerBox = await corner.boundingBox();
+  assert.ok(beforeResize && cornerBox, 'workbench resize targets should have layout boxes');
+  const resizeX = cornerBox.x + cornerBox.width / 2;
+  const resizeY = cornerBox.y + cornerBox.height / 2;
+  await page.mouse.move(resizeX, resizeY);
+  await page.mouse.down();
+  await page.mouse.move(resizeX + 24, resizeY + 18, { steps: 4 });
+  await page.mouse.up();
+  const afterResize = await panel.boundingBox();
+  assert.ok(afterResize, 'workbench should remain visible after resizing');
+  assert.ok(
+    afterResize.width > beforeResize.width + 8 || afterResize.height > beforeResize.height + 8,
+    'workbench should resize with the shared resize binding'
+  );
+}
+
 async function waitJlcListDecorated(page, expected = 1, timeout = 25000) {
   await page.waitForFunction(
     (count) => {
@@ -82,6 +128,11 @@ try {
     },
     async (page) => {
       await openAndCheckTitle(page, /Scout/i);
+      await exerciseWorkbenchGeometry(page, {
+        fab: 'scoutDragBound',
+        panel: 'scoutPanelResizeBound',
+        header: 'scoutHeaderDragBound',
+      });
       await page.locator('#jlc-wb .jlc-wb-nav button[data-tab="lexicon"]').click();
       await page.locator('#jlc-wb .jlc-wb-nav button.active[data-tab="lexicon"]').waitFor();
 
@@ -106,6 +157,11 @@ try {
     },
     async (page) => {
       await openAndCheckTitle(page, /ExH/i);
+      await exerciseWorkbenchGeometry(page, {
+        fab: 'exhFabDragBound',
+        panel: 'exhPanelResizeBound',
+        header: 'exhPanelDragBound',
+      });
       const works = page.locator('#jlc-wb .jlc-wb-nav button[data-nav="works"]');
       await works.waitFor();
       await works.click();
@@ -128,6 +184,11 @@ try {
     async (page) => {
       await waitJlcListDecorated(page);
       await openAndCheckTitle(page, /JavLibrary|Creamu/i, 25000);
+      await exerciseWorkbenchGeometry(page, {
+        fab: 'jlcFabDragBound',
+        panel: 'jlcPanelResizeBound',
+        header: 'jlcPanelDragBound',
+      });
       await page.locator('#jlc-wb .jlc-wb-nav button[data-nav="library"]').click();
       await page.locator('#jlc-wb .jlc-wb-nav button.active[data-nav="library"]').waitFor();
       await page.locator('#jlc-wb .jlc-wb-nav button[data-nav="filter"]').click();

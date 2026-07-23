@@ -4,6 +4,7 @@ import path from 'node:path';
 const root = process.cwd();
 const files = [
   'tests/shared/workbench-geometry.mjs',
+  'tests/shared/workbench-interactions.mjs',
   'tests/shared/workbench-css.mjs',
   'tests/webdav.mjs',
   'tests/exh/test-domain.mjs',

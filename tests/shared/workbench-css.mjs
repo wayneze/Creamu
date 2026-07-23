@@ -90,4 +90,23 @@ console.log('Shared workbench styles');
   console.log('  OK  documentElement fallback');
 }
 
-console.log('Shared workbench style tests passed (3)');
+{
+  const document = createDocument();
+  const context = loadStyles(document);
+  const style = context.injectCreamuWorkbenchStyles({
+    styleId: 'scoped-style',
+    panelSelector: '#product-wb',
+    fabSelector: '#product-fab',
+    dialogSelector: '#product-dialog',
+    pagebarSelector: '#product-pagebar',
+    extraCss: '#jlc-wb .product-only { color: tomato; }',
+  });
+  assert.ok(style.textContent.includes('#product-wb .jlc-wb-header'));
+  assert.ok(style.textContent.includes('#product-fab.is-panel-open'));
+  assert.ok(style.textContent.includes('#product-dialog .jlc-wb-dialog-card'));
+  assert.ok(style.textContent.includes('#product-wb .product-only'));
+  assert.ok(!style.textContent.includes('#jlc-wb .product-only'));
+  console.log('  OK  configurable selectors include product extensions');
+}
+
+console.log('Shared workbench style tests passed (4)');

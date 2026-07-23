@@ -4304,8 +4304,18 @@
         if (queuedCount) scheduleTrackingPageRefresh(false);
         return queuedCount;
     }
-function getCreamuWorkbenchCss() {
-  return `
+function replaceCreamuWorkbenchSelectors(css, options = {}) {
+    const replacements = [
+        ['#jlc-wb-dialog', options.dialogSelector || '#jlc-wb-dialog'],
+        ['#jlc-tracking-pagebar', options.pagebarSelector || '#jlc-tracking-pagebar'],
+        ['#jlc-wb-fab', options.fabSelector || '#jlc-wb-fab'],
+        ['#jlc-wb', options.panelSelector || '#jlc-wb'],
+    ];
+    return replacements.reduce((result, [from, to]) => result.split(from).join(to), String(css || ''));
+}
+
+function getCreamuWorkbenchCss(options = {}) {
+  const css = `
         :where(#jlc-wb, #jlc-wb-fab, #jlc-wb-dialog, #jlc-tracking-pagebar) {
             --creamu-wb-bg: #f6efe3;
             --creamu-wb-surface: #fffdf8;
@@ -4863,6 +4873,7 @@ function getCreamuWorkbenchCss() {
             #jlc-wb .jlc-wb-header { cursor: default; }
             #jlc-wb-fab { width: 42px; height: 42px; font-size: 17px; }
         }`;
+  return replaceCreamuWorkbenchSelectors(css, options);
 }
 
 function injectCreamuWorkbenchStyles(opts) {
@@ -4874,8 +4885,8 @@ function injectCreamuWorkbenchStyles(opts) {
       styleEl.id = id;
       (document.head || document.documentElement).appendChild(styleEl);
     }
-    const extra = opts.extraCss || '';
-    const css = getCreamuWorkbenchCss() + (extra ? '\n' + extra : '');
+    const extra = replaceCreamuWorkbenchSelectors(opts.extraCss || '', opts);
+    const css = getCreamuWorkbenchCss(opts) + (extra ? '\n' + extra : '');
     if (styleEl.textContent !== css) styleEl.textContent = css;
     return styleEl;
   }
@@ -5016,6 +5027,385 @@ function resizeCreamuWorkbenchRect(rect, startPoint, currentPoint, mode, viewpor
     ...resized,
     left: right - resized.width,
   }, viewport, options);
+}
+function getCreamuInteractionTarget(options = {}) {
+  return options.eventTarget || (typeof window !== 'undefined' ? window : null);
+}
+
+function getCreamuInteractionDocument(element, options = {}) {
+  return options.document || element?.ownerDocument || (typeof document !== 'undefined' ? document : null);
+}
+
+function getCreamuInteractionRect(element) {
+  const rect = element?.getBoundingClientRect?.() || {};
+  return {
+    left: Number(rect.left) || 0,
+    top: Number(rect.top) || 0,
+    width: Number(rect.width) || 0,
+    height: Number(rect.height) || 0,
+  };
+}
+
+function applyCreamuInteractionRect(element, rect) {
+  if (!element?.style || !rect) return;
+  element.style.left = Math.round(Number(rect.left) || 0) + 'px';
+  element.style.top = Math.round(Number(rect.top) || 0) + 'px';
+  element.style.right = 'auto';
+  element.style.bottom = 'auto';
+  if (rect.width != null) element.style.width = Math.round(Number(rect.width) || 0) + 'px';
+  if (rect.height != null) element.style.height = Math.round(Number(rect.height) || 0) + 'px';
+}
+
+function isCreamuPrimaryPointer(event) {
+  return event && (event.button == null || event.button === 0);
+}
+
+function getCreamuClientPoint(event) {
+  return { x: Number(event?.clientX) || 0, y: Number(event?.clientY) || 0 };
+}
+
+function getCreamuDataset(element) {
+  if (!element) return null;
+  if (!element.dataset) element.dataset = {};
+  return element.dataset;
+}
+
+function callCreamuPreventDefault(event) {
+  if (typeof event?.preventDefault === 'function') event.preventDefault();
+}
+
+function callCreamuStopPropagation(event) {
+  if (typeof event?.stopPropagation === 'function') event.stopPropagation();
+}
+
+function bindCreamuFabDrag(fab, options = {}) {
+  if (!fab) return () => {};
+  const dataset = getCreamuDataset(fab);
+  const boundKey = options.boundKey || 'creamuFabDragBound';
+  if (dataset?.[boundKey] === '1') return () => {};
+  if (dataset) dataset[boundKey] = '1';
+
+  const target = getCreamuInteractionTarget(options);
+  const doc = getCreamuInteractionDocument(fab, options);
+  if (!target || typeof fab.addEventListener !== 'function') return () => {};
+
+  const eventType = options.eventType === 'mouse' ? 'mouse' : 'pointer';
+  const downEvent = eventType === 'mouse' ? 'mousedown' : 'pointerdown';
+  const moveEvent = eventType === 'mouse' ? 'mousemove' : 'pointermove';
+  const upEvent = eventType === 'mouse' ? 'mouseup' : 'pointerup';
+  const cancelEvent = eventType === 'mouse' ? null : 'pointercancel';
+  const applyPosition = options.applyPosition || ((point) => {
+    if (!fab.style || !point) return;
+    fab.style.left = Math.round(Number(point.left) || 0) + 'px';
+    fab.style.top = Math.round(Number(point.top) || 0) + 'px';
+    fab.style.right = 'auto';
+    fab.style.bottom = 'auto';
+  });
+  const getPosition = options.getPosition || (() => {
+    const rect = getCreamuInteractionRect(fab);
+    return { left: rect.left, top: rect.top };
+  });
+  const savePosition = options.savePosition || (() => {});
+  const onActivate = options.onActivate || (() => {});
+  const shouldIgnoreDrag = options.shouldIgnoreDrag || (() => false);
+  const isDragDisabled = options.isDragDisabled || (() => false);
+  const threshold = Number.isFinite(Number(options.threshold)) ? Number(options.threshold) : 5;
+  const thresholdMode = options.thresholdMode === 'axis' ? 'axis' : 'sum';
+  const preventClick = options.preventClick !== false;
+  const bindClick = options.bindClick !== false;
+  const suppressDuration = Number.isFinite(Number(options.suppressDuration))
+    ? Math.max(0, Number(options.suppressDuration))
+    : 0;
+  let active = false;
+  let moved = false;
+  let startPoint = { x: 0, y: 0 };
+  let origin = { left: 0, top: 0 };
+  let lastPoint = null;
+
+  if (typeof options.getInitialPosition === 'function') {
+    const initial = options.getInitialPosition();
+    if (initial) applyPosition(initial, { phase: 'initial' });
+  }
+
+  const onMove = (event) => {
+    if (!active) return;
+    const point = getCreamuClientPoint(event);
+    const dx = point.x - startPoint.x;
+    const dy = point.y - startPoint.y;
+    const crossedThreshold = thresholdMode === 'axis'
+      ? Math.abs(dx) >= threshold || Math.abs(dy) >= threshold
+      : Math.abs(dx) + Math.abs(dy) >= threshold;
+    if (!moved && crossedThreshold) {
+      moved = true;
+      fab.classList?.add('is-dragging');
+    }
+    if (!moved) return;
+    callCreamuPreventDefault(event);
+    const width = fab.offsetWidth || 34;
+    const height = fab.offsetHeight || 34;
+    const next = clampCreamuWorkbenchPoint(
+      { left: origin.left + dx, top: origin.top + dy },
+      { width, height },
+      options.viewport || (typeof window !== 'undefined' ? window : null),
+      options.geometryOptions || {}
+    );
+    if (!next) return;
+    lastPoint = next;
+    applyPosition(next, { phase: 'move', event });
+  };
+
+  const onUp = (event) => {
+    if (!active) return;
+    active = false;
+    target.removeEventListener(moveEvent, onMove, true);
+    target.removeEventListener(upEvent, onUp, true);
+    if (cancelEvent) target.removeEventListener(cancelEvent, onUp, true);
+    fab.classList?.remove('is-dragging');
+    if (moved) {
+      savePosition(lastPoint || getPosition(), { phase: 'end', event });
+      dataset.suppressClick = '1';
+      const clear = () => { delete dataset.suppressClick; };
+      if (suppressDuration > 0 && typeof setTimeout === 'function') setTimeout(clear, suppressDuration);
+      else if (typeof setTimeout === 'function') setTimeout(clear, 0);
+      else clear();
+    }
+    moved = false;
+    lastPoint = null;
+  };
+
+  const onDown = (event) => {
+    if (!isCreamuPrimaryPointer(event) || isDragDisabled(event) || shouldIgnoreDrag(event)) return;
+    active = true;
+    moved = false;
+    startPoint = getCreamuClientPoint(event);
+    const rect = getCreamuInteractionRect(fab);
+    origin = { left: rect.left, top: rect.top };
+    if (eventType === 'pointer' && typeof fab.setPointerCapture === 'function' && event.pointerId != null) {
+      try { fab.setPointerCapture(event.pointerId); } catch (_) { /* ignore */ }
+    }
+    target.addEventListener(moveEvent, onMove, true);
+    target.addEventListener(upEvent, onUp, true);
+    if (cancelEvent) target.addEventListener(cancelEvent, onUp, true);
+  };
+
+  const onClick = (event) => {
+    if (dataset.suppressClick === '1' || moved) {
+      if (preventClick) callCreamuPreventDefault(event);
+      callCreamuStopPropagation(event);
+      return;
+    }
+    if (preventClick) callCreamuPreventDefault(event);
+    onActivate(event);
+  };
+
+  const onViewportChange = () => {
+    if (typeof options.onViewportChange === 'function') options.onViewportChange(fab);
+  };
+
+  fab.addEventListener(downEvent, onDown);
+  if (bindClick) fab.addEventListener('click', onClick);
+  if (typeof options.onViewportChange === 'function') {
+    target.addEventListener('resize', onViewportChange, { passive: true });
+  }
+
+  return () => {
+    fab.removeEventListener(downEvent, onDown);
+    if (bindClick) fab.removeEventListener('click', onClick);
+    target.removeEventListener(moveEvent, onMove, true);
+    target.removeEventListener(upEvent, onUp, true);
+    if (cancelEvent) target.removeEventListener(cancelEvent, onUp, true);
+    if (typeof options.onViewportChange === 'function') target.removeEventListener('resize', onViewportChange);
+    if (dataset) delete dataset[boundKey];
+    if (doc?.body) doc.body.style.userSelect = '';
+  };
+}
+
+function bindCreamuWorkbenchDrag(panel, options = {}) {
+  if (!panel) return () => {};
+  const header = options.header || panel.querySelector?.(options.headerSelector || '.jlc-wb-header');
+  if (!header) return () => {};
+  const dataset = getCreamuDataset(header);
+  const boundKey = options.boundKey || 'creamuWorkbenchDragBound';
+  if (dataset?.[boundKey] === '1') return () => {};
+  if (dataset) dataset[boundKey] = '1';
+
+  const target = getCreamuInteractionTarget(options);
+  const doc = getCreamuInteractionDocument(panel, options);
+  if (!target || typeof header.addEventListener !== 'function') return () => {};
+  const eventType = options.eventType === 'mouse' ? 'mouse' : 'pointer';
+  const downEvent = eventType === 'mouse' ? 'mousedown' : 'pointerdown';
+  const moveEvent = eventType === 'mouse' ? 'mousemove' : 'pointermove';
+  const upEvent = eventType === 'mouse' ? 'mouseup' : 'pointerup';
+  const cancelEvent = eventType === 'mouse' ? null : 'pointercancel';
+  const getStartRect = options.getStartRect || (() => getCreamuInteractionRect(panel));
+  const applyRect = options.applyRect || ((rect) => applyCreamuInteractionRect(panel, rect));
+  const shouldIgnoreDrag = options.shouldIgnoreDrag || (() => false);
+  const isDragDisabled = options.isDragDisabled || (() => false);
+  const lockBodySelection = options.lockBodySelection === true;
+  const body = options.body || doc?.body;
+  let active = false;
+  let startPoint = { x: 0, y: 0 };
+  let startRect = null;
+  let lastRect = null;
+
+  const finish = (event) => {
+    if (!active) return;
+    active = false;
+    panel.classList?.remove('is-dragging');
+    if (lockBodySelection && body) body.style.userSelect = '';
+    target.removeEventListener(moveEvent, onMove, true);
+    target.removeEventListener(upEvent, finish, true);
+    if (cancelEvent) target.removeEventListener(cancelEvent, finish, true);
+    const rect = lastRect || getCreamuInteractionRect(panel);
+    if (typeof options.onEnd === 'function') options.onEnd(rect, { event, phase: 'end' });
+    else applyRect(rect, { event, phase: 'end', persist: true });
+    lastRect = null;
+  };
+
+  const onMove = (event) => {
+    if (!active) return;
+    const current = getCreamuClientPoint(event);
+    lastRect = moveCreamuWorkbenchRect(
+      startRect,
+      startPoint,
+      current,
+      options.viewport || (typeof window !== 'undefined' ? window : null),
+      options.geometryOptions || {}
+    );
+    applyRect(lastRect, { event, phase: 'move', persist: false });
+  };
+
+  const onDown = (event) => {
+    if (!isCreamuPrimaryPointer(event) || isDragDisabled(event) || shouldIgnoreDrag(event)) return;
+    callCreamuPreventDefault(event);
+    startRect = getStartRect(panel, event);
+    startPoint = getCreamuClientPoint(event);
+    lastRect = startRect;
+    active = true;
+    panel.classList?.add('is-dragging');
+    if (lockBodySelection && body) body.style.userSelect = 'none';
+    if (eventType === 'pointer' && typeof header.setPointerCapture === 'function' && event.pointerId != null) {
+      try { header.setPointerCapture(event.pointerId); } catch (_) { /* ignore */ }
+    }
+    if (typeof options.onStart === 'function') options.onStart(startRect, { event, phase: 'start' });
+    target.addEventListener(moveEvent, onMove, true);
+    target.addEventListener(upEvent, finish, true);
+    if (cancelEvent) target.addEventListener(cancelEvent, finish, true);
+  };
+
+  header.addEventListener(downEvent, onDown);
+  return () => {
+    header.removeEventListener(downEvent, onDown);
+    target.removeEventListener(moveEvent, onMove, true);
+    target.removeEventListener(upEvent, finish, true);
+    if (cancelEvent) target.removeEventListener(cancelEvent, finish, true);
+    if (lockBodySelection && body) body.style.userSelect = '';
+    if (dataset) delete dataset[boundKey];
+  };
+}
+
+function bindCreamuWorkbenchResize(panel, options = {}) {
+  if (!panel) return () => {};
+  const dataset = getCreamuDataset(panel);
+  const boundKey = options.boundKey || 'creamuWorkbenchResizeBound';
+  if (dataset?.[boundKey] === '1') return () => {};
+  if (dataset) dataset[boundKey] = '1';
+
+  const target = getCreamuInteractionTarget(options);
+  const doc = getCreamuInteractionDocument(panel, options);
+  if (!target || typeof panel.querySelector !== 'function') return () => {};
+  const eventType = options.eventType === 'mouse' ? 'mouse' : 'pointer';
+  const downEvent = eventType === 'mouse' ? 'mousedown' : 'pointerdown';
+  const moveEvent = eventType === 'mouse' ? 'mousemove' : 'pointermove';
+  const upEvent = eventType === 'mouse' ? 'mouseup' : 'pointerup';
+  const cancelEvent = eventType === 'mouse' ? null : 'pointercancel';
+  const getStartRect = options.getStartRect || (() => getCreamuInteractionRect(panel));
+  const applyRect = options.applyRect || ((rect) => applyCreamuInteractionRect(panel, rect));
+  const isDragDisabled = options.isDragDisabled || (() => false);
+  const lockBodySelection = options.lockBodySelection === true;
+  const body = options.body || doc?.body;
+  const handles = [
+    [options.westSelector || '.jlc-wb-resize-w', 'w'],
+    [options.heightSelector || '.jlc-wb-resize-h', 'h'],
+    [options.cornerSelector || '.jlc-wb-resize-corner', 'corner'],
+  ];
+  const cleanups = [];
+
+  handles.forEach(([selector, mode]) => {
+    const handle = panel.querySelector(selector);
+    if (!handle || typeof handle.addEventListener !== 'function') return;
+    const handleDataset = getCreamuDataset(handle);
+    const handleKey = (options.handleBoundPrefix || 'creamuResizeHandle') + mode;
+    if (handleDataset?.[handleKey] === '1') return;
+    if (handleDataset) handleDataset[handleKey] = '1';
+    let active = false;
+    let startPoint = { x: 0, y: 0 };
+    let startRect = null;
+    let lastRect = null;
+
+    const finish = (event) => {
+      if (!active) return;
+      active = false;
+      handle.classList?.remove('is-dragging');
+      panel.classList?.remove('is-resizing');
+      if (lockBodySelection && body) body.style.userSelect = '';
+      target.removeEventListener(moveEvent, onMove, true);
+      target.removeEventListener(upEvent, finish, true);
+      if (cancelEvent) target.removeEventListener(cancelEvent, finish, true);
+      const rect = lastRect || getCreamuInteractionRect(panel);
+      if (typeof options.onEnd === 'function') options.onEnd(rect, mode, { event, phase: 'end' });
+      else applyRect(rect, { event, phase: 'end', persist: true, mode });
+      lastRect = null;
+    };
+
+    const onMove = (event) => {
+      if (!active) return;
+      lastRect = resizeCreamuWorkbenchRect(
+        startRect,
+        startPoint,
+        getCreamuClientPoint(event),
+        mode,
+        options.viewport || (typeof window !== 'undefined' ? window : null),
+        options.geometryOptions || {}
+      );
+      applyRect(lastRect, { event, phase: 'move', persist: false, mode });
+    };
+
+    const onDown = (event) => {
+      if (!isCreamuPrimaryPointer(event) || isDragDisabled(event)) return;
+      callCreamuPreventDefault(event);
+      callCreamuStopPropagation(event);
+      startRect = getStartRect(panel, event);
+      startPoint = getCreamuClientPoint(event);
+      lastRect = startRect;
+      active = true;
+      handle.classList?.add('is-dragging');
+      panel.classList?.add('is-resizing');
+      if (lockBodySelection && body) body.style.userSelect = 'none';
+      if (eventType === 'pointer' && typeof handle.setPointerCapture === 'function' && event.pointerId != null) {
+        try { handle.setPointerCapture(event.pointerId); } catch (_) { /* ignore */ }
+      }
+      if (typeof options.onStart === 'function') options.onStart(startRect, mode, { event, phase: 'start' });
+      target.addEventListener(moveEvent, onMove, true);
+      target.addEventListener(upEvent, finish, true);
+      if (cancelEvent) target.addEventListener(cancelEvent, finish, true);
+    };
+
+    handle.addEventListener(downEvent, onDown);
+    cleanups.push(() => {
+      handle.removeEventListener(downEvent, onDown);
+      target.removeEventListener(moveEvent, onMove, true);
+      target.removeEventListener(upEvent, finish, true);
+      if (cancelEvent) target.removeEventListener(cancelEvent, finish, true);
+      if (handleDataset) delete handleDataset[handleKey];
+    });
+  });
+
+  return () => {
+    cleanups.forEach((cleanup) => cleanup());
+    if (lockBodySelection && body) body.style.userSelect = '';
+    if (dataset) delete dataset[boundKey];
+  };
 }
   /* Creamu WebDAV sync (generic vault file over WebDAV / 坚果云等) */
   const CREAMU_WD_DEFAULT_PATH = '/Creamu';
@@ -6045,211 +6435,63 @@ function resizeCreamuWorkbenchRect(rect, startPoint, currentPoint, mode, viewpor
     }
 
     function bindWorkbenchFabDrag(fab) {
-        if (!fab || fab.dataset.dragBound === '1') return;
-        fab.dataset.dragBound = '1';
+        if (!fab) return;
         applyWorkbenchFabPosition(fab);
-        let dragging = false;
-        let moved = false;
-        let startX = 0;
-        let startY = 0;
-        let originLeft = 0;
-        let originTop = 0;
-        const onMove = (event) => {
-            if (!dragging) return;
-            const dx = event.clientX - startX;
-            const dy = event.clientY - startY;
-            if (!moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-                moved = true;
-                fab.classList.add('is-dragging');
-            }
-            if (!moved) return;
-            const w = fab.offsetWidth || 34;
-            const h = fab.offsetHeight || 34;
-            const point = clampCreamuWorkbenchPoint(
-                { left: originLeft + dx, top: originTop + dy },
-                { width: w, height: h },
-                window
-            );
-            fab.style.left = point.left + 'px';
-            fab.style.top = point.top + 'px';
-            fab.style.right = 'auto';
-            fab.style.bottom = 'auto';
-        };
-        const onUp = () => {
-            if (!dragging) return;
-            dragging = false;
-            window.removeEventListener('pointermove', onMove);
-            window.removeEventListener('pointerup', onUp);
-            window.removeEventListener('pointercancel', onUp);
-            fab.classList.remove('is-dragging');
-            if (moved) {
-                const rect = fab.getBoundingClientRect();
+        bindCreamuFabDrag(fab, {
+            boundKey: 'jlcFabDragBound',
+            threshold: 5,
+            thresholdMode: 'axis',
+            applyPosition: (point) => {
+                fab.style.left = point.left + 'px';
+                fab.style.top = point.top + 'px';
+                fab.style.right = 'auto';
+                fab.style.bottom = 'auto';
+            },
+            savePosition: (point) => {
                 persistWorkbenchSession({
-                    fabLeft: Math.round(rect.left),
-                    fabTop: Math.round(rect.top)
+                    fabLeft: Math.round(point.left),
+                    fabTop: Math.round(point.top)
                 });
-                fab.dataset.suppressClick = '1';
-                window.setTimeout(() => {
-                    delete fab.dataset.suppressClick;
-                }, 0);
-            }
-            moved = false;
-        };
-        fab.addEventListener('pointerdown', (event) => {
-            if (event.button != null && event.button !== 0) return;
-            dragging = true;
-            moved = false;
-            const rect = fab.getBoundingClientRect();
-            startX = event.clientX;
-            startY = event.clientY;
-            originLeft = rect.left;
-            originTop = rect.top;
-            try { fab.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
-            window.addEventListener('pointermove', onMove);
-            window.addEventListener('pointerup', onUp);
-            window.addEventListener('pointercancel', onUp);
+            },
+            onActivate: () => toggleWorkbenchV3(),
+            onViewportChange: () => applyWorkbenchFabPosition(fab),
+            preventClick: false
         });
-        fab.addEventListener('click', (event) => {
-            if (fab.dataset.suppressClick === '1') {
-                event.preventDefault();
-                event.stopPropagation();
-                return;
-            }
-            toggleWorkbenchV3();
-        });
-        window.addEventListener('resize', () => {
-            applyWorkbenchFabPosition(fab);
-        }, { passive: true });
+    }
+
+    function getWorkbenchInteractionRect(shell) {
+            const session = getWorkbenchSession();
+            const rect = shell.getBoundingClientRect();
+            return {
+                left: rect.left,
+                top: rect.top,
+                width: Math.round(Number(session.shellWidth) > 0 ? session.shellWidth : rect.width),
+                height: Math.round(Number(session.shellHeight) > 0 ? session.shellHeight : rect.height)
+            };
     }
 
     function bindWorkbenchDrag(shell) {
-        const header = shell.querySelector('.jlc-wb-header');
-        if (!header || header.dataset.dragBound === '1') return;
-        header.dataset.dragBound = '1';
-        let dragging = false;
-        let startX = 0;
-        let startY = 0;
-        let originLeft = 0;
-        let originTop = 0;
-        let lockedWidth = 0;
-        let lockedHeight = 0;
-        const onMove = (event) => {
-            if (!dragging) return;
-            const rect = moveCreamuWorkbenchRect({
-                left: originLeft,
-                top: originTop,
-                width: lockedWidth,
-                height: lockedHeight
-            }, { x: startX, y: startY }, {
-                x: event.clientX,
-                y: event.clientY
-            }, window);
-            applyWorkbenchShellGeometry(rect, { skipPersist: true });
-        };
-        const onUp = () => {
-            if (!dragging) return;
-            dragging = false;
-            shell.classList.remove('is-dragging');
-            document.body.style.userSelect = '';
-            document.removeEventListener('pointermove', onMove);
-            document.removeEventListener('pointerup', onUp);
-            document.removeEventListener('pointercancel', onUp);
-            // 松手时一次性记忆位置（尺寸仍用锁定值）
-            applyWorkbenchShellGeometry({
-                left: parseFloat(shell.style.left) || originLeft,
-                top: parseFloat(shell.style.top) || originTop,
-                width: lockedWidth,
-                height: lockedHeight
-            });
-        };
-        header.addEventListener('pointerdown', (event) => {
-            if (window.innerWidth <= 820) return;
-            // 点到按钮不拖
-            if (event.target.closest('.jlc-wb-header-actions')) return;
-            event.preventDefault();
-            const session = getWorkbenchSession();
-            const rect = shell.getBoundingClientRect();
-            dragging = true;
-            startX = event.clientX;
-            startY = event.clientY;
-            originLeft = rect.left;
-            originTop = rect.top;
-            lockedWidth = Math.round(Number(session.shellWidth) > 0 ? session.shellWidth : rect.width);
-            lockedHeight = Math.round(Number(session.shellHeight) > 0 ? session.shellHeight : rect.height);
-            shell.classList.add('is-dragging');
-            document.body.style.userSelect = 'none';
-            document.addEventListener('pointermove', onMove);
-            document.addEventListener('pointerup', onUp);
-            document.addEventListener('pointercancel', onUp);
+        bindCreamuWorkbenchDrag(shell, {
+            boundKey: 'jlcPanelDragBound',
+            isDragDisabled: () => window.innerWidth <= 820,
+            shouldIgnoreDrag: (event) => !!event.target?.closest?.('.jlc-wb-header-actions'),
+            getStartRect: () => getWorkbenchInteractionRect(shell),
+            applyRect: (rect) => applyWorkbenchShellGeometry(rect, { skipPersist: true }),
+            onEnd: (rect) => applyWorkbenchShellGeometry(rect),
+            lockBodySelection: true
         });
     }
 
     function bindWorkbenchResize(shell) {
-        if (shell.dataset.resizeBound === '1') return;
-        shell.dataset.resizeBound = '1';
-        const bindHandle = (handle, mode) => {
-            if (!handle || handle.dataset.bound === '1') return;
-            handle.dataset.bound = '1';
-            let dragging = false;
-            let startX = 0;
-            let startY = 0;
-            let startW = 0;
-            let startH = 0;
-            let startLeft = 0;
-            let startTop = 0;
-            const onMove = (event) => {
-                if (!dragging) return;
-                const rect = resizeCreamuWorkbenchRect({
-                    left: startLeft,
-                    top: startTop,
-                    width: startW,
-                    height: startH
-                }, { x: startX, y: startY }, {
-                    x: event.clientX,
-                    y: event.clientY
-                }, mode, window);
-                applyWorkbenchShellGeometry(rect, { skipPersist: true });
-            };
-            const onUp = () => {
-                if (!dragging) return;
-                dragging = false;
-                handle.classList.remove('is-dragging');
-                shell.classList.remove('is-resizing');
-                document.body.style.userSelect = '';
-                document.removeEventListener('pointermove', onMove);
-                document.removeEventListener('pointerup', onUp);
-                document.removeEventListener('pointercancel', onUp);
-                applyWorkbenchShellGeometry({
-                    left: parseFloat(shell.style.left) || startLeft,
-                    top: parseFloat(shell.style.top) || startTop,
-                    width: parseFloat(shell.style.width) || startW,
-                    height: parseFloat(shell.style.height) || startH
-                });
-            };
-            handle.addEventListener('pointerdown', (event) => {
-                if (window.innerWidth <= 820) return;
-                event.preventDefault();
-                event.stopPropagation();
-                const session = getWorkbenchSession();
-                const rect = shell.getBoundingClientRect();
-                dragging = true;
-                startX = event.clientX;
-                startY = event.clientY;
-                startLeft = rect.left;
-                startTop = rect.top;
-                startW = Math.round(Number(session.shellWidth) > 0 ? session.shellWidth : rect.width);
-                startH = Math.round(Number(session.shellHeight) > 0 ? session.shellHeight : rect.height);
-                handle.classList.add('is-dragging');
-                shell.classList.add('is-resizing');
-                document.body.style.userSelect = 'none';
-                document.addEventListener('pointermove', onMove);
-                document.addEventListener('pointerup', onUp);
-                document.addEventListener('pointercancel', onUp);
-            });
-        };
-        bindHandle(shell.querySelector('.jlc-wb-resize-w'), 'w');
-        bindHandle(shell.querySelector('.jlc-wb-resize-h'), 'h');
-        bindHandle(shell.querySelector('.jlc-wb-resize-corner'), 'corner');
+        bindCreamuWorkbenchResize(shell, {
+            boundKey: 'jlcPanelResizeBound',
+            handleBoundPrefix: 'jlcResizeHandle',
+            isDragDisabled: () => window.innerWidth <= 820,
+            getStartRect: () => getWorkbenchInteractionRect(shell),
+            applyRect: (rect) => applyWorkbenchShellGeometry(rect, { skipPersist: true }),
+            onEnd: (rect) => applyWorkbenchShellGeometry(rect),
+            lockBodySelection: true
+        });
     }
 
     function ensureWorkbenchDialog() {

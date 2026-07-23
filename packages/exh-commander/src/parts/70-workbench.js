@@ -1,6 +1,4 @@
   let wbSession = null;
-  let wbDragging = null;
-  let wbResizing = null;
   /** 主动检查更新运行态 */
   let trackingCheckRuntime = null;
 
@@ -54,89 +52,35 @@
   }
 
   function bindFabDrag(fab) {
-    if (!fab || fab.dataset.dragBound === '1') return;
-    fab.dataset.dragBound = '1';
+    if (!fab) return;
     applyFabPosition(fab, wbSession || loadSession());
-    let active = false;
-    let dragging = false;
-    let startX = 0;
-    let startY = 0;
-    let originLeft = 0;
-    let originTop = 0;
-    const MOVE_PX = 10;
-
-    const onMove = (event) => {
-      if (!active) return;
-      const dx = event.clientX - startX;
-      const dy = event.clientY - startY;
-      if (!dragging && Math.abs(dx) + Math.abs(dy) > MOVE_PX) {
-        dragging = true;
-        fab.classList.add('is-dragging');
-      }
-      if (!dragging) return;
-      event.preventDefault();
-      const w = fab.offsetWidth || 34;
-      const h = fab.offsetHeight || 34;
-      const point = clampCreamuWorkbenchPoint(
-        { left: originLeft + dx, top: originTop + dy },
-        { width: w, height: h },
-        window
-      );
-      fab.style.left = point.left + 'px';
-      fab.style.top = point.top + 'px';
-      fab.style.right = 'auto';
-      fab.style.bottom = 'auto';
-    };
-
-    const onUp = () => {
-      if (!active) return;
-      active = false;
-      document.removeEventListener('mousemove', onMove, true);
-      document.removeEventListener('mouseup', onUp, true);
-      document.removeEventListener('pointermove', onMove, true);
-      document.removeEventListener('pointerup', onUp, true);
-      fab.classList.remove('is-dragging');
-      if (dragging) {
-        dragging = false;
-        const rect = fab.getBoundingClientRect();
+    bindCreamuFabDrag(fab, {
+      boundKey: 'exhFabDragBound',
+      eventType: 'mouse',
+      threshold: 10,
+      suppressDuration: 50,
+      applyPosition: (point) => {
+        fab.style.left = point.left + 'px';
+        fab.style.top = point.top + 'px';
+        fab.style.right = 'auto';
+        fab.style.bottom = 'auto';
+      },
+      savePosition: (point) => {
         wbSession = wbSession || loadSession();
-        wbSession.fabLeft = Math.round(rect.left);
-        wbSession.fabTop = Math.round(rect.top);
+        wbSession.fabLeft = Math.round(point.left);
+        wbSession.fabTop = Math.round(point.top);
         saveSession(wbSession);
-        fab.dataset.skipClick = '1';
-        window.setTimeout(() => {
-          delete fab.dataset.skipClick;
-        }, 50);
-      }
-    };
-
-    // 用 mousedown 启动拖动（Firefox 站点页更稳）；点击仍走 click
-    fab.addEventListener('mousedown', (event) => {
-      if (event.button !== 0) return;
-      active = true;
-      dragging = false;
-      startX = event.clientX;
-      startY = event.clientY;
-      const rect = fab.getBoundingClientRect();
-      originLeft = rect.left;
-      originTop = rect.top;
-      document.addEventListener('mousemove', onMove, true);
-      document.addEventListener('mouseup', onUp, true);
-    });
-    fab.addEventListener('click', (event) => {
-      if (fab.dataset.skipClick === '1' || dragging) {
-        event.preventDefault();
+      },
+      onActivate: (event) => {
         event.stopPropagation();
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      try {
-        toggleWorkbench();
-      } catch (e) {
-        console.warn('[ExC] toggleWorkbench', e);
-        showToast('打开工作台失败: ' + ((e && e.message) || e));
-      }
+        try {
+          toggleWorkbench();
+        } catch (e) {
+          console.warn('[ExC] toggleWorkbench', e);
+          showToast('打开工作台失败: ' + ((e && e.message) || e));
+        }
+      },
+      onViewportChange: () => applyFabPosition(fab, wbSession || loadSession())
     });
   }
 
@@ -488,119 +432,50 @@
     if (window.__excRefreshPage) window.__excRefreshPage();
   }
 
+  function getExhWorkbenchInteractionRect(panel) {
+    const rect = panel.getBoundingClientRect();
+    return {
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+
+  function persistExhWorkbenchRect(panel, rect, saveWidth = false) {
+    wbSession = wbSession || loadSession();
+    wbSession.left = Math.round(rect.left);
+    wbSession.top = Math.round(rect.top);
+    wbSession.width = Math.round(rect.width) || wbSession.width || 500;
+    wbSession.height = Math.round(rect.height) || wbSession.height || 560;
+    clampWorkbenchShellPos(panel, wbSession);
+    saveSession(wbSession);
+    if (saveWidth) saveConfig({ workbench_width: wbSession.width });
+  }
+
   function initWbDrag(handle, panel) {
-    handle.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-      if (e.target.closest('.jlc-wb-header-actions')) return;
-      const rect = panel.getBoundingClientRect();
-      panel.style.left = rect.left + 'px';
-      panel.style.top = rect.top + 'px';
-      panel.style.right = 'auto';
-      panel.style.bottom = 'auto';
-      panel.style.width = rect.width + 'px';
-      panel.style.height = rect.height + 'px';
-      wbDragging = {
-        startRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-        startPoint: { x: e.clientX, y: e.clientY },
-      };
-      panel.classList.add('is-dragging');
-      e.preventDefault();
-    });
-    window.addEventListener('mousemove', (e) => {
-      if (wbResizing) {
-        const mode = wbResizing.mode || 'w';
-        const rect = resizeCreamuWorkbenchRect(
-          wbResizing.startRect,
-          wbResizing.startPoint,
-          { x: e.clientX, y: e.clientY },
-          mode,
-          window,
-          { minWidth: 360, minHeight: 280, maxWidth: 720, margin: 12 }
-        );
-        panel.style.left = rect.left + 'px';
-        panel.style.top = rect.top + 'px';
-        panel.style.width = rect.width + 'px';
-        panel.style.height = rect.height + 'px';
-        panel.style.right = 'auto';
-        panel.style.bottom = 'auto';
-        return;
-      }
-      if (!wbDragging) return;
-      const rect = moveCreamuWorkbenchRect(
-        wbDragging.startRect,
-        wbDragging.startPoint,
-        { x: e.clientX, y: e.clientY },
-        window,
-        { minWidth: 360, minHeight: 280, maxWidth: 720, margin: 12 }
-      );
-      panel.style.left = rect.left + 'px';
-      panel.style.top = rect.top + 'px';
-      panel.style.width = rect.width + 'px';
-      panel.style.height = rect.height + 'px';
-      panel.style.right = 'auto';
-      panel.style.bottom = 'auto';
-    });
-    window.addEventListener('mouseup', () => {
-      if (wbResizing) {
-        const handleEl = wbResizing.handle;
-        if (handleEl) handleEl.classList.remove('is-dragging');
-        wbResizing = null;
-        wbSession = wbSession || loadSession();
-        const rect = panel.getBoundingClientRect();
-        wbSession.width = Math.round(rect.width) || 500;
-        wbSession.height = Math.round(rect.height) || 560;
-        wbSession.left = Math.round(rect.left);
-        wbSession.top = Math.round(rect.top);
-        saveSession(wbSession);
-        saveConfig({ workbench_width: wbSession.width });
-        return;
-      }
-      if (!wbDragging) return;
-      wbDragging = null;
-      panel.classList.remove('is-dragging');
-      const rect = panel.getBoundingClientRect();
-      wbSession = wbSession || loadSession();
-      wbSession.left = rect.left;
-      wbSession.top = rect.top;
-      wbSession.width = Math.round(rect.width) || wbSession.width;
-      wbSession.height = Math.round(rect.height) || wbSession.height;
-      clampWorkbenchShellPos(panel, wbSession);
-      saveSession(wbSession);
+    bindCreamuWorkbenchDrag(panel, {
+      boundKey: 'exhPanelDragBound',
+      eventType: 'mouse',
+      shouldIgnoreDrag: (event) => !!event.target?.closest?.('.jlc-wb-header-actions'),
+      getStartRect: () => getExhWorkbenchInteractionRect(panel),
+      applyRect: (rect) => applyCreamuInteractionRect(panel, rect),
+      onEnd: (rect) => persistExhWorkbenchRect(panel, rect),
+      lockBodySelection: false,
+      geometryOptions: { minWidth: 360, minHeight: 280, maxWidth: 720, margin: 12 }
     });
   }
 
   function initWbResizeHandles(panel) {
-    if (!panel || panel.dataset.resizeBound === '1') return;
-    panel.dataset.resizeBound = '1';
-    const bind = (sel, mode) => {
-      const handle = panel.querySelector(sel);
-      if (!handle) return;
-      handle.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return;
-        const rect = panel.getBoundingClientRect();
-        panel.style.right = 'auto';
-        panel.style.bottom = 'auto';
-        panel.style.left = rect.left + 'px';
-        panel.style.top = rect.top + 'px';
-        panel.style.width = rect.width + 'px';
-        panel.style.height = rect.height + 'px';
-        wbResizing = {
-          mode: mode,
-          startRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-          startPoint: { x: e.clientX, y: e.clientY },
-          handle: handle,
-        };
-        handle.classList.add('is-dragging');
-        panel.classList.add('is-resizing');
-        e.preventDefault();
-        e.stopPropagation();
-      });
-    };
-    bind('.jlc-wb-resize-w', 'w');
-    bind('.jlc-wb-resize-h', 'h');
-    bind('.jlc-wb-resize-corner', 'corner');
-    window.addEventListener('mouseup', () => {
-      panel.classList.remove('is-resizing');
+    bindCreamuWorkbenchResize(panel, {
+      boundKey: 'exhPanelResizeBound',
+      handleBoundPrefix: 'exhResizeHandle',
+      eventType: 'mouse',
+      getStartRect: () => getExhWorkbenchInteractionRect(panel),
+      applyRect: (rect) => applyCreamuInteractionRect(panel, rect),
+      onEnd: (rect) => persistExhWorkbenchRect(panel, rect, true),
+      lockBodySelection: false,
+      geometryOptions: { minWidth: 360, minHeight: 280, maxWidth: 720, margin: 12 }
     });
   }
 

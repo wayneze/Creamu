@@ -41,6 +41,18 @@ function getScoutThemeCss() {
           --scout-text-color: #12301c;
         }
 
+        :where(#jlc-wb, #jlc-wb-fab, #jlc-wb-dialog, #jlc-tracking-pagebar) {
+          --creamu-wb-accent: var(--scout-theme-color);
+          --creamu-wb-accent-hover: var(--scout-theme-color);
+          --creamu-wb-accent-light: var(--scout-theme-color);
+          --creamu-wb-accent-dark: var(--scout-theme-dark);
+          --creamu-wb-accent-shadow: var(--scout-theme-shadow);
+          --creamu-wb-accent-shadow-soft: var(--scout-theme-shadow);
+          --creamu-wb-accent-ring: var(--scout-theme-shadow);
+          --creamu-wb-accent-overlay: color-mix(in srgb, var(--scout-theme-color) 28%, transparent);
+          --creamu-wb-accent-overlay-soft: color-mix(in srgb, var(--scout-theme-color) 18%, transparent);
+        }
+
         /*
          * 清爽：只藏明确广告位，禁止 class/id 子串 *ad-*（会误伤 gamepad 等，
          * 运行时广告壳也常套在列表附近，过宽选择器会把整列视频 height:0 挡没）。
@@ -87,16 +99,16 @@ function getScoutThemeCss() {
         #jlc-wb-fab {
           position: fixed !important;
           z-index: 2147483000 !important;
-          background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-          background-color: var(--scout-theme-color) !important;
-          box-shadow: 0 4px 0 var(--scout-theme-dark), 0 10px 20px var(--scout-theme-shadow) !important;
+          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
+          background-color: var(--creamu-wb-accent) !important;
+          box-shadow: 0 4px 0 var(--creamu-wb-accent-dark), 0 10px 20px var(--creamu-wb-accent-shadow) !important;
           visibility: visible !important;
           opacity: 1 !important;
           pointer-events: auto !important;
           display: flex !important;
         }
         #jlc-wb-fab:active, #jlc-wb-fab.is-dragging {
-          box-shadow: 0 2px 0 var(--scout-theme-dark), 0 4px 10px var(--scout-theme-shadow) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark), 0 4px 10px var(--creamu-wb-accent-shadow-soft) !important;
         }
         #scout-search-track-bar.scout-track-fab {
           z-index: 2147483001 !important;
@@ -111,9 +123,9 @@ function getScoutThemeCss() {
           appearance: none !important;
           flex: 1 1 auto !important;
           border: 0 !important;
-          background: #efe4d2 !important;
-          background-color: #efe4d2 !important;
-          color: #8a6f55 !important;
+          background: var(--creamu-wb-surface-muted) !important;
+          background-color: var(--creamu-wb-surface-muted) !important;
+          color: var(--creamu-wb-text-subtle) !important;
           padding: 10px 8px !important;
           cursor: pointer !important;
           font-size: 14px !important;
@@ -123,39 +135,39 @@ function getScoutThemeCss() {
         }
         #jlc-wb .jlc-wb-nav button.active,
         #jlc-wb .jlc-wb-settings-nav button.active {
-          color: #fff !important;
-          background: var(--scout-theme-color) !important;
-          background-color: var(--scout-theme-color) !important;
-          box-shadow: 0 2px 0 var(--scout-theme-dark) !important;
+          color: var(--creamu-wb-on-accent) !important;
+          background: var(--creamu-wb-accent) !important;
+          background-color: var(--creamu-wb-accent) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark) !important;
         }
         #jlc-wb .jlc-wb-btn {
           appearance: none !important;
-          background: #fffaf2 !important;
-          background-color: #fffaf2 !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
-          box-shadow: 0 2px 0 #e0cdae !important;
+          background: var(--creamu-wb-surface-soft) !important;
+          background-color: var(--creamu-wb-surface-soft) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-border-strong) !important;
         }
         #jlc-wb .jlc-wb-btn.primary {
-          background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-          background-color: var(--scout-theme-color) !important;
+          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
+          background-color: var(--creamu-wb-accent) !important;
           border-color: transparent !important;
-          color: #fff !important;
-          box-shadow: 0 2px 0 var(--scout-theme-dark) !important;
+          color: var(--creamu-wb-on-accent) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark) !important;
         }
         #jlc-wb .jlc-wb-btn.primary:hover {
           filter: brightness(1.05);
         }
         #jlc-wb .jlc-wb-btn.ghost {
-          background: #fffaf2 !important;
-          background-color: #fffaf2 !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
+          background: var(--creamu-wb-surface-soft) !important;
+          background-color: var(--creamu-wb-surface-soft) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
         }
         #jlc-wb .jlc-wb-btn.ghost:hover {
-          color: var(--scout-theme-color) !important;
-          border-color: var(--scout-theme-color) !important;
-          background: #fff !important;
+          color: var(--creamu-wb-accent) !important;
+          border-color: var(--creamu-wb-accent) !important;
+          background: var(--creamu-wb-surface-raised) !important;
         }
         #jlc-wb .jlc-wb-btn.danger {
           background: #f3d5d0 !important;
@@ -165,50 +177,50 @@ function getScoutThemeCss() {
           box-shadow: none !important;
         }
         #jlc-wb .jlc-wb-chip {
-          background: #fff !important;
-          background-color: #fff !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
-          box-shadow: 0 2px 0 #e6d3b5 !important;
+          background: var(--creamu-wb-surface-raised) !important;
+          background-color: var(--creamu-wb-surface-raised) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-control-shadow) !important;
         }
         #jlc-wb .jlc-wb-chip.is-on {
-          background: var(--scout-theme-color) !important;
-          background-color: var(--scout-theme-color) !important;
+          background: var(--creamu-wb-accent) !important;
+          background-color: var(--creamu-wb-accent) !important;
           border-color: transparent !important;
-          color: #fff !important;
-          box-shadow: 0 2px 0 var(--scout-theme-dark) !important;
+          color: var(--creamu-wb-on-accent) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark) !important;
         }
         #jlc-wb .jlc-wb-open-btn {
-          background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-          background-color: var(--scout-theme-color) !important;
-          color: #fff !important;
-          box-shadow: 0 3px 0 var(--scout-theme-dark) !important;
+          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
+          background-color: var(--creamu-wb-accent) !important;
+          color: var(--creamu-wb-on-accent) !important;
+          box-shadow: 0 3px 0 var(--creamu-wb-accent-dark) !important;
           border: 0 !important;
         }
         #jlc-wb .jlc-wb-more-btn {
-          background: #fffaf2 !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
+          background: var(--creamu-wb-surface-soft) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
         }
         #jlc-wb .jlc-wb-icon-btn {
-          background: #fff !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
-          box-shadow: 0 2px 0 #e6d3b5 !important;
+          background: var(--creamu-wb-surface-raised) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-control-shadow) !important;
         }
         /* 组合底栏：搜索主色、收藏/清空 ghost */
         #jlc-wb .scout-combo-dock-actions .jlc-wb-btn.primary,
         #jlc-wb .scout-combo-dock-actions #scout-combo-search-btn {
-          background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-          background-color: var(--scout-theme-color) !important;
-          color: #fff !important;
+          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
+          background-color: var(--creamu-wb-accent) !important;
+          color: var(--creamu-wb-on-accent) !important;
           border-color: transparent !important;
         }
         #jlc-wb .legacy-toggle input[type="checkbox"] {
-          accent-color: var(--scout-theme-color) !important;
+          accent-color: var(--creamu-wb-accent) !important;
         }
         #jlc-wb .jlc-wb-search:focus {
-          border-color: var(--scout-theme-color) !important;
+          border-color: var(--creamu-wb-accent) !important;
         }
 
         /*

@@ -128,6 +128,21 @@ try {
     },
     async (page) => {
       await openAndCheckTitle(page, /Scout/i);
+      const themeColors = await page.evaluate(() => {
+        const panel = document.getElementById('jlc-wb');
+        const probe = document.createElement('span');
+        probe.style.color = 'var(--creamu-wb-accent)';
+        probe.style.backgroundColor = 'var(--creamu-wb-accent-dark)';
+        panel.appendChild(probe);
+        const style = getComputedStyle(probe);
+        const colors = { accent: style.color, dark: style.backgroundColor };
+        probe.remove();
+        return colors;
+      });
+      assert.deepEqual(themeColors, {
+        accent: 'rgb(229, 72, 64)',
+        dark: 'rgb(158, 42, 36)',
+      });
       await exerciseWorkbenchGeometry(page, {
         fab: 'scoutDragBound',
         panel: 'scoutPanelResizeBound',

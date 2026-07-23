@@ -5,6 +5,10 @@ import { createContext, runInContext } from 'node:vm';
 
 const root = process.cwd();
 const source = fs.readFileSync(path.join(root, 'packages/shared/creamu-workbench-css.js'), 'utf8');
+const scoutThemeSource = fs.readFileSync(
+  path.join(root, 'packages/scout-commander/src/parts/25-theme.js'),
+  'utf8'
+);
 
 function createDocument(withHead = true) {
   const children = [];
@@ -46,7 +50,12 @@ console.log('Shared workbench styles');
   const context = loadStyles(createDocument());
   const css = context.getCreamuWorkbenchCss();
   assert.ok(css.includes('--creamu-wb-bg: #f6efe3'));
+  assert.ok(css.includes('--creamu-wb-control-shadow: #e6d3b5'));
+  assert.ok(css.includes('--creamu-wb-accent-shadow: rgba(140,90,40,.26)'));
   assert.ok(css.includes('var(--creamu-wb-accent)'));
+  assert.ok(css.includes('0 3px 0 var(--creamu-wb-accent-dark)'));
+  assert.ok(css.includes('0 0 0 2px var(--creamu-wb-accent-ring)'));
+  assert.ok(css.includes('background: var(--creamu-wb-accent-overlay)'));
   assert.ok(css.includes('var(--creamu-wb-border)'));
   assert.match(css, /#jlc-wb\s*\{[^}]*box-sizing:\s*border-box/s);
   assert.ok(css.includes('#jlc-wb-fab.is-panel-open'));
@@ -109,4 +118,16 @@ console.log('Shared workbench styles');
   console.log('  OK  configurable selectors include product extensions');
 }
 
-console.log('Shared workbench style tests passed (4)');
+{
+  const context = createContext({});
+  runInContext(scoutThemeSource, context, { filename: '25-theme.js' });
+  const css = context.getScoutThemeCss();
+  assert.ok(css.includes('--creamu-wb-accent: var(--scout-theme-color)'));
+  assert.ok(css.includes('--creamu-wb-accent-dark: var(--scout-theme-dark)'));
+  assert.ok(css.includes('--creamu-wb-accent-ring: var(--scout-theme-shadow)'));
+  assert.ok(css.includes('background: var(--creamu-wb-surface-muted) !important'));
+  assert.ok(css.includes('box-shadow: 0 2px 0 var(--creamu-wb-control-shadow) !important'));
+  console.log('  OK  Scout theme maps site colors to shared tokens');
+}
+
+console.log('Shared workbench style tests passed (5)');

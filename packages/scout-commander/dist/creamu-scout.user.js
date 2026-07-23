@@ -2619,10 +2619,16 @@ function getCreamuWorkbenchCss(options = {}) {
             --creamu-wb-border: #e4d4bc;
             --creamu-wb-border-strong: #e0cdae;
             --creamu-wb-divider: #eadcc6;
+            --creamu-wb-control-shadow: #e6d3b5;
             --creamu-wb-accent: #d4883a;
             --creamu-wb-accent-hover: #e09848;
             --creamu-wb-accent-light: #e8a24e;
             --creamu-wb-accent-dark: #b56e28;
+            --creamu-wb-accent-shadow: rgba(140,90,40,.26);
+            --creamu-wb-accent-shadow-soft: rgba(140,90,40,.22);
+            --creamu-wb-accent-ring: rgba(212,136,58,.22);
+            --creamu-wb-accent-overlay: rgba(212,136,58,.28);
+            --creamu-wb-accent-overlay-soft: rgba(212,136,58,.18);
             --creamu-wb-on-accent: #fff;
             --creamu-wb-danger: #b42318;
         }
@@ -2632,7 +2638,7 @@ function getCreamuWorkbenchCss(options = {}) {
             border-radius: 11px; border: 0 !important; color: #fff !important;
             background: linear-gradient(var(--creamu-wb-accent-light), var(--creamu-wb-accent)) !important;
             background-color: var(--creamu-wb-accent) !important;
-            box-shadow: 0 3px 0 #b56e28, 0 8px 16px rgba(140,90,40,.26) !important;
+            box-shadow: 0 3px 0 var(--creamu-wb-accent-dark), 0 8px 16px var(--creamu-wb-accent-shadow) !important;
             z-index: 999999; cursor: grab; touch-action: none; user-select: none;
             display: flex; align-items: center; justify-content: center; font-size: 14px;
             opacity: 1 !important;
@@ -2641,7 +2647,7 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb-fab:hover { filter: brightness(1.05); }
         #jlc-wb-fab:active, #jlc-wb-fab.is-dragging {
             cursor: grabbing; transform: translateY(2px);
-            box-shadow: 0 2px 0 #b56e28, 0 4px 10px rgba(140,90,40,.22);
+            box-shadow: 0 2px 0 var(--creamu-wb-accent-dark), 0 4px 10px var(--creamu-wb-accent-shadow-soft);
             filter: brightness(.98);
         }
         #jlc-wb-fab .jlc-wb-fab-badge {
@@ -2683,12 +2689,12 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-icon-btn {
             width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
-            background: var(--creamu-wb-surface-raised); font-size: 15px; box-shadow: 0 2px 0 #e6d3b5;
+            background: var(--creamu-wb-surface-raised); font-size: 15px; box-shadow: 0 2px 0 var(--creamu-wb-control-shadow);
         }
-        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: var(--creamu-wb-surface-raised); box-shadow: 0 2px 0 #e6d3b5; }
-        #jlc-wb .jlc-wb-chip.is-on { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 #b56e28; }
+        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: var(--creamu-wb-surface-raised); box-shadow: 0 2px 0 var(--creamu-wb-control-shadow); }
+        #jlc-wb .jlc-wb-chip.is-on { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark); }
         #jlc-wb .jlc-wb-btn { padding: 9px 13px; border-radius: 12px; box-shadow: 0 2px 0 #e0cdae; }
-        #jlc-wb .jlc-wb-btn.primary { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 #b56e28; }
+        #jlc-wb .jlc-wb-btn.primary { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark); }
         #jlc-wb .jlc-wb-btn.ghost { background: var(--creamu-wb-surface-soft); }
         #jlc-wb .jlc-wb-btn.danger { background: #f3d5d0; border-color: #e8b8b0; color: #8a3a32; box-shadow: none; }
         #jlc-wb .jlc-wb-btn:hover, #jlc-wb .jlc-wb-icon-btn:hover, #jlc-wb .jlc-wb-chip:hover {
@@ -2706,7 +2712,7 @@ function getCreamuWorkbenchCss(options = {}) {
             font-size: 14px; font-weight: 700; transition: .18s; border-radius: 12px;
         }
         #jlc-wb .jlc-wb-nav button.active {
-            color: var(--creamu-wb-on-accent); background: var(--creamu-wb-accent); box-shadow: 0 2px 0 #b56e28;
+            color: var(--creamu-wb-on-accent); background: var(--creamu-wb-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark);
         }
 
         #jlc-wb .jlc-wb-body {
@@ -2806,7 +2812,7 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-item::before { display: none; }
         #jlc-wb .jlc-wb-item.is-focus {
-            border-color: var(--creamu-wb-accent); box-shadow: 0 0 0 2px rgba(212,136,58,.22), 0 4px 0 #e0c9a8;
+            border-color: var(--creamu-wb-accent); box-shadow: 0 0 0 2px var(--creamu-wb-accent-ring), 0 4px 0 #e0c9a8;
             background: #fff8ee;
         }
         #jlc-wb .jlc-wb-item.is-current { border-color: #8eb6e8; }
@@ -2892,10 +2898,10 @@ function getCreamuWorkbenchCss(options = {}) {
             appearance: none; border: 0; cursor: pointer;
             min-width: 64px; padding: 8px 14px; border-radius: 999px;
             background: linear-gradient(var(--creamu-wb-accent-light), var(--creamu-wb-accent)); color: var(--creamu-wb-on-accent); font-weight: 800; font-size: 13px;
-            box-shadow: 0 3px 0 #b56e28; transition: transform .12s ease, filter .12s ease;
+            box-shadow: 0 3px 0 var(--creamu-wb-accent-dark); transition: transform .12s ease, filter .12s ease;
         }
         #jlc-wb .jlc-wb-open-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
-        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 #b56e28; }
+        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--creamu-wb-accent-dark); }
         #jlc-wb .jlc-wb-more-btn {
             appearance: none; border: 0; background: transparent; color: #b09070;
             width: 28px; height: 22px; border-radius: 8px; cursor: pointer; font-size: 16px; line-height: 1;
@@ -3091,10 +3097,10 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-resize-w:hover, #jlc-wb .jlc-wb-resize-w.is-dragging,
         #jlc-wb .jlc-wb-resize-h:hover, #jlc-wb .jlc-wb-resize-h.is-dragging {
-            background: rgba(212,136,58,.28);
+            background: var(--creamu-wb-accent-overlay);
         }
         #jlc-wb .jlc-wb-resize-corner:hover, #jlc-wb .jlc-wb-resize-corner.is-dragging {
-            background: rgba(212,136,58,.18);
+            background: var(--creamu-wb-accent-overlay-soft);
         }
 
         #jlc-wb .jlc-wb-item-edit {
@@ -5008,6 +5014,18 @@ function getScoutThemeCss() {
           --scout-text-color: #12301c;
         }
 
+        :where(#jlc-wb, #jlc-wb-fab, #jlc-wb-dialog, #jlc-tracking-pagebar) {
+          --creamu-wb-accent: var(--scout-theme-color);
+          --creamu-wb-accent-hover: var(--scout-theme-color);
+          --creamu-wb-accent-light: var(--scout-theme-color);
+          --creamu-wb-accent-dark: var(--scout-theme-dark);
+          --creamu-wb-accent-shadow: var(--scout-theme-shadow);
+          --creamu-wb-accent-shadow-soft: var(--scout-theme-shadow);
+          --creamu-wb-accent-ring: var(--scout-theme-shadow);
+          --creamu-wb-accent-overlay: color-mix(in srgb, var(--scout-theme-color) 28%, transparent);
+          --creamu-wb-accent-overlay-soft: color-mix(in srgb, var(--scout-theme-color) 18%, transparent);
+        }
+
         /*
          * 清爽：只藏明确广告位，禁止 class/id 子串 *ad-*（会误伤 gamepad 等，
          * 运行时广告壳也常套在列表附近，过宽选择器会把整列视频 height:0 挡没）。
@@ -5054,16 +5072,16 @@ function getScoutThemeCss() {
         #jlc-wb-fab {
           position: fixed !important;
           z-index: 2147483000 !important;
-          background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-          background-color: var(--scout-theme-color) !important;
-          box-shadow: 0 4px 0 var(--scout-theme-dark), 0 10px 20px var(--scout-theme-shadow) !important;
+          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
+          background-color: var(--creamu-wb-accent) !important;
+          box-shadow: 0 4px 0 var(--creamu-wb-accent-dark), 0 10px 20px var(--creamu-wb-accent-shadow) !important;
           visibility: visible !important;
           opacity: 1 !important;
           pointer-events: auto !important;
           display: flex !important;
         }
         #jlc-wb-fab:active, #jlc-wb-fab.is-dragging {
-          box-shadow: 0 2px 0 var(--scout-theme-dark), 0 4px 10px var(--scout-theme-shadow) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark), 0 4px 10px var(--creamu-wb-accent-shadow-soft) !important;
         }
         #scout-search-track-bar.scout-track-fab {
           z-index: 2147483001 !important;
@@ -5078,9 +5096,9 @@ function getScoutThemeCss() {
           appearance: none !important;
           flex: 1 1 auto !important;
           border: 0 !important;
-          background: #efe4d2 !important;
-          background-color: #efe4d2 !important;
-          color: #8a6f55 !important;
+          background: var(--creamu-wb-surface-muted) !important;
+          background-color: var(--creamu-wb-surface-muted) !important;
+          color: var(--creamu-wb-text-subtle) !important;
           padding: 10px 8px !important;
           cursor: pointer !important;
           font-size: 14px !important;
@@ -5090,39 +5108,39 @@ function getScoutThemeCss() {
         }
         #jlc-wb .jlc-wb-nav button.active,
         #jlc-wb .jlc-wb-settings-nav button.active {
-          color: #fff !important;
-          background: var(--scout-theme-color) !important;
-          background-color: var(--scout-theme-color) !important;
-          box-shadow: 0 2px 0 var(--scout-theme-dark) !important;
+          color: var(--creamu-wb-on-accent) !important;
+          background: var(--creamu-wb-accent) !important;
+          background-color: var(--creamu-wb-accent) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark) !important;
         }
         #jlc-wb .jlc-wb-btn {
           appearance: none !important;
-          background: #fffaf2 !important;
-          background-color: #fffaf2 !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
-          box-shadow: 0 2px 0 #e0cdae !important;
+          background: var(--creamu-wb-surface-soft) !important;
+          background-color: var(--creamu-wb-surface-soft) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-border-strong) !important;
         }
         #jlc-wb .jlc-wb-btn.primary {
-          background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-          background-color: var(--scout-theme-color) !important;
+          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
+          background-color: var(--creamu-wb-accent) !important;
           border-color: transparent !important;
-          color: #fff !important;
-          box-shadow: 0 2px 0 var(--scout-theme-dark) !important;
+          color: var(--creamu-wb-on-accent) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark) !important;
         }
         #jlc-wb .jlc-wb-btn.primary:hover {
           filter: brightness(1.05);
         }
         #jlc-wb .jlc-wb-btn.ghost {
-          background: #fffaf2 !important;
-          background-color: #fffaf2 !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
+          background: var(--creamu-wb-surface-soft) !important;
+          background-color: var(--creamu-wb-surface-soft) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
         }
         #jlc-wb .jlc-wb-btn.ghost:hover {
-          color: var(--scout-theme-color) !important;
-          border-color: var(--scout-theme-color) !important;
-          background: #fff !important;
+          color: var(--creamu-wb-accent) !important;
+          border-color: var(--creamu-wb-accent) !important;
+          background: var(--creamu-wb-surface-raised) !important;
         }
         #jlc-wb .jlc-wb-btn.danger {
           background: #f3d5d0 !important;
@@ -5132,50 +5150,50 @@ function getScoutThemeCss() {
           box-shadow: none !important;
         }
         #jlc-wb .jlc-wb-chip {
-          background: #fff !important;
-          background-color: #fff !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
-          box-shadow: 0 2px 0 #e6d3b5 !important;
+          background: var(--creamu-wb-surface-raised) !important;
+          background-color: var(--creamu-wb-surface-raised) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-control-shadow) !important;
         }
         #jlc-wb .jlc-wb-chip.is-on {
-          background: var(--scout-theme-color) !important;
-          background-color: var(--scout-theme-color) !important;
+          background: var(--creamu-wb-accent) !important;
+          background-color: var(--creamu-wb-accent) !important;
           border-color: transparent !important;
-          color: #fff !important;
-          box-shadow: 0 2px 0 var(--scout-theme-dark) !important;
+          color: var(--creamu-wb-on-accent) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark) !important;
         }
         #jlc-wb .jlc-wb-open-btn {
-          background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-          background-color: var(--scout-theme-color) !important;
-          color: #fff !important;
-          box-shadow: 0 3px 0 var(--scout-theme-dark) !important;
+          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
+          background-color: var(--creamu-wb-accent) !important;
+          color: var(--creamu-wb-on-accent) !important;
+          box-shadow: 0 3px 0 var(--creamu-wb-accent-dark) !important;
           border: 0 !important;
         }
         #jlc-wb .jlc-wb-more-btn {
-          background: #fffaf2 !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
+          background: var(--creamu-wb-surface-soft) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
         }
         #jlc-wb .jlc-wb-icon-btn {
-          background: #fff !important;
-          color: #5a4030 !important;
-          border: 1px solid #e0cdae !important;
-          box-shadow: 0 2px 0 #e6d3b5 !important;
+          background: var(--creamu-wb-surface-raised) !important;
+          color: var(--creamu-wb-text-strong) !important;
+          border: 1px solid var(--creamu-wb-border-strong) !important;
+          box-shadow: 0 2px 0 var(--creamu-wb-control-shadow) !important;
         }
         /* 组合底栏：搜索主色、收藏/清空 ghost */
         #jlc-wb .scout-combo-dock-actions .jlc-wb-btn.primary,
         #jlc-wb .scout-combo-dock-actions #scout-combo-search-btn {
-          background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-          background-color: var(--scout-theme-color) !important;
-          color: #fff !important;
+          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
+          background-color: var(--creamu-wb-accent) !important;
+          color: var(--creamu-wb-on-accent) !important;
           border-color: transparent !important;
         }
         #jlc-wb .legacy-toggle input[type="checkbox"] {
-          accent-color: var(--scout-theme-color) !important;
+          accent-color: var(--creamu-wb-accent) !important;
         }
         #jlc-wb .jlc-wb-search:focus {
-          border-color: var(--scout-theme-color) !important;
+          border-color: var(--creamu-wb-accent) !important;
         }
 
         /*

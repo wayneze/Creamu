@@ -558,9 +558,11 @@
     return best;
   }
 
-  function structuralMatchScore(edition, archive) {
+  function structuralMatchScore(edition, archive, preparedTitleScore) {
     if (!edition || !archive) return 0;
-    let score = titleSimilarity(edition.title_raw || edition.title_core, archive.title || archive.title_core);
+    let score = Number.isFinite(preparedTitleScore)
+      ? preparedTitleScore
+      : titleSimilarity(edition.title_raw || edition.title_core, archive.title || archive.title_core);
     if (!score) return 0;
     if (edition.group && archive.group) {
       if (compactText(edition.group).toLowerCase() === compactText(archive.group).toLowerCase()) score += 0.08;

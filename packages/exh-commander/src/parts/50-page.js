@@ -402,9 +402,14 @@
   /**
    * EH 官方 gdata 批量：posted / 页数 / 体积 / 标签（码级语言）。
    * @param {{gid:string|number,token:string}[]} pairs
+   * @param {object} [options]
+   * @param {Function} [options.shouldContinue]
    * @returns {Promise<Object<string, object>>} gid → meta
    */
-  async function fetchGalleryGdataBatch(pairs) {
+  async function fetchGalleryGdataBatch(pairs, options) {
+    options = options || {};
+    const shouldContinue =
+      typeof options.shouldContinue === 'function' ? options.shouldContinue : () => true;
     const out = Object.create(null);
     const uniq = [];
     const seen = Object.create(null);
@@ -419,6 +424,7 @@
     if (!uniq.length) return out;
     const api = getEhGdataApiUrl();
     for (let off = 0; off < uniq.length; off += 25) {
+      if (!shouldContinue()) break;
       const chunk = uniq.slice(off, off + 25);
       const gidlist = chunk.map((x) => [Number(x.gid), x.token]);
       try {
@@ -489,8 +495,8 @@
   }
 
   /** @param {{gid:string|number,token:string}[]} pairs */
-  async function fetchGalleryMetaPostedBatch(pairs) {
-    const full = await fetchGalleryGdataBatch(pairs);
+  async function fetchGalleryMetaPostedBatch(pairs, options) {
+    const full = await fetchGalleryGdataBatch(pairs, options);
     const out = Object.create(null);
     Object.keys(full).forEach((g) => {
       if (full[g] && full[g].posted_at) out[g] = full[g].posted_at;
@@ -635,11 +641,42 @@
     }
   }
 
+  async function lookupEditionPostedByGids(gids) {
+    const keys = Array.from(
+      new Set((gids || []).map((gid) => compactText(gid || '')).filter(Boolean))
+    );
+    const out = new Map();
+    if (!keys.length) return out;
+    try {
+      const d = await openDb();
+      const transaction = d.transaction(STORE_EDITIONS, 'readonly');
+      const index = transaction.objectStore(STORE_EDITIONS).index('gid');
+      const pending = [];
+      keys.forEach((gid) => {
+        pending.push(idbReq(index.getAll(gid)).then((rows) => [gid, rows || []]));
+        if (/^\d+$/.test(gid)) {
+          pending.push(idbReq(index.getAll(Number(gid))).then((rows) => [gid, rows || []]));
+        }
+      });
+      const groups = await Promise.all(pending);
+      groups.forEach(([gid, rows]) => {
+        let best = Number(out.get(gid)) || 0;
+        rows.forEach((row) => {
+          const posted = Number(row && row.posted_at) || 0;
+          if (posted > best) best = posted;
+        });
+        if (best) out.set(gid, best);
+      });
+    } catch (_) { /* ignore */ }
+    return out;
+  }
+
   /**
    * 补全追更记录的 top/断点发布时间。
    * 顺序：DOM → editions → gdata（需 token）。
    * @param {object} [opts]
    * @param {boolean} [opts.skipGdata]
+   * @param {boolean} [opts.deferSave]
    */
   async function enrichTrackingPostedFields(rec, opts) {
     if (!rec) return rec;
@@ -647,7 +684,9 @@
     let dirty = false;
     if (rec.top_gid && !(Number(rec.top_posted_at) > 0)) {
       let p = lookupDomPostedByGid(rec.top_gid);
-      if (!p) p = await lookupEditionPostedByGid(rec.top_gid);
+      if (!p && opts.editionPostedByGid) {
+        p = Number(opts.editionPostedByGid.get(compactText(rec.top_gid))) || 0;
+      } else if (!p) p = await lookupEditionPostedByGid(rec.top_gid);
       if (!p && !opts.skipGdata) {
         const tok = compactText(rec.top_token || '') || extractTokenForGidFromDom(rec.top_gid);
         if (tok) {
@@ -662,7 +701,9 @@
     }
     if (rec.breakpoint_gid && !(Number(rec.breakpoint_posted_at) > 0)) {
       let p = lookupDomPostedByGid(rec.breakpoint_gid);
-      if (!p) p = await lookupEditionPostedByGid(rec.breakpoint_gid);
+      if (!p && opts.editionPostedByGid) {
+        p = Number(opts.editionPostedByGid.get(compactText(rec.breakpoint_gid))) || 0;
+      } else if (!p) p = await lookupEditionPostedByGid(rec.breakpoint_gid);
       if (!p && !opts.skipGdata) {
         const tok =
           compactText(rec.breakpoint_token || '') ||
@@ -677,7 +718,7 @@
         dirty = true;
       }
     }
-    if (dirty) {
+    if (dirty && !opts.deferSave) {
       try {
         await saveTrackingRecord(rec);
       } catch (_) { /* ignore */ }
@@ -686,13 +727,41 @@
   }
 
   /** 批量补全列表里缺失的发布时间（gdata 每批最多 25） */
-  async function enrichTrackingListPosted(list) {
+  async function enrichTrackingListPosted(list, options) {
+    options = options || {};
+    const shouldContinue =
+      typeof options.shouldContinue === 'function' ? options.shouldContinue : () => true;
     const rows = list || [];
     const need = [];
+    const dirtyRecords = new Map();
+    const missingGids = [];
+    rows.forEach((rec) => {
+      if (!rec) return;
+      if (rec.top_gid && !(Number(rec.top_posted_at) > 0)) missingGids.push(rec.top_gid);
+      if (rec.breakpoint_gid && !(Number(rec.breakpoint_posted_at) > 0)) {
+        missingGids.push(rec.breakpoint_gid);
+      }
+    });
+    if (!shouldContinue()) return rows;
+    const editionPostedByGid = await lookupEditionPostedByGids(missingGids);
+    if (!shouldContinue()) return rows;
     for (let i = 0; i < rows.length; i++) {
+      if (!shouldContinue()) break;
       const rec = rows[i];
       if (!rec) continue;
-      await enrichTrackingPostedFields(rec, { skipGdata: true });
+      const previousTopPosted = Number(rec.top_posted_at) || 0;
+      const previousBreakpointPosted = Number(rec.breakpoint_posted_at) || 0;
+      await enrichTrackingPostedFields(rec, {
+        skipGdata: true,
+        deferSave: true,
+        editionPostedByGid,
+      });
+      if (
+        (Number(rec.top_posted_at) || 0) !== previousTopPosted ||
+        (Number(rec.breakpoint_posted_at) || 0) !== previousBreakpointPosted
+      ) {
+        dirtyRecords.set(rec.id || rec, rec);
+      }
       if (rec.top_gid && !(Number(rec.top_posted_at) > 0)) {
         const tok = compactText(rec.top_token || '') || extractTokenForGidFromDom(rec.top_gid);
         if (tok) {
@@ -710,28 +779,34 @@
         }
       }
     }
-    if (!need.length) return rows;
-    const pairs = need.map((x) => ({ gid: x.gid, token: x.token }));
-    const map = await fetchGalleryMetaPostedBatch(pairs);
-    const dirtyIds = Object.create(null);
-    for (let j = 0; j < need.length; j++) {
-      const item = need[j];
-      const ms = map[compactText(item.gid)] || 0;
-      if (!ms) continue;
-      if (item.field === 'top' && !(Number(item.rec.top_posted_at) > 0)) {
-        item.rec.top_posted_at = ms;
-        dirtyIds[item.rec.id] = item.rec;
-      }
-      if (item.field === 'bp' && !(Number(item.rec.breakpoint_posted_at) > 0)) {
-        item.rec.breakpoint_posted_at = ms;
-        dirtyIds[item.rec.id] = item.rec;
+    if (need.length && shouldContinue()) {
+      const pairs = need.map((x) => ({ gid: x.gid, token: x.token }));
+      const map = await fetchGalleryMetaPostedBatch(pairs, { shouldContinue });
+      for (let j = 0; j < need.length; j++) {
+        const item = need[j];
+        const ms = map[compactText(item.gid)] || 0;
+        if (!ms) continue;
+        if (item.field === 'top' && !(Number(item.rec.top_posted_at) > 0)) {
+          item.rec.top_posted_at = ms;
+          dirtyRecords.set(item.rec.id || item.rec, item.rec);
+        }
+        if (item.field === 'bp' && !(Number(item.rec.breakpoint_posted_at) > 0)) {
+          item.rec.breakpoint_posted_at = ms;
+          dirtyRecords.set(item.rec.id || item.rec, item.rec);
+        }
       }
     }
-    const saves = Object.keys(dirtyIds);
-    for (let k = 0; k < saves.length; k++) {
+    const saves = Array.from(dirtyRecords.values());
+    if (saves.length) {
       try {
-        await saveTrackingRecord(dirtyIds[saves[k]]);
-      } catch (_) { /* ignore */ }
+        await saveTrackingRecords(saves);
+      } catch (_) {
+        for (let k = 0; k < saves.length; k++) {
+          try {
+            await saveTrackingRecord(saves[k]);
+          } catch (_) { /* ignore */ }
+        }
+      }
     }
     return rows;
   }

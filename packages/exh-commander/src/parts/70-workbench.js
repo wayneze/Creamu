@@ -1,6 +1,28 @@
   let wbSession = null;
   /** 主动检查更新运行态 */
   let trackingCheckRuntime = null;
+  let trackingListPaintId = 0;
+  let trackingListPaintTimer = null;
+  const TRACKING_QUERY_DEBOUNCE_MS = 180;
+
+  function cancelScheduledTrackingListPaint() {
+    if (!trackingListPaintTimer) return;
+    clearTimeout(trackingListPaintTimer);
+    trackingListPaintTimer = null;
+  }
+
+  function invalidateTrackingListPaint() {
+    cancelScheduledTrackingListPaint();
+    trackingListPaintId += 1;
+  }
+
+  function scheduleTrackingListPaint() {
+    invalidateTrackingListPaint();
+    trackingListPaintTimer = setTimeout(() => {
+      trackingListPaintTimer = null;
+      void paintTrackingList();
+    }, TRACKING_QUERY_DEBOUNCE_MS);
+  }
 
   function ensureCreamuSync() {
     if (window.__creamuWdExh) return window.__creamuWdExh;
@@ -207,6 +229,7 @@
   }
 
   function activateNav(nav) {
+    if (nav !== 'tracking') invalidateTrackingListPaint();
     const shell = document.getElementById('jlc-wb');
     if (!shell) return;
     shell.querySelectorAll('.jlc-wb-nav button').forEach((b) => {
@@ -591,6 +614,7 @@
           showToast('工作台内容渲染失败（面板应已打开）: ' + ((e && e.message) || e));
         });
     } else {
+      invalidateTrackingListPaint();
       forceWorkbenchHidden(wb);
       saveSession(wbSession);
       console.info('[ExC] workbench close');
@@ -701,6 +725,7 @@
   }
 
   async function renderTrackingPage() {
+    invalidateTrackingListPaint();
     const root = document.getElementById('exc-wb-tracking-root');
     if (!root) return;
     const query = compactText(wbSession.trackingQuery || '');
@@ -753,7 +778,7 @@
     document.getElementById('exc-trk-q').oninput = (e) => {
       wbSession.trackingQuery = e.target.value;
       saveSession(wbSession);
-      paintTrackingList();
+      scheduleTrackingListPaint();
     };
     document.getElementById('exc-trk-group').onchange = (e) => {
       wbSession.trackingGroup = e.target.value;
@@ -1067,11 +1092,18 @@
   }
 
   async function paintTrackingList() {
+    cancelScheduledTrackingListPaint();
+    const paintId = ++trackingListPaintId;
     const host = document.getElementById('jlc-wb-list-scroll');
     if (!host) return;
-    let list = await listTrackingSearches();
     const q = compactText(wbSession.trackingQuery || '').toLowerCase();
     const gf = wbSession.trackingGroup || 'all';
+    const isCurrentPaint = () =>
+      paintId === trackingListPaintId &&
+      host.isConnected &&
+      document.getElementById('jlc-wb-list-scroll') === host;
+    let list = await listTrackingSearches();
+    if (!isCurrentPaint()) return;
     if (gf === 'none') {
       list = list.filter((r) => !compactText(r.custom_folder || ''));
     } else if (gf.indexOf('uf:') === 0) {
@@ -1096,8 +1128,9 @@
 
     // 旧记录可能没有发布时间：DOM / editions / gdata 批量回填
     try {
-      await enrichTrackingListPosted(list);
+      await enrichTrackingListPosted(list, { shouldContinue: isCurrentPaint });
     } catch (_) { /* ignore */ }
+    if (!isCurrentPaint()) return;
 
     if (!(trackingCheckRuntime && trackingCheckRuntime.active)) {
       const pending = list.filter((r) =>
@@ -1411,21 +1444,25 @@
   async function paintWorksList(tab) {
     const host = document.getElementById('jlc-wb-works-scroll');
     if (!host) return;
+    const storageSnapshot = await loadLibraryStorageSnapshot();
 
     // LRR 在库：直接列档案（同步后即有），不依赖是否点过画廊
     if (tab === 'lrr') {
-      await paintLrrLibraryList(host);
+      await paintLrrLibraryList(host, storageSnapshot);
       return;
     }
 
     let works = [];
-    if (tab === 'blocked') works = await listBlockedWorks();
+    if (tab === 'blocked') works = await listBlockedWorks(storageSnapshot);
     else if (tab === 'better') {
-      const all = await listAllWorks();
+      const all = await listAllWorks(storageSnapshot);
       for (const w of all) {
-        const eds = await listEditionsByWork(w.work_id);
+        const eds = storageSnapshot.editionsByWork.get(w.work_id) || [];
         if (!eds.length) continue;
-        const lib = await resolveLibraryState(Object.assign({}, eds[0], { work_id: w.work_id }));
+        const lib = await resolveLibraryState(
+          Object.assign({}, eds[0], { work_id: w.work_id }),
+          storageSnapshot
+        );
         if (lib.has_better_remote) works.push(Object.assign({}, w, { _lib: lib }));
       }
     }
@@ -1438,7 +1475,7 @@
     }
     const chunks = [];
     for (const w of works.slice(0, 80)) {
-      const eds = await listEditionsByWork(w.work_id);
+      const eds = storageSnapshot.editionsByWork.get(w.work_id) || [];
       const best = pickBestEdition(eds, config);
       const title = w.title_raw || (best && best.title_raw) || w.work_id;
       const url = best ? best.url || buildGalleryUrl(location.origin, best.gid, best.token) : '';
@@ -1471,8 +1508,10 @@
     };
   }
 
-  async function paintLrrLibraryList(host) {
-    const entries = typeof listLibraryArchiveEntries === 'function' ? await listLibraryArchiveEntries() : [];
+  async function paintLrrLibraryList(host, storageSnapshot) {
+    const entries = typeof listLibraryArchiveEntries === 'function'
+      ? await listLibraryArchiveEntries(storageSnapshot)
+      : [];
     const total = entries.length;
     setFooterSummary((total ? total + ' 本' : '无') + ' · LRR 档案');
     if (!total) {

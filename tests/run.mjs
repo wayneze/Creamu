@@ -8,6 +8,7 @@ const files = [
   'tests/shared/workbench-css.mjs',
   'tests/webdav.mjs',
   'tests/exh/test-domain.mjs',
+  'tests/exh/list-storage.mjs',
   'tests/jlc/core.mjs',
   'tests/jlc/dom-scanning.mjs',
   'tests/jlc/idb-batching.mjs',

@@ -14,6 +14,19 @@ let failed = 0;
 const MAX_BATCH_TRANSACTIONS = 16;
 const MAX_STARTUP_TRACKING_TRANSACTIONS = 4;
 const MAX_INITIAL_META_REQUESTS = 24;
+const EXH_STRESS_CARD_COUNT = 32;
+const MAX_EXH_STARTUP_TRANSACTIONS = 12;
+const MAX_EXH_STABLE_REFRESH_TRANSACTIONS = 4;
+const MAX_EXH_INCREMENTAL_TRANSACTIONS = 10;
+const EXH_LARGE_LIBRARY_ARCHIVE_COUNT = 4000;
+const MAX_EXH_LARGE_LIBRARY_REFRESH_MS = 5000;
+const MAX_EXH_LIBRARY_TAB_TRANSACTIONS = 6;
+const MAX_EXH_BETTER_TAB_TRANSACTIONS = 8;
+const MAX_EXH_DETAIL_REFRESH_TRANSACTIONS = 8;
+const EXH_TRACKING_RACE_COUNT = 30;
+const MAX_EXH_TRACKING_BURST_TRANSACTIONS = 2;
+const MAX_EXH_TRACKING_RACE_TRANSACTIONS = 4;
+const MAX_EXH_TRACKING_BACKFILL_TRANSACTIONS = 3;
 const SCOUT_THEME_FIXTURE = '<!DOCTYPE html><html><head><meta charset="utf-8">'
   + '<title>Scout theme fixture</title></head><body><main>Scout</main></body></html>';
 const SCOUT_THEME_CASES = [
@@ -180,6 +193,192 @@ function createJlcStressFixture(count) {
   }).join('');
   return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>list fixture</title></head>'
     + '<body><div class="videothumblist"><div class="videos">' + cards + '</div></div></body></html>';
+}
+
+function createExhStressFixture(count) {
+  const rows = Array.from({ length: count }, (_, index) => {
+    const gid = String(710000 + index);
+    const token = (index + 1).toString(16).padStart(10, 'a').slice(-10);
+    return '<tr data-e2e-exh-card="' + gid + '"><td class="glname">'
+      + '<a href="/g/' + gid + '/' + token + '/">'
+      + '<div class="glink">[Group ' + index + '] Stress Gallery ' + index + '</div>'
+      + '</a></td></tr>';
+  }).join('');
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>gallery list fixture</title></head>'
+    + '<body><table class="itg"><tbody>' + rows + '</tbody></table></body></html>';
+}
+
+function createExhDetailFixture() {
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Detail Gallery - E-Hentai</title></head>'
+    + '<body>'
+    + '<div id="gleft"><div id="gd1"><img alt="cover" '
+    + 'src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="></div></div>'
+    + '<div id="gmid"><h1 id="gn">[Detail Group] Detail Gallery</h1><h1 id="gj">Detail Gallery</h1>'
+    + '<div id="gdc"><div class="cs">Doujinshi</div></div>'
+    + '<div id="gdn"><a href="/uploader/detail-uploader">detail-uploader</a></div>'
+    + '<table id="gdd"><tbody>'
+    + '<tr><td>Posted:</td><td>2026-07-20 12:00</td></tr>'
+    + '<tr><td>File Size:</td><td>128 MiB</td></tr>'
+    + '<tr><td>Length:</td><td>100 pages</td></tr>'
+    + '</tbody></table>'
+    + '<table id="taglist"><tbody>'
+    + '<tr><td class="tc">language:</td><td><a href="/tag/language%3Achinese">chinese</a></td></tr>'
+    + '<tr><td class="tc">group:</td><td><a href="/tag/group%3Adetail+group">detail group</a></td></tr>'
+    + '</tbody></table></div>'
+    + '<div id="gright"></div>'
+    + '</body></html>';
+}
+
+function installExhStorageMetrics() {
+  window.__exhListMetrics = {
+    transactions: { total: 0, byStore: {} },
+    enhancedWrites: 0,
+    lastTransactionAt: performance.now(),
+  };
+  const original = IDBDatabase.prototype.transaction;
+  IDBDatabase.prototype.transaction = function countedTransaction(storeNames, ...args) {
+    const metrics = window.__exhListMetrics;
+    const stores = typeof storeNames === 'string' ? [storeNames] : Array.from(storeNames || []);
+    metrics.transactions.total += 1;
+    metrics.lastTransactionAt = performance.now();
+    stores.forEach((store) => {
+      metrics.transactions.byStore[store] = (metrics.transactions.byStore[store] || 0) + 1;
+    });
+    return original.call(this, storeNames, ...args);
+  };
+
+  const observer = new MutationObserver((mutations) => {
+    window.__exhListMetrics.enhancedWrites += mutations.length;
+  });
+  observer.observe(document.documentElement, {
+    attributes: true,
+    subtree: true,
+    attributeFilter: ['data-exc-enhanced'],
+  });
+  window.__resetExhListMetrics = () => {
+    observer.takeRecords();
+    window.__exhListMetrics.transactions = { total: 0, byStore: {} };
+    window.__exhListMetrics.enhancedWrites = 0;
+    window.__exhListMetrics.lastTransactionAt = performance.now();
+  };
+
+  const openExhDb = () => new Promise((resolve, reject) => {
+    const request = indexedDB.open('exh_commander_db');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const requestResult = (request) => new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const transactionDone = (transaction) => new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+  window.__readExhStores = async (names) => {
+    const db = await openExhDb();
+    const transaction = db.transaction(names, 'readonly');
+    const done = transactionDone(transaction);
+    const result = {};
+    await Promise.all(names.map(async (name) => {
+      result[name] = await requestResult(transaction.objectStore(name).getAll());
+    }));
+    await done;
+    db.close();
+    return result;
+  };
+  window.__patchExhEdition = async (id, patch) => {
+    const db = await openExhDb();
+    const transaction = db.transaction('editions', 'readwrite');
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore('editions');
+    const row = await requestResult(store.get(id));
+    store.put(Object.assign({}, row, patch));
+    await done;
+    db.close();
+  };
+  window.__seedExhArchives = async (count, relevantTitle = 'Stress Gallery 0') => {
+    const db = await openExhDb();
+    const transaction = db.transaction('local_archives', 'readwrite');
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore('local_archives');
+    store.clear();
+    for (let index = 0; index < count; index++) {
+      store.put({
+        arcid: `noise-${index}`,
+        title: `Unrelated Archive Number ${index}`,
+        title_core: `unrelated archive number ${index}`,
+        tags: [],
+        language: 'other',
+        censor_tier: 'unknown',
+        group: '',
+        pages: 0,
+        size_bytes: 0,
+        updated_at: 1,
+      });
+    }
+    store.put({
+      arcid: 'relevant-stress-gallery',
+      title: relevantTitle,
+      title_core: String(relevantTitle).toLowerCase(),
+      tags: [],
+      language: 'other',
+      censor_tier: 'unknown',
+      group: '',
+      pages: 0,
+      size_bytes: 0,
+      updated_at: 1,
+    });
+    await done;
+    db.close();
+  };
+  window.__seedExhTracking = async (count) => {
+    const db = await openExhDb();
+    const transaction = db.transaction('tracking_searches', 'readwrite');
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore('tracking_searches');
+    store.clear();
+    for (let index = 0; index < count; index++) {
+      const gid = String(820000 + index);
+      const label = `Race Gallery ${index}` + (index === count - 1 ? ' Needle' : '');
+      store.put({
+        id: `race-tracking-${index}`,
+        site: 'ehentai',
+        query_signature: `race:${index}`,
+        f_search: `race-gallery-${index}`,
+        label,
+        custom_label: label,
+        page_url: `https://e-hentai.org/tag/race-gallery-${index}`,
+        open_url: `https://e-hentai.org/tag/race-gallery-${index}`,
+        top_gid: gid,
+        top_token: (index + 1).toString(16).padStart(10, '0'),
+        archived: false,
+        created_at: index + 1,
+        updated_at: index + 1,
+      });
+    }
+    await done;
+    db.close();
+  };
+  window.__seedExhTrackingEditions = async (count) => {
+    const db = await openExhDb();
+    const transaction = db.transaction('editions', 'readwrite');
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore('editions');
+    for (let index = 0; index < count; index++) {
+      const gid = String(820000 + index);
+      store.put({
+        id: `race-edition-${index}`,
+        gid: index % 2 === 0 ? gid : Number(gid),
+        token: (index + 1).toString(16).padStart(10, '0'),
+        posted_at: 1700000000000 + index * 1000,
+        updated_at: index + 1,
+      });
+    }
+    await done;
+    db.close();
+  };
 }
 
 async function runCase(name, options, flow) {
@@ -1233,6 +1432,579 @@ try {
 
       await page.locator('#jlc-wb-close-btn').click();
       await waitWorkbenchClosed(page);
+    }
+  );
+
+  await runCase(
+    'ExH list: startup, stable focus, and incremental work stay bounded',
+    {
+      host: 'e-hentai.org',
+      fixtureHtml: createExhStressFixture(EXH_STRESS_CARD_COUNT),
+      scriptPath: PATHS.exhDist,
+      beforeInject: async (page) => {
+        await page.evaluate(installExhStorageMetrics);
+      },
+    },
+    async (page) => {
+      await page.waitForFunction(
+        (expected) => {
+          const items = Array.from(document.querySelectorAll('[data-e2e-exh-card]'));
+          return items.length === expected && items.every((item) => item.dataset.excEnhanced === '1');
+        },
+        EXH_STRESS_CARD_COUNT,
+        { timeout: 30000 }
+      );
+      await page.waitForFunction(
+        () => performance.now() - window.__exhListMetrics.lastTransactionAt > 250,
+        null,
+        { timeout: 5000 }
+      );
+      const startup = await page.evaluate(() => ({
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+        enhancedWrites: window.__exhListMetrics.enhancedWrites,
+      }));
+
+      await page.evaluate(() => {
+        window.__exhStableBadgeNodes = Array.from(
+          document.querySelectorAll('[data-e2e-exh-card]')
+        ).map((item) => item.querySelector('.exc-badge-container > .exc-meta-overlay'));
+        window.GM_setValue(
+          'exh_commander_seen_gids_v1',
+          JSON.stringify({ 710000: Date.now() })
+        );
+        window.__resetExhListMetrics();
+        window.dispatchEvent(new Event('focus'));
+      });
+      await page.waitForTimeout(260);
+      await page.waitForFunction(
+        () => {
+          const items = Array.from(document.querySelectorAll('[data-e2e-exh-card]'));
+          return items.every((item) => item.dataset.excEnhanced === '1')
+            && performance.now() - window.__exhListMetrics.lastTransactionAt > 250;
+        },
+        null,
+        { timeout: 30000 }
+      );
+      const stable = await page.evaluate(() => ({
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+        enhancedWrites: window.__exhListMetrics.enhancedWrites,
+        badgesPreserved: Array.from(document.querySelectorAll('[data-e2e-exh-card]'))
+          .every((item, index) => (
+            item.querySelector('.exc-badge-container > .exc-meta-overlay')
+              === window.__exhStableBadgeNodes[index]
+          )),
+        seenRefreshed: document.querySelector('[data-e2e-exh-card="710000"]')
+          ?.classList.contains('is-exc-seen') === true,
+      }));
+
+      await page.evaluate(() => {
+        window.__resetExhListMetrics();
+        document.querySelector('table.itg > tbody').insertAdjacentHTML(
+          'beforeend',
+          '<tr data-e2e-exh-card="799999"><td class="glname">'
+            + '<a href="/g/799999/bbbbbbbbbb/">'
+            + '<div class="glink">[Group 0] Stress Gallery 0</div></a>'
+            + '</td></tr>'
+        );
+      });
+      await page.waitForFunction(
+        () => document.querySelector('[data-e2e-exh-card="799999"]')?.dataset.excEnhanced === '1',
+        null,
+        { timeout: 10000 }
+      );
+      await page.waitForFunction(
+        () => performance.now() - window.__exhListMetrics.lastTransactionAt > 250,
+        null,
+        { timeout: 5000 }
+      );
+      const incremental = await page.evaluate(() => ({
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+        enhancedWrites: window.__exhListMetrics.enhancedWrites,
+        existingBadgesPreserved: Array.from(document.querySelectorAll('[data-e2e-exh-card]'))
+          .slice(0, window.__exhStableBadgeNodes.length)
+          .every((item, index) => (
+            item.querySelector('.exc-badge-container > .exc-meta-overlay')
+              === window.__exhStableBadgeNodes[index]
+          )),
+      }));
+
+      console.log('      ExH startup: ' + JSON.stringify(startup));
+      console.log('      ExH stable focus: ' + JSON.stringify(stable));
+      console.log('      ExH incremental: ' + JSON.stringify(incremental));
+      assert.ok(
+        startup.transactions.total <= MAX_EXH_STARTUP_TRANSACTIONS,
+        'ExH startup opened too many IndexedDB transactions: ' + startup.transactions.total
+      );
+      assert.ok(
+        stable.transactions.total <= MAX_EXH_STABLE_REFRESH_TRANSACTIONS,
+        'stable ExH focus opened too many IndexedDB transactions: ' + stable.transactions.total
+      );
+      assert.equal(stable.enhancedWrites, 0, 'stable ExH focus should not invalidate enhanced cards');
+      assert.equal(stable.badgesPreserved, true, 'stable ExH focus should preserve badge DOM');
+      assert.equal(stable.seenRefreshed, true, 'stable ExH focus should refresh volatile seen state');
+      assert.ok(
+        incremental.transactions.total <= MAX_EXH_INCREMENTAL_TRANSACTIONS,
+        'one inserted ExH card opened too many IndexedDB transactions: '
+          + incremental.transactions.total
+      );
+      assert.equal(
+        incremental.existingBadgesPreserved,
+        true,
+        'incremental ExH enhancement should preserve existing badge DOM'
+      );
+
+      const stored = await page.evaluate(() => window.__readExhStores(['editions', 'works']));
+      assert.equal(stored.editions.length, EXH_STRESS_CARD_COUNT + 1);
+      assert.equal(stored.works.length, EXH_STRESS_CARD_COUNT);
+      const firstEdition = stored.editions.find((row) => String(row.gid) === '710000');
+      const insertedEdition = stored.editions.find((row) => String(row.gid) === '799999');
+      assert.ok(firstEdition && insertedEdition, 'batch persistence should keep both editions');
+      assert.equal(
+        insertedEdition.work_id,
+        firstEdition.work_id,
+        'incremental batch should reuse the matching work'
+      );
+
+      const preservedFields = {
+        tags: ['female:seeded-tag'],
+        language: 'zh',
+        censor_tier: 'uncensored',
+        pages: 777,
+        size_bytes: 987654321,
+        updated_at: 1,
+      };
+      await page.evaluate(
+        async ({ id, fields }) => {
+          await window.__patchExhEdition(id, fields);
+          window.__excRefreshPage();
+        },
+        { id: firstEdition.id, fields: preservedFields }
+      );
+      await page.waitForFunction(
+        async (id) => {
+          const data = await window.__readExhStores(['editions']);
+          const row = data.editions.find((edition) => edition.id === id);
+          return !!(
+            row &&
+            row.updated_at > 1 &&
+            row.tags.includes('female:seeded-tag') &&
+            row.language === 'zh' &&
+            row.censor_tier === 'uncensored' &&
+            row.pages === 777 &&
+            row.size_bytes === 987654321
+          );
+        },
+        firstEdition.id,
+        { timeout: 10000 }
+      );
+      await page.waitForFunction(
+        () => {
+          const cards = Array.from(document.querySelectorAll('[data-e2e-exh-card]'));
+          return cards.every((card) => card.dataset.excEnhanced === '1') &&
+            !!document.querySelector('.exc-fold-tag');
+        },
+        null,
+        { timeout: 10000 }
+      );
+      await page.evaluate(() => {
+        window.__exhStableFoldNode = document.querySelector('.exc-fold-tag');
+      });
+      await page.waitForTimeout(1000);
+      assert.equal(
+        await page.evaluate(() => document.querySelector('.exc-fold-tag') === window.__exhStableFoldNode),
+        true,
+        'list observer should ignore stable fold controls'
+      );
+      await page.evaluate(async (archiveCount) => {
+        await window.__seedExhArchives(archiveCount);
+        window.__resetExhListMetrics();
+        window.__exhLargeLibraryRefreshStarted = performance.now();
+        window.__excRefreshPage();
+      }, EXH_LARGE_LIBRARY_ARCHIVE_COUNT);
+      await page.waitForFunction(
+        () => {
+          const cards = Array.from(document.querySelectorAll('[data-e2e-exh-card]'));
+          return cards.every(
+            (card) =>
+              card.dataset.excEnhanced === '1' &&
+              !!card.querySelector('.exc-badge-container > .exc-meta-overlay')
+          );
+        },
+        null,
+        { timeout: MAX_EXH_LARGE_LIBRARY_REFRESH_MS }
+      );
+      await page.evaluate(() => new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve))
+      ));
+      const largeLibrary = await page.evaluate(() => ({
+        durationMs: performance.now() - window.__exhLargeLibraryRefreshStarted,
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+        fuzzyBadge: !!document.querySelector(
+          '[data-e2e-exh-card="710000"] .meta-tag.maybe'
+        ),
+      }));
+      console.log('      ExH large library: ' + JSON.stringify(largeLibrary));
+      assert.ok(
+        largeLibrary.durationMs <= MAX_EXH_LARGE_LIBRARY_REFRESH_MS,
+        `large ExH library refresh took ${Math.round(largeLibrary.durationMs)}ms`
+      );
+      assert.ok(
+        largeLibrary.transactions.total <= MAX_EXH_STARTUP_TRANSACTIONS,
+        `large ExH library refresh opened ${largeLibrary.transactions.total} transactions`
+      );
+      assert.equal(largeLibrary.fuzzyBadge, true, 'large library index should preserve fuzzy matches');
+
+      await page.locator('#jlc-wb-fab').click();
+      await waitWorkbenchOpen(page);
+      await page.locator('#exc-wb-tracking-root #jlc-wb-list-scroll').waitFor();
+      await page.evaluate(() => {
+        window.__resetExhListMetrics();
+        window.__exhWorkbenchMeasureStarted = performance.now();
+      });
+      await page.locator('#jlc-wb .jlc-wb-nav button[data-nav="works"]').click();
+      await page.waitForFunction(
+        () => document.querySelectorAll('#jlc-wb-works-scroll .jlc-wb-item').length === 200,
+        null,
+        { timeout: 10000 }
+      );
+      await page.waitForFunction(
+        () => performance.now() - window.__exhListMetrics.lastTransactionAt > 250,
+        null,
+        { timeout: 5000 }
+      );
+      const libraryTab = await page.evaluate(() => ({
+        durationMs: performance.now() - window.__exhWorkbenchMeasureStarted,
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+      }));
+
+      await page.evaluate(() => {
+        window.__resetExhListMetrics();
+        window.__exhWorkbenchMeasureStarted = performance.now();
+      });
+      await page.locator('#exc-work-chips [data-wtab="better"]').click();
+      await page.waitForFunction(
+        () => {
+          const summary = document.getElementById('jlc-wb-footer-summary');
+          const active = document.querySelector('#exc-work-chips [data-wtab="better"].is-on');
+          return !!active && /作品$/.test(summary?.textContent || '');
+        },
+        null,
+        { timeout: 15000 }
+      );
+      await page.waitForFunction(
+        () => performance.now() - window.__exhListMetrics.lastTransactionAt > 250,
+        null,
+        { timeout: 5000 }
+      );
+      const betterTab = await page.evaluate(() => ({
+        durationMs: performance.now() - window.__exhWorkbenchMeasureStarted,
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+      }));
+      console.log('      ExH LRR tab: ' + JSON.stringify(libraryTab));
+      console.log('      ExH better tab: ' + JSON.stringify(betterTab));
+      assert.ok(
+        libraryTab.transactions.total <= MAX_EXH_LIBRARY_TAB_TRANSACTIONS,
+        `ExH LRR tab opened ${libraryTab.transactions.total} transactions`
+      );
+      assert.ok(
+        betterTab.transactions.total <= MAX_EXH_BETTER_TAB_TRANSACTIONS,
+        `ExH better tab opened ${betterTab.transactions.total} transactions`
+      );
+      await page.locator('#jlc-wb-close-btn').click();
+      await waitWorkbenchClosed(page);
+
+      await page.evaluate(() => {
+        const table = document.querySelector('table.itg');
+        table.insertAdjacentHTML(
+          'afterend',
+          '<table class="itg"><tbody>'
+            + '<tr data-e2e-exh-card="899999"><td class="glname">'
+            + '<a href="/g/899999/cccccccccc/">'
+            + '<div class="glink">Replacement Gallery</div></a>'
+            + '</td></tr></tbody></table>'
+        );
+        table.remove();
+      });
+      await page.waitForFunction(
+        () => document.querySelector('[data-e2e-exh-card="899999"]')?.dataset.excEnhanced === '1',
+        null,
+        { timeout: 10000 }
+      );
+      assert.ok(
+        await page.locator('[data-e2e-exh-card="899999"] .exc-meta-overlay').count(),
+        'list observer should enhance a replaced list root'
+      );
+    }
+  );
+
+  await runCase(
+    'ExH tracking: quick filters coalesce and stale enrichment stops',
+    {
+      host: 'e-hentai.org',
+      fixtureHtml: createExhStressFixture(1),
+      scriptPath: PATHS.exhDist,
+      beforeInject: async (page) => {
+        await page.evaluate(installExhStorageMetrics);
+      },
+      beforeScript: async (page) => {
+        await page.evaluate(() => {
+          window.__exhGdataStats = { started: 0, completed: 0, pending: 0, batches: [] };
+          window.GM_xmlhttpRequest = (options = {}) => {
+            let batchSize = 0;
+            try {
+              const body = JSON.parse(options.data || '{}');
+              if (body.method === 'gdata' && Array.isArray(body.gidlist)) {
+                batchSize = body.gidlist.length;
+              }
+            } catch (_) { /* ignore */ }
+            if (batchSize) {
+              window.__exhGdataStats.started += 1;
+              window.__exhGdataStats.pending += 1;
+              window.__exhGdataStats.batches.push(batchSize);
+            }
+            setTimeout(() => {
+              if (batchSize) {
+                window.__exhGdataStats.completed += 1;
+                window.__exhGdataStats.pending -= 1;
+              }
+              options.onload?.({
+                status: 200,
+                responseText: JSON.stringify({ gmetadata: [] }),
+                finalUrl: options.url || '',
+                responseHeaders: '',
+              });
+            }, batchSize > 1 ? 250 : 0);
+          };
+        });
+      },
+    },
+    async (page) => {
+      await waitFab(page);
+      await page.evaluate(
+        (count) => window.__seedExhTracking(count),
+        EXH_TRACKING_RACE_COUNT
+      );
+      await page.locator('#jlc-wb-fab').click();
+      await waitWorkbenchOpen(page);
+      await page.waitForFunction(
+        (count) => document.querySelectorAll('#jlc-wb-list-scroll [data-trk]').length === count
+          && window.__exhGdataStats.started >= 2
+          && window.__exhGdataStats.pending === 0,
+        EXH_TRACKING_RACE_COUNT,
+        { timeout: 10000 }
+      );
+
+      await page.evaluate(() => {
+        window.__resetExhListMetrics();
+        window.__exhGdataStats = { started: 0, completed: 0, pending: 0, batches: [] };
+        const input = document.getElementById('exc-trk-q');
+        ['R', 'Ra', 'Race', 'Needle'].forEach((query) => {
+          input.value = query;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+      });
+      await page.waitForFunction(
+        () => {
+          const rows = document.querySelectorAll('#jlc-wb-list-scroll [data-trk]');
+          return rows.length === 1
+            && /Needle/.test(rows[0].textContent || '')
+            && window.__exhGdataStats.started >= 1
+            && window.__exhGdataStats.pending === 0;
+        },
+        null,
+        { timeout: 5000 }
+      );
+      await page.waitForFunction(
+        () => performance.now() - window.__exhListMetrics.lastTransactionAt > 250,
+        null,
+        { timeout: 5000 }
+      );
+      const burst = await page.evaluate(() => ({
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+        batches: window.__exhGdataStats.batches.slice(),
+      }));
+      console.log('      ExH tracking input burst: ' + JSON.stringify(burst));
+
+      await page.evaluate(() => {
+        window.__resetExhListMetrics();
+        window.__exhGdataStats = { started: 0, completed: 0, pending: 0, batches: [] };
+        const input = document.getElementById('exc-trk-q');
+        input.value = 'Race Gallery';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await page.waitForFunction(
+        () => window.__exhGdataStats.started >= 1 && window.__exhGdataStats.pending >= 1,
+        null,
+        { timeout: 5000 }
+      );
+      await page.evaluate(() => {
+        const input = document.getElementById('exc-trk-q');
+        input.value = 'Needle';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await page.waitForFunction(
+        () => {
+          const rows = document.querySelectorAll('#jlc-wb-list-scroll [data-trk]');
+          return rows.length === 1 && /Needle/.test(rows[0].textContent || '');
+        },
+        null,
+        { timeout: 5000 }
+      );
+      await page.waitForFunction(
+        () => window.__exhGdataStats.started >= 2
+          && window.__exhGdataStats.completed === window.__exhGdataStats.started
+          && window.__exhGdataStats.pending === 0,
+        null,
+        { timeout: 10000 }
+      );
+      await page.evaluate(() => new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve))
+      ));
+
+      const result = await page.evaluate(() => ({
+        query: document.getElementById('exc-trk-q')?.value || '',
+        rows: document.querySelectorAll('#jlc-wb-list-scroll [data-trk]').length,
+        text: document.getElementById('jlc-wb-list-scroll')?.textContent || '',
+        batches: window.__exhGdataStats.batches.slice(),
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+      }));
+      console.log('      ExH tracking stale filter: ' + JSON.stringify(result));
+      assert.ok(
+        burst.transactions.total <= MAX_EXH_TRACKING_BURST_TRANSACTIONS,
+        `tracking input burst opened ${burst.transactions.total} transactions`
+      );
+      assert.ok(
+        (burst.transactions.byStore.tracking_searches || 0) <= 1,
+        'tracking input burst should read tracking_searches once'
+      );
+      assert.ok(
+        (burst.transactions.byStore.editions || 0) <= 1,
+        'tracking input burst should read editions once'
+      );
+      assert.deepEqual(burst.batches, [1], 'tracking input burst should enrich only the last query');
+      assert.equal(result.query, 'Needle');
+      assert.equal(
+        result.rows,
+        1,
+        `stale broad filter replaced the latest result; batches=${result.batches.join(',')}`
+      );
+      assert.match(result.text, /Needle/);
+      assert.deepEqual(result.batches, [25, 1], 'stale broad filter should stop before its next batch');
+      assert.ok(
+        result.transactions.total <= MAX_EXH_TRACKING_RACE_TRANSACTIONS,
+        `tracking filter race opened ${result.transactions.total} transactions`
+      );
+      assert.ok(
+        (result.transactions.byStore.tracking_searches || 0) <= 2,
+        'tracking filter race should read tracking_searches at most twice'
+      );
+      assert.ok(
+        (result.transactions.byStore.editions || 0) <= 2,
+        'tracking filter race should batch edition reads'
+      );
+
+      await page.evaluate(async (count) => {
+        await window.__seedExhTrackingEditions(count);
+        window.__resetExhListMetrics();
+        const input = document.getElementById('exc-trk-q');
+        input.value = 'Race Gallery';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }, EXH_TRACKING_RACE_COUNT);
+      await page.waitForFunction(
+        (count) => document.querySelectorAll('#jlc-wb-list-scroll [data-trk]').length === count,
+        EXH_TRACKING_RACE_COUNT,
+        { timeout: 5000 }
+      );
+      await page.waitForFunction(
+        () => performance.now() - window.__exhListMetrics.lastTransactionAt > 250,
+        null,
+        { timeout: 5000 }
+      );
+      const backfill = await page.evaluate(() => ({
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+      }));
+      const storedTracking = await page.evaluate(
+        () => window.__readExhStores(['tracking_searches'])
+      );
+      console.log('      ExH tracking edition backfill: ' + JSON.stringify(backfill));
+      assert.equal(
+        storedTracking.tracking_searches.filter((row) => Number(row.top_posted_at) > 0).length,
+        EXH_TRACKING_RACE_COUNT,
+        'edition backfill should persist posted times for every tracking row'
+      );
+      assert.ok(
+        backfill.transactions.total <= MAX_EXH_TRACKING_BACKFILL_TRANSACTIONS,
+        `tracking edition backfill opened ${backfill.transactions.total} transactions`
+      );
+      assert.ok(
+        (backfill.transactions.byStore.tracking_searches || 0) <= 2,
+        'tracking edition backfill should batch tracking writes'
+      );
+      assert.ok(
+        (backfill.transactions.byStore.editions || 0) <= 1,
+        'tracking edition backfill should read editions once'
+      );
+    }
+  );
+
+  await runCase(
+    'ExH detail: stable refresh keeps storage work bounded',
+    {
+      host: 'e-hentai.org',
+      fixtureHtml: createExhDetailFixture(),
+      scriptPath: PATHS.exhDist,
+      beforeInject: async (page) => {
+        await page.evaluate(installExhStorageMetrics);
+        await page.evaluate(() => {
+          history.replaceState(null, '', '/g/720000/abcdef1234/');
+        });
+      },
+    },
+    async (page) => {
+      await page.locator('#exc-gallery-panel').waitFor({ timeout: 15000 });
+      await page.waitForFunction(
+        () => window.__exhListMetrics.transactions.total > 0
+          && performance.now() - window.__exhListMetrics.lastTransactionAt > 300,
+        null,
+        { timeout: 10000 }
+      );
+      const startup = await page.evaluate(() => ({
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+      }));
+
+      await page.evaluate(
+        ([archiveCount, relevantTitle]) => window.__seedExhArchives(archiveCount, relevantTitle),
+        [EXH_LARGE_LIBRARY_ARCHIVE_COUNT, 'Detail Gallery']
+      );
+      await page.evaluate(() => {
+        const panel = document.getElementById('exc-gallery-panel');
+        window.__exhDetailPanelNode = panel?.firstElementChild || null;
+        window.__resetExhListMetrics();
+        window.__exhDetailRefreshStarted = performance.now();
+        window.__excRefreshPage();
+      });
+      await page.waitForFunction(
+        () => {
+          const panel = document.getElementById('exc-gallery-panel');
+          return window.__exhListMetrics.transactions.total > 0
+            && panel?.firstElementChild !== window.__exhDetailPanelNode
+            && performance.now() - window.__exhListMetrics.lastTransactionAt > 300;
+        },
+        null,
+        { timeout: 15000 }
+      );
+      const refresh = await page.evaluate(() => ({
+        durationMs: performance.now() - window.__exhDetailRefreshStarted,
+        transactions: structuredClone(window.__exhListMetrics.transactions),
+        panelVisible: document.getElementById('exc-gallery-panel')?.offsetParent !== null,
+      }));
+      console.log('      ExH detail startup: ' + JSON.stringify(startup));
+      console.log('      ExH detail refresh: ' + JSON.stringify(refresh));
+      assert.equal(refresh.panelVisible, true, 'ExH detail panel should remain visible after refresh');
+      assert.ok(
+        refresh.transactions.total <= MAX_EXH_DETAIL_REFRESH_TRANSACTIONS,
+        `ExH detail refresh opened ${refresh.transactions.total} transactions`
+      );
     }
   );
 

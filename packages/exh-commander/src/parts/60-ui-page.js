@@ -977,7 +977,8 @@
 
   async function enhanceListItem(el, ctx) {
     if (!el || el.dataset.excEnhanced === '1') return null;
-    const partial = parseListCard(el);
+    const listContext = ctx || {};
+    const partial = listContext.partial || parseListCard(el);
     if (!partial || !partial.gid) return null;
     el.dataset.excEnhanced = '1';
     el.classList.add('exc-gl-item');
@@ -1011,15 +1012,22 @@
 
     let edition;
     try {
-      edition = await upsertEdition(partial);
+      edition = listContext.edition || (await upsertEdition(partial));
     } catch (e) {
       console.warn('[ExC] upsert list edition', e);
+      delete el.dataset.excEnhanced;
       return null;
     }
     el.dataset.excWork = edition.work_id || '';
 
-    const work = edition.work_id ? await idbGet(STORE_WORKS, edition.work_id) : null;
-    const lib = await resolveLibraryState(edition);
+    const hasPreparedWork = Object.prototype.hasOwnProperty.call(listContext, 'work');
+    const work = hasPreparedWork
+      ? listContext.work
+      : edition.work_id
+        ? await idbGet(STORE_WORKS, edition.work_id)
+        : null;
+    const lib = listContext.libraryState ||
+      (await resolveLibraryState(edition, listContext.storageSnapshot));
     const block = isBlockedEdition(edition, work);
 
     if (block.blocked) {
@@ -1029,7 +1037,9 @@
     // 三类框体分开打标（互不顶替，可叠加）
     // 1) 点过 2) 库内 3) 心动
     el.classList.remove('is-exc-seen', 'is-exc-lib', 'is-exc-fav', 'is-exc-familiar');
-    const seenOnly = isGallerySeen(edition.gid);
+    const seenOnly = listContext.seenGids
+      ? !!listContext.seenGids[String(edition.gid)]
+      : isGallerySeen(edition.gid);
     if (seenOnly) el.classList.add('is-exc-seen');
     const inLib = !!(
       lib &&
@@ -1253,13 +1263,16 @@
     if (tools) {
       const blockOn = work && work.blocked;
       // 当前列表是否可追更 + 是否已是断点作品
-      const pageCtx = parseExhPageContext(location.href);
+      const pageCtx = Object.prototype.hasOwnProperty.call(listContext, 'pageContext')
+        ? listContext.pageContext
+        : parseExhPageContext(location.href);
       let isBpWork = false;
       let trkRec = null;
       if (pageCtx && pageCtx.trackable) {
         try {
-          trkRec =
-            typeof findTrackingForContext === 'function'
+          trkRec = listContext.trackingResolved
+            ? listContext.trackingRecord || null
+            : typeof findTrackingForContext === 'function'
               ? await findTrackingForContext(pageCtx)
               : await getTrackingBySignature(pageCtx.query_signature);
           if (trkRec && trkRec.id) {
@@ -1641,6 +1654,12 @@
   }
 
   function applyWorkFold(enhanced) {
+    for (const item of enhanced || []) {
+      if (!item || !item.el) continue;
+      item.el.classList.remove('is-exc-folded-child');
+      const old = item.el.querySelector('.exc-fold-tag');
+      if (old) old.remove();
+    }
     if (!config.list_fold_works) return;
     const groups = new Map();
     for (const item of enhanced) {
@@ -1656,11 +1675,6 @@
       if (list.length < 2) continue;
       const ranked = rankFoldGroup(list);
       const primary = ranked[0];
-      list.forEach((x) => {
-        x.el.classList.remove('is-exc-folded-child');
-        const old = x.el.querySelector('.exc-fold-tag');
-        if (old) old.remove();
-      });
       ranked.slice(1).forEach((x) => x.el.classList.add('is-exc-folded-child'));
 
       const hidden = ranked.length - 1;
@@ -1813,10 +1827,9 @@
       bar.id = 'exc-tracking-bar';
     }
 
-    // 同一 signature 不重建 DOM（只校正挂载位 + 刷状态），避免收藏页 mutation 闪烁
+    // 同一 signature 不重建 DOM，只校正挂载位置。
     if (bar.dataset.sig === ctx.query_signature && bar.dataset.ready === '1') {
       mountTrackingBar(bar);
-      void refreshTrackingBarState();
       return;
     }
 
@@ -1879,8 +1892,10 @@
     void refreshTrackingBarState();
   }
 
-  async function refreshTrackingBarState() {
-    const ctx = parseExhPageContext(location.href);
+  async function refreshTrackingBarState(preloaded) {
+    const ctx = preloaded && preloaded.context
+      ? preloaded.context
+      : parseExhPageContext(location.href);
     const bar = document.getElementById('exc-tracking-bar');
     const btn = document.getElementById('exc-save-tracking');
     const status = document.getElementById('exc-track-status');
@@ -1889,8 +1904,9 @@
     const meta = document.getElementById('exc-track-meta');
     if (!ctx || !ctx.trackable || !bar || !btn) return;
 
-    const rec =
-      typeof findTrackingForContext === 'function'
+    const rec = preloaded && preloaded.resolved
+      ? preloaded.record || null
+      : typeof findTrackingForContext === 'function'
         ? await findTrackingForContext(ctx)
         : await getTrackingBySignature(ctx.query_signature);
     const pageState =
@@ -2107,23 +2123,6 @@
     }
   }
 
-  async function enhanceListPage() {
-    bindListLiveRefresh();
-    injectTrackingBar();
-    const items = queryListItems();
-    const enhanced = [];
-    let n = 0;
-    for (const el of items) {
-      const r = await enhanceListItem(el);
-      if (r) enhanced.push(r);
-      n++;
-      if (n % 10 === 0) await new Promise((r) => setTimeout(r, 0));
-    }
-    applyWorkFold(enhanced);
-    tryConsumeBreakpointScroll();
-    return enhanced.length;
-  }
-
   /**
    * 把画廊增强面板放到封面/信息浮动块之后（与 #gleft #gmid #gright 同级）。
    */
@@ -2251,39 +2250,6 @@
     return rec;
   }
 
-  /** 列表页回前台时重绘已点/断点/徽章 */
-  let listLiveRefreshTimer = null;
-  function scheduleListLiveRefresh(reason) {
-    if (listLiveRefreshTimer) clearTimeout(listLiveRefreshTimer);
-    listLiveRefreshTimer = setTimeout(() => {
-      listLiveRefreshTimer = null;
-      try {
-        const kind = detectPageKind();
-        if (kind === 'gallery' || kind === 'image') return;
-        document.querySelectorAll('.exc-gl-item').forEach((el) => {
-          el.dataset.excEnhanced = '';
-        });
-        enhanceListPage().catch(() => {});
-        if (typeof refreshTrackingBarState === 'function') {
-          void refreshTrackingBarState();
-        }
-        if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
-      } catch (e) {
-        console.warn('[ExC] list live refresh', reason, e);
-      }
-    }, 200);
-  }
-
-  function bindListLiveRefresh() {
-    if (window.__excListLiveBound) return;
-    window.__excListLiveBound = true;
-    window.addEventListener('pageshow', () => scheduleListLiveRefresh('pageshow'));
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') scheduleListLiveRefresh('visible');
-    });
-    window.addEventListener('focus', () => scheduleListLiveRefresh('focus'));
-  }
-
   /** 兄弟版本缺体积/时间/码级时 gdata 补全 */
   async function enrichSiblingEditionsMeta(siblings) {
     const list = (siblings || []).filter(Boolean);
@@ -2356,8 +2322,9 @@
   }
 
   /** 按标题搜相关上传并入 Work；同 work 5 分钟内最多一次 */
-  async function autoImportRelatedOnlineEditions(edition) {
+  async function autoImportRelatedOnlineEditions(edition, options) {
     if (!edition || !edition.work_id) return;
+    options = options || {};
     const key = 'exc_rel_imp_' + edition.work_id;
     let skipSearch = false;
     try {
@@ -2375,7 +2342,11 @@
           minSim: 0.68,
         });
       }
-      const sibs = await listEditionsByWork(edition.work_id);
+      const sibs = r && r.imported > 0
+        ? await listEditionsByWork(edition.work_id)
+        : Array.isArray(options.siblings)
+          ? options.siblings
+          : await listEditionsByWork(edition.work_id);
       const filled = await enrichSiblingEditionsMeta(sibs);
       if ((r && r.imported > 0) || filled > 0) {
         await enhanceGalleryPage({ skipRelatedImport: true });
@@ -2400,9 +2371,13 @@
     } catch (e) {
       console.warn('[ExC] auto bp', e);
     }
-    const work = await idbGet(STORE_WORKS, edition.work_id);
-    const lib = await resolveLibraryState(edition);
-    let siblings = await listEditionsByWork(edition.work_id);
+    const [storageSnapshot, prog] = await Promise.all([
+      loadLibraryStorageSnapshot(),
+      getProgress(edition.work_id),
+    ]);
+    const work = storageSnapshot.worksById.get(edition.work_id) || null;
+    const lib = await resolveLibraryState(edition, storageSnapshot);
+    let siblings = storageSnapshot.editionsByWork.get(edition.work_id) || [];
     // 已有兄弟但缺体积/时间：进页就补一轮（不依赖搜索）
     if (opts.skipRelatedImport && siblings && siblings.length) {
       try {
@@ -2410,7 +2385,6 @@
         siblings = await listEditionsByWork(edition.work_id);
       } catch (_) { /* ignore */ }
     }
-    const prog = await getProgress(edition.work_id);
 
     let panel = document.getElementById('exc-gallery-panel');
     if (!panel) {
@@ -2599,7 +2573,7 @@
 
     // 后台自动搜相关线上版本（同 work 5 分钟内最多一次）
     if (!opts.skipRelatedImport) {
-      void autoImportRelatedOnlineEditions(edition);
+      void autoImportRelatedOnlineEditions(edition, { siblings });
     }
     return edition;
   }
@@ -2640,33 +2614,4 @@
       });
       await enhanceListPage();
     }
-  }
-
-  function observeListMutations() {
-    // 只观察列表本体，避开 #nb / 追更条自身，减少闪烁
-    const root =
-      document.querySelector('table.itg') ||
-      document.querySelector('.itg') ||
-      document.getElementById('gdt') ||
-      document.getElementById('ido') ||
-      document.body;
-    let timer = null;
-    const mo = new MutationObserver((mutations) => {
-      // 忽略追更条内部变更
-      let relevant = false;
-      for (const m of mutations) {
-        const t = m.target;
-        if (t && t.closest && t.closest('#exc-tracking-bar, #jlc-wb, #jlc-wb-fab, #exc-hover-preview')) {
-          continue;
-        }
-        relevant = true;
-        break;
-      }
-      if (!relevant) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        enhanceListPage().catch((e) => console.warn('[ExC] list enhance', e));
-      }, 400);
-    });
-    mo.observe(root, { childList: true, subtree: true });
   }

@@ -3981,9 +3981,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return best;
   }
 
-  function structuralMatchScore(edition, archive) {
+  function structuralMatchScore(edition, archive, preparedTitleScore) {
     if (!edition || !archive) return 0;
-    let score = titleSimilarity(edition.title_raw || edition.title_core, archive.title || archive.title_core);
+    let score = Number.isFinite(preparedTitleScore)
+      ? preparedTitleScore
+      : titleSimilarity(edition.title_raw || edition.title_core, archive.title || archive.title_core);
     if (!score) return 0;
     if (edition.group && archive.group) {
       if (compactText(edition.group).toLowerCase() === compactText(archive.group).toLowerCase()) score += 0.08;
@@ -4521,15 +4523,54 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return idbReq(query === undefined ? idx.getAll() : idx.getAll(query));
   }
 
+  async function idbGetAllFromStores(storeNames) {
+    const names = Array.from(new Set(storeNames || [])).filter(Boolean);
+    if (!names.length) return {};
+    const d = await openDb();
+    const tx = d.transaction(names, 'readonly');
+    const entries = await Promise.all(
+      names.map(async (name) => [name, await idbReq(tx.objectStore(name).getAll())])
+    );
+    return Object.fromEntries(entries);
+  }
+
+  async function idbPutBatches(batches) {
+    const entries = Object.entries(batches || {}).filter(
+      ([, rows]) => Array.isArray(rows) && rows.length
+    );
+    if (!entries.length) return 0;
+    const names = entries.map(([name]) => name);
+    const d = await openDb();
+    const tx = d.transaction(names, 'readwrite');
+    const done = new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error('idb batch write failed'));
+      tx.onabort = () => reject(tx.error || new Error('idb batch write aborted'));
+    });
+    let count = 0;
+    for (const [name, rows] of entries) {
+      const store = tx.objectStore(name);
+      for (const row of rows) {
+        store.put(row);
+        count++;
+      }
+    }
+    await done;
+    if (!idbSyncSuppress && names.some((name) => SYNCABLE_IDB_STORES.has(name))) {
+      if (typeof markCreamuLocalDirty === 'function') markCreamuLocalDirty();
+    }
+    return count;
+  }
+
   function makeEditionId(gid, token) {
     return editionKey(gid, token);
   }
 
-  async function upsertEdition(partial) {
+  function mergeEditionRecord(partial, previous) {
     const rec = normalizeEditionRecord(partial);
     if (!rec.gid || !rec.token) throw new Error('edition requires gid/token');
     const id = makeEditionId(rec.gid, rec.token);
-    const prev = await idbGet(STORE_EDITIONS, id);
+    const prev = previous || null;
     const merged = Object.assign({}, prev || {}, rec, { id });
     // 列表页常无标签：空 tags 不要冲掉画廊页已写入的完整标签
     if (
@@ -4540,12 +4581,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     ) {
       merged.tags = prev.tags.slice();
     } else if (prev && Array.isArray(prev.tags) && prev.tags.length && Array.isArray(merged.tags)) {
-      // 合并去重
       const set = new Set(prev.tags.map(String));
       merged.tags.forEach((t) => set.add(String(t)));
       merged.tags = Array.from(set);
     }
-    // 列表缺语言/码级时保留旧值
     if (prev) {
       if ((!merged.language || merged.language === 'other') && prev.language && prev.language !== 'other') {
         merged.language = prev.language;
@@ -4563,6 +4602,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         merged.size_bytes = prev.size_bytes;
       }
     }
+    return { merged, previous: prev };
+  }
+
+  async function upsertEdition(partial) {
+    const rec = normalizeEditionRecord(partial);
+    if (!rec.gid || !rec.token) throw new Error('edition requires gid/token');
+    const id = makeEditionId(rec.gid, rec.token);
+    const prev = await idbGet(STORE_EDITIONS, id);
+    const merged = mergeEditionRecord(partial, prev).merged;
     if (!merged.work_id) {
       merged.work_id = (prev && prev.work_id) || (await ensureWorkForEdition(merged)).work_id;
     }
@@ -4573,6 +4621,335 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       await refreshArchivesBoundToEdition(merged);
     } catch (_) { /* ignore */ }
     return merged;
+  }
+
+  function createWorkFromEdition(edition, workId) {
+    return {
+      work_id: workId || uid('work'),
+      title_raw: edition.title_raw,
+      title_core: edition.title_core,
+      favorite: 0,
+      status: 'none',
+      blocked: 0,
+      note: '',
+      created_at: nowMs(),
+      updated_at: nowMs(),
+    };
+  }
+
+  const LIST_LIBRARY_MIN_TITLE_SCORE = 0.6;
+
+  function addListIndexValue(index, key, value) {
+    if (!key) return;
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(value);
+  }
+
+  function createListTitleIndex(value) {
+    const core = buildTitleCore(value || '');
+    const tokens = tokenize(core);
+    const compact = Array.from(core.replace(/\s+/g, ''));
+    const grams = new Set();
+    for (let index = 0; index + 2 < compact.length; index++) {
+      grams.add(compact.slice(index, index + 3).join(''));
+    }
+    return { core, tokens, grams: Array.from(grams), compactLength: compact.length };
+  }
+
+  function getIndexedTitleSimilarity(left, right) {
+    if (!left.core || !right.core) return 0;
+    if (left.core === right.core) return 1;
+    if (left.core.includes(right.core) || right.core.includes(left.core)) return 0.92;
+    return jaccard(left.tokens, right.tokens);
+  }
+
+  function getSnapshotArchiveCandidates(storageSnapshot, edition) {
+    const snapshot = indexListStorageSnapshot(storageSnapshot);
+    const query = createListTitleIndex(edition.title_raw || edition.title_core || '');
+    if (!query.core) return [];
+
+    const candidates = new Map();
+    const add = (archive) => {
+      if (archive && archive.arcid) candidates.set(String(archive.arcid), archive);
+    };
+    if (query.compactLength < 3) {
+      snapshot.archives.forEach(add);
+    } else {
+      new Set(query.tokens).forEach((token) => {
+        (snapshot.archivesByTitleToken.get(token) || []).forEach(add);
+      });
+      query.grams.forEach((gram) => {
+        (snapshot.archivesByTitleGram.get(gram) || []).forEach(add);
+      });
+      snapshot.shortTitleArchives.forEach(add);
+    }
+
+    // structuralMatchScore 最多再加 0.22；低于 0.6 的标题不可能达到模糊命中阈值 0.85。
+    const result = [];
+    candidates.forEach((archive, arcid) => {
+      const title = snapshot.archiveTitleInfoById.get(arcid);
+      const titleScore = title ? getIndexedTitleSimilarity(query, title) : 0;
+      if (titleScore < LIST_LIBRARY_MIN_TITLE_SCORE) return;
+      result.push({ archive, titleScore });
+    });
+    result.sort(
+      (left, right) =>
+        (snapshot.archiveOrderById.get(String(left.archive.arcid)) || 0) -
+        (snapshot.archiveOrderById.get(String(right.archive.arcid)) || 0)
+    );
+    return result;
+  }
+
+  function getSnapshotArchivesByIds(storageSnapshot, arcids, excludedArcids) {
+    const snapshot = indexListStorageSnapshot(storageSnapshot);
+    const excluded = excludedArcids || new Set();
+    const rows = [];
+    for (const arcid of arcids || []) {
+      const id = String(arcid || '');
+      if (!id || excluded.has(arcid) || excluded.has(id)) continue;
+      const archive = snapshot.archivesById.get(id);
+      if (archive) rows.push(archive);
+    }
+    rows.sort(
+      (left, right) =>
+        (snapshot.archiveOrderById.get(String(left.arcid)) || 0) -
+        (snapshot.archiveOrderById.get(String(right.arcid)) || 0)
+    );
+    return rows;
+  }
+
+  function indexListStorageSnapshot(snapshot) {
+    const indexed = snapshot || {};
+    if (
+      indexed._listStorageIndexed === true &&
+      indexed.editionsByWork instanceof Map &&
+      indexed.worksById instanceof Map &&
+      indexed.archivesBySourceGid instanceof Map &&
+      indexed.archiveTitleInfoById instanceof Map
+    ) {
+      return indexed;
+    }
+    const editions = Array.isArray(indexed.editions) ? indexed.editions : [];
+    const works = Array.isArray(indexed.works) ? indexed.works : [];
+    const archives = Array.isArray(indexed.archives) ? indexed.archives : [];
+    indexed.editionsById = new Map(editions.map((row) => [row.id, row]));
+    indexed.worksById = new Map(works.map((row) => [row.work_id, row]));
+    indexed.editionsByWork = new Map();
+    indexed.editionsByGid = new Map();
+    indexed.editionsByTitleCore = new Map();
+    for (const row of editions) {
+      if (row.work_id) {
+        if (!indexed.editionsByWork.has(row.work_id)) indexed.editionsByWork.set(row.work_id, []);
+        indexed.editionsByWork.get(row.work_id).push(row);
+      }
+      if (row.gid) {
+        const gid = String(row.gid);
+        const current = indexed.editionsByGid.get(gid);
+        if (!current || (Number(row.updated_at) || 0) >= (Number(current.updated_at) || 0)) {
+          indexed.editionsByGid.set(gid, row);
+        }
+      }
+      if (row.title_core) {
+        if (!indexed.editionsByTitleCore.has(row.title_core)) indexed.editionsByTitleCore.set(row.title_core, []);
+        indexed.editionsByTitleCore.get(row.title_core).push(row);
+      }
+    }
+    indexed.archivesById = new Map();
+    indexed.archiveOrderById = new Map();
+    indexed.archivesByGid = new Map();
+    indexed.archivesBySourceGid = new Map();
+    indexed.archivesByTitleToken = new Map();
+    indexed.archivesByTitleGram = new Map();
+    indexed.archiveTitleInfoById = new Map();
+    indexed.shortTitleArchives = [];
+    for (let archiveIndex = 0; archiveIndex < archives.length; archiveIndex++) {
+      const row = archives[archiveIndex];
+      const arcid = String(row.arcid || '');
+      if (arcid) {
+        indexed.archivesById.set(arcid, row);
+        indexed.archiveOrderById.set(arcid, archiveIndex);
+      }
+      const explicitGid = row.eh_gid ? String(row.eh_gid) : '';
+      const sourceGid = explicitGid || String(extractEhGidFromTags(row.tags || []) || '');
+      if (explicitGid) addListIndexValue(indexed.archivesByGid, explicitGid, row);
+      if (sourceGid) addListIndexValue(indexed.archivesBySourceGid, sourceGid, row);
+
+      const title = createListTitleIndex(row.title || row.title_core || '');
+      if (arcid) indexed.archiveTitleInfoById.set(arcid, title);
+      new Set(title.tokens).forEach((token) => {
+        addListIndexValue(indexed.archivesByTitleToken, token, row);
+      });
+      title.grams.forEach((gram) => {
+        addListIndexValue(indexed.archivesByTitleGram, gram, row);
+      });
+      if (title.compactLength < 3) indexed.shortTitleArchives.push(row);
+    }
+    indexed._listStorageIndexed = true;
+    return indexed;
+  }
+
+  async function loadLibraryStorageSnapshot() {
+    const loaded = await idbGetAllFromStores([
+      STORE_WORKS,
+      STORE_EDITIONS,
+      STORE_ARCHIVES,
+      STORE_LINKS,
+    ]);
+    return indexListStorageSnapshot({
+      works: loaded[STORE_WORKS] || [],
+      editions: loaded[STORE_EDITIONS] || [],
+      archives: loaded[STORE_ARCHIVES] || [],
+      links: loaded[STORE_LINKS] || [],
+    });
+  }
+
+  function removeIndexedEdition(snapshot, edition) {
+    if (!edition) return;
+    const remove = (map, key) => {
+      if (!key || !map.has(key)) return;
+      const next = map.get(key).filter((row) => row.id !== edition.id);
+      if (next.length) map.set(key, next);
+      else map.delete(key);
+    };
+    remove(snapshot.editionsByWork, edition.work_id);
+    remove(snapshot.editionsByTitleCore, edition.title_core);
+    if (edition.gid && snapshot.editionsByGid.get(String(edition.gid))?.id === edition.id) {
+      snapshot.editionsByGid.delete(String(edition.gid));
+    }
+  }
+
+  function addIndexedEdition(snapshot, edition) {
+    snapshot.editionsById.set(edition.id, edition);
+    if (edition.work_id) {
+      if (!snapshot.editionsByWork.has(edition.work_id)) snapshot.editionsByWork.set(edition.work_id, []);
+      snapshot.editionsByWork.get(edition.work_id).push(edition);
+    }
+    if (edition.gid) {
+      const gid = String(edition.gid);
+      const current = snapshot.editionsByGid.get(gid);
+      if (!current || (Number(edition.updated_at) || 0) >= (Number(current.updated_at) || 0)) {
+        snapshot.editionsByGid.set(gid, edition);
+      }
+    }
+    if (edition.title_core) {
+      if (!snapshot.editionsByTitleCore.has(edition.title_core)) {
+        snapshot.editionsByTitleCore.set(edition.title_core, []);
+      }
+      snapshot.editionsByTitleCore.get(edition.title_core).push(edition);
+    }
+  }
+
+  function findSnapshotWorkForEdition(edition, snapshot) {
+    if (edition.work_id && snapshot.worksById.has(edition.work_id)) {
+      return snapshot.worksById.get(edition.work_id);
+    }
+    if (config.auto_cluster) {
+      const candidates = snapshot.editionsByTitleCore.get(edition.title_core) || [];
+      let best = null;
+      let bestScore = 0;
+      for (const candidate of candidates) {
+        if (!candidate.work_id) continue;
+        if (candidate.gid === edition.gid && candidate.token === edition.token) continue;
+        let score = titleSimilarity(edition.title_raw, candidate.title_raw);
+        if (
+          edition.group &&
+          candidate.group &&
+          edition.group.toLowerCase() === String(candidate.group).toLowerCase()
+        ) {
+          score += 0.05;
+        }
+        if (score >= (config.cluster_threshold || 0.82) && score > bestScore) {
+          bestScore = score;
+          best = candidate;
+        }
+      }
+      if (best && snapshot.worksById.has(best.work_id)) {
+        return snapshot.worksById.get(best.work_id);
+      }
+    }
+    return null;
+  }
+
+  function refreshSnapshotArchivesForEdition(edition, snapshot, archiveWrites) {
+    if (!edition || !edition.gid) return;
+    const gid = String(edition.gid);
+    const explicit = snapshot.archivesByGid.get(gid) || [];
+    const rows = explicit.length
+      ? explicit
+      : snapshot.archivesBySourceGid.get(gid) || [];
+    for (const archive of rows) {
+      const enriched = applyBoundEditionQualityToArchive(
+        Object.assign({}, archive, { eh_gid: gid }),
+        edition
+      );
+      const changed =
+        enriched.language !== archive.language ||
+        enriched.censor_tier !== archive.censor_tier ||
+        (enriched.group && enriched.group !== archive.group) ||
+        !archive.eh_gid;
+      if (!changed) continue;
+      archive.eh_gid = gid;
+      archive.language = enriched.language;
+      archive.censor_tier = enriched.censor_tier;
+      if (enriched.group) archive.group = enriched.group;
+      archive.quality_from_eh_source = 1;
+      archive.updated_at = nowMs();
+      archiveWrites.set(archive.arcid, archive);
+      if (!snapshot.archivesByGid.has(gid)) snapshot.archivesByGid.set(gid, []);
+      const explicitBucket = snapshot.archivesByGid.get(gid);
+      if (!explicitBucket.some((row) => row.arcid === archive.arcid)) explicitBucket.push(archive);
+      if (!snapshot.archivesBySourceGid.has(gid)) snapshot.archivesBySourceGid.set(gid, []);
+      const sourceBucket = snapshot.archivesBySourceGid.get(gid);
+      if (!sourceBucket.some((row) => row.arcid === archive.arcid)) sourceBucket.push(archive);
+    }
+  }
+
+  async function upsertListEditions(partials) {
+    const input = Array.from(partials || []);
+    if (!input.length) {
+      return { editions: [], snapshot: indexListStorageSnapshot({ works: [], editions: [], archives: [], links: [] }) };
+    }
+    const snapshot = await loadLibraryStorageSnapshot();
+    const editionWrites = new Map();
+    const workWrites = new Map();
+    const archiveWrites = new Map();
+    const result = [];
+
+    for (const partial of input) {
+      const normalized = normalizeEditionRecord(partial);
+      if (!normalized.gid || !normalized.token) throw new Error('edition requires gid/token');
+      const id = makeEditionId(normalized.gid, normalized.token);
+      const previous = snapshot.editionsById.get(id) || null;
+      const edition = mergeEditionRecord(partial, previous).merged;
+      let work = null;
+      if (!edition.work_id && previous && previous.work_id) edition.work_id = previous.work_id;
+      work = findSnapshotWorkForEdition(edition, snapshot);
+      if (!work) {
+        work = createWorkFromEdition(edition, edition.work_id);
+        snapshot.works.push(work);
+        snapshot.worksById.set(work.work_id, work);
+      }
+      edition.work_id = work.work_id;
+      if (!work.title_core) work.title_core = edition.title_core;
+      if (!work.title_raw) work.title_raw = edition.title_raw;
+      work.updated_at = nowMs();
+
+      removeIndexedEdition(snapshot, previous);
+      addIndexedEdition(snapshot, edition);
+      editionWrites.set(edition.id, edition);
+      workWrites.set(work.work_id, work);
+      refreshSnapshotArchivesForEdition(edition, snapshot, archiveWrites);
+      result.push(edition);
+    }
+
+    snapshot.editions = Array.from(snapshot.editionsById.values());
+    snapshot.works = Array.from(snapshot.worksById.values());
+    await idbPutBatches({
+      [STORE_WORKS]: Array.from(workWrites.values()),
+      [STORE_EDITIONS]: Array.from(editionWrites.values()),
+      [STORE_ARCHIVES]: Array.from(archiveWrites.values()),
+    });
+    return { editions: result, snapshot };
   }
 
   /** 本地见到 EH 画廊后，刷新所有 eh_gid 指向它的 LRR 档案质量维 */
@@ -4784,7 +5161,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
    * @param {object} archive
    * @param {Map<string, object>} [edByGid] 可选预载 map
    */
-  async function enrichArchiveForCompare(archive, edByGid) {
+  async function enrichArchiveForCompare(archive, edByGid, completeEditionIndex) {
     if (!archive) return archive;
     const gid = archive.eh_gid || extractEhGidFromTags(archive.tags || '') || '';
     if (!gid) {
@@ -4796,7 +5173,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
     let bound = null;
     if (edByGid && edByGid.has(String(gid))) bound = edByGid.get(String(gid));
-    else bound = await getEditionByGid(gid);
+    else if (!completeEditionIndex) bound = await getEditionByGid(gid);
     if (!bound) {
       // 尚未点过源画廊：至少重跑标签检测
       return Object.assign({}, archive, {
@@ -5076,11 +5453,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return scored.slice(0, limit || 15);
   }
 
-  async function resolveLibraryState(edition) {
-    const archives = await listArchives();
-    const links = await listLinks();
+  async function resolveLibraryState(edition, storageSnapshot) {
+    const hasSnapshot = !!storageSnapshot;
+    const snapshot = hasSnapshot ? indexListStorageSnapshot(storageSnapshot) : null;
+    const archives = hasSnapshot ? snapshot.archives : await listArchives();
+    const links = hasSnapshot ? snapshot.links : await listLinks();
     const editionId = edition.id || makeEditionId(edition.gid, edition.token);
     const workId = edition.work_id;
+    const siblingEds = workId
+      ? hasSnapshot
+        ? snapshot.editionsByWork.get(workId) || []
+        : await listEditionsByWork(workId)
+      : [edition];
 
     const negativeArc = new Set(
       links.filter((l) => l.negative && (l.edition_id === editionId || l.work_id === workId)).map((l) => l.arcid)
@@ -5092,7 +5476,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         ((l.edition_id && l.edition_id === editionId) || (l.work_id && workId && l.work_id === workId))
     );
 
-    const byGid = archives.filter((a) => a.eh_gid && String(a.eh_gid) === String(edition.gid));
+    const byGid = hasSnapshot
+      ? snapshot.archivesByGid.get(String(edition.gid)) || []
+      : archives.filter((a) => a.eh_gid && String(a.eh_gid) === String(edition.gid));
     const exactArcIds = new Set([
       ...linked.filter((l) => l.edition_id === editionId).map((l) => l.arcid),
       ...byGid.map((a) => a.arcid),
@@ -5101,20 +5487,30 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const workArcIds = new Set([...exactArcIds, ...linked.map((l) => l.arcid)]);
 
     if (workId) {
-      const siblings = await listEditionsByWork(workId);
-      for (const ed of siblings) {
-        for (const a of archives) {
-          if (a.eh_gid && String(a.eh_gid) === String(ed.gid)) workArcIds.add(a.arcid);
+      for (const ed of siblingEds) {
+        const siblingArchives = hasSnapshot
+          ? snapshot.archivesByGid.get(String(ed.gid)) || []
+          : archives;
+        for (const a of siblingArchives) {
+          if (hasSnapshot || (a.eh_gid && String(a.eh_gid) === String(ed.gid))) {
+            workArcIds.add(a.arcid);
+          }
         }
       }
     }
 
-    const exactArchives = archives.filter((a) => exactArcIds.has(a.arcid) && !negativeArc.has(a.arcid));
-    const workArchives = archives.filter((a) => workArcIds.has(a.arcid) && !negativeArc.has(a.arcid));
+    const exactArchives = hasSnapshot
+      ? getSnapshotArchivesByIds(snapshot, exactArcIds, negativeArc)
+      : archives.filter((a) => exactArcIds.has(a.arcid) && !negativeArc.has(a.arcid));
+    const workArchives = hasSnapshot
+      ? getSnapshotArchivesByIds(snapshot, workArcIds, negativeArc)
+      : archives.filter((a) => workArcIds.has(a.arcid) && !negativeArc.has(a.arcid));
 
     // 同 work edition map：LRR source/eh_gid → 码级语言
-    const siblingEds = workId ? await listEditionsByWork(workId) : [edition];
     const edByGid = new Map();
+    if (hasSnapshot) {
+      snapshot.editionsByGid.forEach((ed, gid) => edByGid.set(String(gid), ed));
+    }
     (siblingEds || []).forEach((ed) => {
       if (ed && ed.gid) edByGid.set(String(ed.gid), ed);
     });
@@ -5141,11 +5537,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     const fuzzy = [];
     if (edition.title_core) {
-      for (const a of archives) {
+      const candidates = hasSnapshot
+        ? getSnapshotArchiveCandidates(snapshot, edition)
+        : archives.map((archive) => ({ archive, titleScore: undefined }));
+      for (const candidate of candidates) {
+        const a = candidate.archive;
         if (negativeArc.has(a.arcid)) continue;
         if (exactArcIds.has(a.arcid) || workArcIds.has(a.arcid)) continue;
-        const aEn = await enrichArchiveForCompare(a, edByGid);
-        const score = structuralMatchScore(edition, aEn);
+        const aEn = await enrichArchiveForCompare(a, edByGid, hasSnapshot);
+        const score = structuralMatchScore(edition, aEn, candidate.titleScore);
         if (score < 0.85) continue;
         const compare = diffEditionVsArchive(edition, aEn, config);
         fuzzy.push({ archive: aEn, sim: score, score, compare });
@@ -5157,7 +5557,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const preferredEdition = pickBestEdition(siblingEds && siblingEds.length ? siblingEds : [edition], config);
     let preferred_in_library = false;
     if (preferredEdition) {
-      preferred_in_library = await resolveEditionExactInLibrary(preferredEdition, archives, links);
+      preferred_in_library = hasSnapshot
+        ? links.some(
+            (link) =>
+              !link.negative &&
+              link.edition_id ===
+                (preferredEdition.id || makeEditionId(preferredEdition.gid, preferredEdition.token)) &&
+              link.arcid
+          ) || (snapshot.archivesByGid.get(String(preferredEdition.gid)) || []).length > 0
+        : await resolveEditionExactInLibrary(preferredEdition, archives, links);
     }
 
     const sameVersionArcIds = new Set(
@@ -5180,7 +5588,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       // 先按绑定 EH 源 enrich，再比质量（否则 LRR 全是 unknown 无法比码）
       const enriched = [];
       for (const a of pool) {
-        enriched.push(await enrichArchiveForCompare(a, edByGid));
+        enriched.push(await enrichArchiveForCompare(a, edByGid, hasSnapshot));
       }
       // 优先：eh_gid 就是当前画廊；否则按偏好分
       const exactGidArc = enriched.find((a) => a.eh_gid && String(a.eh_gid) === String(edition.gid));
@@ -5196,7 +5604,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
       }
     } else if (fuzzyTop.length) {
-      compareArc = await enrichArchiveForCompare(fuzzyTop[0].archive, edByGid);
+      compareArc = await enrichArchiveForCompare(fuzzyTop[0].archive, edByGid, hasSnapshot);
       library_compare = diffEditionVsArchive(edition, compareArc, config);
     }
 
@@ -5265,19 +5673,24 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return (archives || []).some((a) => a.eh_gid && String(a.eh_gid) === String(edition.gid));
   }
 
-  async function listBlockedWorks() {
-    const all = await idbGetAll(STORE_WORKS);
+  async function listBlockedWorks(storageSnapshot) {
+    const all = storageSnapshot
+      ? indexListStorageSnapshot(storageSnapshot).works
+      : await idbGetAll(STORE_WORKS);
     return (all || []).filter((w) => w.blocked).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
   }
 
   /** LRR 在库：以 local_archives 为准，再挂 work/edition/link（若有） */
-  async function listLibraryArchiveEntries() {
-    const archives = (await listArchives()) || [];
+  async function listLibraryArchiveEntries(storageSnapshot) {
+    const snapshot = storageSnapshot
+      ? indexListStorageSnapshot(storageSnapshot)
+      : await loadLibraryStorageSnapshot();
+    const archives = snapshot.archives || [];
     if (!archives.length) return [];
 
-    const links = (await listLinks()) || [];
-    const editions = (await idbGetAll(STORE_EDITIONS)) || [];
-    const works = (await idbGetAll(STORE_WORKS)) || [];
+    const links = snapshot.links || [];
+    const editions = snapshot.editions || [];
+    const works = snapshot.works || [];
     const workMap = new Map(works.map((w) => [w.work_id, w]));
     const edById = new Map();
     const edByGid = new Map();
@@ -5328,9 +5741,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return out;
   }
 
-  async function listAllWorks() {
-    const all = await idbGetAll(STORE_WORKS);
-    return (all || []).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+  async function listAllWorks(storageSnapshot) {
+    const all = storageSnapshot
+      ? indexListStorageSnapshot(storageSnapshot).works
+      : await idbGetAll(STORE_WORKS);
+    return Array.from(all || []).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
   }
 
   async function listTrackingSearches() {
@@ -5501,12 +5916,20 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return keep;
   }
 
+  async function saveTrackingRecords(records) {
+    const rows = (records || []).filter(Boolean).map((record) => {
+      const row = Object.assign({}, record, { updated_at: nowMs() });
+      if (!row.id) row.id = uid('trk');
+      if (!row.created_at) row.created_at = nowMs();
+      return row;
+    });
+    if (!rows.length) return rows;
+    await idbPutBatches({ [STORE_TRACKING]: rows });
+    return rows;
+  }
+
   async function saveTrackingRecord(record) {
-    const row = Object.assign({}, record, { updated_at: nowMs() });
-    if (!row.id) row.id = uid('trk');
-    if (!row.created_at) row.created_at = nowMs();
-    await idbPut(STORE_TRACKING, row);
-    return row;
+    return (await saveTrackingRecords([record]))[0];
   }
 
   async function deleteTrackingRecord(id) {
@@ -6824,9 +7247,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   /**
    * EH 官方 gdata 批量：posted / 页数 / 体积 / 标签（码级语言）。
    * @param {{gid:string|number,token:string}[]} pairs
+   * @param {object} [options]
+   * @param {Function} [options.shouldContinue]
    * @returns {Promise<Object<string, object>>} gid → meta
    */
-  async function fetchGalleryGdataBatch(pairs) {
+  async function fetchGalleryGdataBatch(pairs, options) {
+    options = options || {};
+    const shouldContinue =
+      typeof options.shouldContinue === 'function' ? options.shouldContinue : () => true;
     const out = Object.create(null);
     const uniq = [];
     const seen = Object.create(null);
@@ -6841,6 +7269,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     if (!uniq.length) return out;
     const api = getEhGdataApiUrl();
     for (let off = 0; off < uniq.length; off += 25) {
+      if (!shouldContinue()) break;
       const chunk = uniq.slice(off, off + 25);
       const gidlist = chunk.map((x) => [Number(x.gid), x.token]);
       try {
@@ -6911,8 +7340,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   /** @param {{gid:string|number,token:string}[]} pairs */
-  async function fetchGalleryMetaPostedBatch(pairs) {
-    const full = await fetchGalleryGdataBatch(pairs);
+  async function fetchGalleryMetaPostedBatch(pairs, options) {
+    const full = await fetchGalleryGdataBatch(pairs, options);
     const out = Object.create(null);
     Object.keys(full).forEach((g) => {
       if (full[g] && full[g].posted_at) out[g] = full[g].posted_at;
@@ -7057,11 +7486,42 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
   }
 
+  async function lookupEditionPostedByGids(gids) {
+    const keys = Array.from(
+      new Set((gids || []).map((gid) => compactText(gid || '')).filter(Boolean))
+    );
+    const out = new Map();
+    if (!keys.length) return out;
+    try {
+      const d = await openDb();
+      const transaction = d.transaction(STORE_EDITIONS, 'readonly');
+      const index = transaction.objectStore(STORE_EDITIONS).index('gid');
+      const pending = [];
+      keys.forEach((gid) => {
+        pending.push(idbReq(index.getAll(gid)).then((rows) => [gid, rows || []]));
+        if (/^\d+$/.test(gid)) {
+          pending.push(idbReq(index.getAll(Number(gid))).then((rows) => [gid, rows || []]));
+        }
+      });
+      const groups = await Promise.all(pending);
+      groups.forEach(([gid, rows]) => {
+        let best = Number(out.get(gid)) || 0;
+        rows.forEach((row) => {
+          const posted = Number(row && row.posted_at) || 0;
+          if (posted > best) best = posted;
+        });
+        if (best) out.set(gid, best);
+      });
+    } catch (_) { /* ignore */ }
+    return out;
+  }
+
   /**
    * 补全追更记录的 top/断点发布时间。
    * 顺序：DOM → editions → gdata（需 token）。
    * @param {object} [opts]
    * @param {boolean} [opts.skipGdata]
+   * @param {boolean} [opts.deferSave]
    */
   async function enrichTrackingPostedFields(rec, opts) {
     if (!rec) return rec;
@@ -7069,7 +7529,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     let dirty = false;
     if (rec.top_gid && !(Number(rec.top_posted_at) > 0)) {
       let p = lookupDomPostedByGid(rec.top_gid);
-      if (!p) p = await lookupEditionPostedByGid(rec.top_gid);
+      if (!p && opts.editionPostedByGid) {
+        p = Number(opts.editionPostedByGid.get(compactText(rec.top_gid))) || 0;
+      } else if (!p) p = await lookupEditionPostedByGid(rec.top_gid);
       if (!p && !opts.skipGdata) {
         const tok = compactText(rec.top_token || '') || extractTokenForGidFromDom(rec.top_gid);
         if (tok) {
@@ -7084,7 +7546,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
     if (rec.breakpoint_gid && !(Number(rec.breakpoint_posted_at) > 0)) {
       let p = lookupDomPostedByGid(rec.breakpoint_gid);
-      if (!p) p = await lookupEditionPostedByGid(rec.breakpoint_gid);
+      if (!p && opts.editionPostedByGid) {
+        p = Number(opts.editionPostedByGid.get(compactText(rec.breakpoint_gid))) || 0;
+      } else if (!p) p = await lookupEditionPostedByGid(rec.breakpoint_gid);
       if (!p && !opts.skipGdata) {
         const tok =
           compactText(rec.breakpoint_token || '') ||
@@ -7099,7 +7563,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         dirty = true;
       }
     }
-    if (dirty) {
+    if (dirty && !opts.deferSave) {
       try {
         await saveTrackingRecord(rec);
       } catch (_) { /* ignore */ }
@@ -7108,13 +7572,41 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   /** 批量补全列表里缺失的发布时间（gdata 每批最多 25） */
-  async function enrichTrackingListPosted(list) {
+  async function enrichTrackingListPosted(list, options) {
+    options = options || {};
+    const shouldContinue =
+      typeof options.shouldContinue === 'function' ? options.shouldContinue : () => true;
     const rows = list || [];
     const need = [];
+    const dirtyRecords = new Map();
+    const missingGids = [];
+    rows.forEach((rec) => {
+      if (!rec) return;
+      if (rec.top_gid && !(Number(rec.top_posted_at) > 0)) missingGids.push(rec.top_gid);
+      if (rec.breakpoint_gid && !(Number(rec.breakpoint_posted_at) > 0)) {
+        missingGids.push(rec.breakpoint_gid);
+      }
+    });
+    if (!shouldContinue()) return rows;
+    const editionPostedByGid = await lookupEditionPostedByGids(missingGids);
+    if (!shouldContinue()) return rows;
     for (let i = 0; i < rows.length; i++) {
+      if (!shouldContinue()) break;
       const rec = rows[i];
       if (!rec) continue;
-      await enrichTrackingPostedFields(rec, { skipGdata: true });
+      const previousTopPosted = Number(rec.top_posted_at) || 0;
+      const previousBreakpointPosted = Number(rec.breakpoint_posted_at) || 0;
+      await enrichTrackingPostedFields(rec, {
+        skipGdata: true,
+        deferSave: true,
+        editionPostedByGid,
+      });
+      if (
+        (Number(rec.top_posted_at) || 0) !== previousTopPosted ||
+        (Number(rec.breakpoint_posted_at) || 0) !== previousBreakpointPosted
+      ) {
+        dirtyRecords.set(rec.id || rec, rec);
+      }
       if (rec.top_gid && !(Number(rec.top_posted_at) > 0)) {
         const tok = compactText(rec.top_token || '') || extractTokenForGidFromDom(rec.top_gid);
         if (tok) {
@@ -7132,28 +7624,34 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
       }
     }
-    if (!need.length) return rows;
-    const pairs = need.map((x) => ({ gid: x.gid, token: x.token }));
-    const map = await fetchGalleryMetaPostedBatch(pairs);
-    const dirtyIds = Object.create(null);
-    for (let j = 0; j < need.length; j++) {
-      const item = need[j];
-      const ms = map[compactText(item.gid)] || 0;
-      if (!ms) continue;
-      if (item.field === 'top' && !(Number(item.rec.top_posted_at) > 0)) {
-        item.rec.top_posted_at = ms;
-        dirtyIds[item.rec.id] = item.rec;
-      }
-      if (item.field === 'bp' && !(Number(item.rec.breakpoint_posted_at) > 0)) {
-        item.rec.breakpoint_posted_at = ms;
-        dirtyIds[item.rec.id] = item.rec;
+    if (need.length && shouldContinue()) {
+      const pairs = need.map((x) => ({ gid: x.gid, token: x.token }));
+      const map = await fetchGalleryMetaPostedBatch(pairs, { shouldContinue });
+      for (let j = 0; j < need.length; j++) {
+        const item = need[j];
+        const ms = map[compactText(item.gid)] || 0;
+        if (!ms) continue;
+        if (item.field === 'top' && !(Number(item.rec.top_posted_at) > 0)) {
+          item.rec.top_posted_at = ms;
+          dirtyRecords.set(item.rec.id || item.rec, item.rec);
+        }
+        if (item.field === 'bp' && !(Number(item.rec.breakpoint_posted_at) > 0)) {
+          item.rec.breakpoint_posted_at = ms;
+          dirtyRecords.set(item.rec.id || item.rec, item.rec);
+        }
       }
     }
-    const saves = Object.keys(dirtyIds);
-    for (let k = 0; k < saves.length; k++) {
+    const saves = Array.from(dirtyRecords.values());
+    if (saves.length) {
       try {
-        await saveTrackingRecord(dirtyIds[saves[k]]);
-      } catch (_) { /* ignore */ }
+        await saveTrackingRecords(saves);
+      } catch (_) {
+        for (let k = 0; k < saves.length; k++) {
+          try {
+            await saveTrackingRecord(saves[k]);
+          } catch (_) { /* ignore */ }
+        }
+      }
     }
     return rows;
   }
@@ -10329,7 +10827,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
   async function enhanceListItem(el, ctx) {
     if (!el || el.dataset.excEnhanced === '1') return null;
-    const partial = parseListCard(el);
+    const listContext = ctx || {};
+    const partial = listContext.partial || parseListCard(el);
     if (!partial || !partial.gid) return null;
     el.dataset.excEnhanced = '1';
     el.classList.add('exc-gl-item');
@@ -10363,15 +10862,22 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     let edition;
     try {
-      edition = await upsertEdition(partial);
+      edition = listContext.edition || (await upsertEdition(partial));
     } catch (e) {
       console.warn('[ExC] upsert list edition', e);
+      delete el.dataset.excEnhanced;
       return null;
     }
     el.dataset.excWork = edition.work_id || '';
 
-    const work = edition.work_id ? await idbGet(STORE_WORKS, edition.work_id) : null;
-    const lib = await resolveLibraryState(edition);
+    const hasPreparedWork = Object.prototype.hasOwnProperty.call(listContext, 'work');
+    const work = hasPreparedWork
+      ? listContext.work
+      : edition.work_id
+        ? await idbGet(STORE_WORKS, edition.work_id)
+        : null;
+    const lib = listContext.libraryState ||
+      (await resolveLibraryState(edition, listContext.storageSnapshot));
     const block = isBlockedEdition(edition, work);
 
     if (block.blocked) {
@@ -10381,7 +10887,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     // 三类框体分开打标（互不顶替，可叠加）
     // 1) 点过 2) 库内 3) 心动
     el.classList.remove('is-exc-seen', 'is-exc-lib', 'is-exc-fav', 'is-exc-familiar');
-    const seenOnly = isGallerySeen(edition.gid);
+    const seenOnly = listContext.seenGids
+      ? !!listContext.seenGids[String(edition.gid)]
+      : isGallerySeen(edition.gid);
     if (seenOnly) el.classList.add('is-exc-seen');
     const inLib = !!(
       lib &&
@@ -10605,13 +11113,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     if (tools) {
       const blockOn = work && work.blocked;
       // 当前列表是否可追更 + 是否已是断点作品
-      const pageCtx = parseExhPageContext(location.href);
+      const pageCtx = Object.prototype.hasOwnProperty.call(listContext, 'pageContext')
+        ? listContext.pageContext
+        : parseExhPageContext(location.href);
       let isBpWork = false;
       let trkRec = null;
       if (pageCtx && pageCtx.trackable) {
         try {
-          trkRec =
-            typeof findTrackingForContext === 'function'
+          trkRec = listContext.trackingResolved
+            ? listContext.trackingRecord || null
+            : typeof findTrackingForContext === 'function'
               ? await findTrackingForContext(pageCtx)
               : await getTrackingBySignature(pageCtx.query_signature);
           if (trkRec && trkRec.id) {
@@ -10993,6 +11504,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   function applyWorkFold(enhanced) {
+    for (const item of enhanced || []) {
+      if (!item || !item.el) continue;
+      item.el.classList.remove('is-exc-folded-child');
+      const old = item.el.querySelector('.exc-fold-tag');
+      if (old) old.remove();
+    }
     if (!config.list_fold_works) return;
     const groups = new Map();
     for (const item of enhanced) {
@@ -11008,11 +11525,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       if (list.length < 2) continue;
       const ranked = rankFoldGroup(list);
       const primary = ranked[0];
-      list.forEach((x) => {
-        x.el.classList.remove('is-exc-folded-child');
-        const old = x.el.querySelector('.exc-fold-tag');
-        if (old) old.remove();
-      });
       ranked.slice(1).forEach((x) => x.el.classList.add('is-exc-folded-child'));
 
       const hidden = ranked.length - 1;
@@ -11165,10 +11677,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       bar.id = 'exc-tracking-bar';
     }
 
-    // 同一 signature 不重建 DOM（只校正挂载位 + 刷状态），避免收藏页 mutation 闪烁
+    // 同一 signature 不重建 DOM，只校正挂载位置。
     if (bar.dataset.sig === ctx.query_signature && bar.dataset.ready === '1') {
       mountTrackingBar(bar);
-      void refreshTrackingBarState();
       return;
     }
 
@@ -11231,8 +11742,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     void refreshTrackingBarState();
   }
 
-  async function refreshTrackingBarState() {
-    const ctx = parseExhPageContext(location.href);
+  async function refreshTrackingBarState(preloaded) {
+    const ctx = preloaded && preloaded.context
+      ? preloaded.context
+      : parseExhPageContext(location.href);
     const bar = document.getElementById('exc-tracking-bar');
     const btn = document.getElementById('exc-save-tracking');
     const status = document.getElementById('exc-track-status');
@@ -11241,8 +11754,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const meta = document.getElementById('exc-track-meta');
     if (!ctx || !ctx.trackable || !bar || !btn) return;
 
-    const rec =
-      typeof findTrackingForContext === 'function'
+    const rec = preloaded && preloaded.resolved
+      ? preloaded.record || null
+      : typeof findTrackingForContext === 'function'
         ? await findTrackingForContext(ctx)
         : await getTrackingBySignature(ctx.query_signature);
     const pageState =
@@ -11459,23 +11973,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
   }
 
-  async function enhanceListPage() {
-    bindListLiveRefresh();
-    injectTrackingBar();
-    const items = queryListItems();
-    const enhanced = [];
-    let n = 0;
-    for (const el of items) {
-      const r = await enhanceListItem(el);
-      if (r) enhanced.push(r);
-      n++;
-      if (n % 10 === 0) await new Promise((r) => setTimeout(r, 0));
-    }
-    applyWorkFold(enhanced);
-    tryConsumeBreakpointScroll();
-    return enhanced.length;
-  }
-
   /**
    * 把画廊增强面板放到封面/信息浮动块之后（与 #gleft #gmid #gright 同级）。
    */
@@ -11603,39 +12100,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return rec;
   }
 
-  /** 列表页回前台时重绘已点/断点/徽章 */
-  let listLiveRefreshTimer = null;
-  function scheduleListLiveRefresh(reason) {
-    if (listLiveRefreshTimer) clearTimeout(listLiveRefreshTimer);
-    listLiveRefreshTimer = setTimeout(() => {
-      listLiveRefreshTimer = null;
-      try {
-        const kind = detectPageKind();
-        if (kind === 'gallery' || kind === 'image') return;
-        document.querySelectorAll('.exc-gl-item').forEach((el) => {
-          el.dataset.excEnhanced = '';
-        });
-        enhanceListPage().catch(() => {});
-        if (typeof refreshTrackingBarState === 'function') {
-          void refreshTrackingBarState();
-        }
-        if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
-      } catch (e) {
-        console.warn('[ExC] list live refresh', reason, e);
-      }
-    }, 200);
-  }
-
-  function bindListLiveRefresh() {
-    if (window.__excListLiveBound) return;
-    window.__excListLiveBound = true;
-    window.addEventListener('pageshow', () => scheduleListLiveRefresh('pageshow'));
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') scheduleListLiveRefresh('visible');
-    });
-    window.addEventListener('focus', () => scheduleListLiveRefresh('focus'));
-  }
-
   /** 兄弟版本缺体积/时间/码级时 gdata 补全 */
   async function enrichSiblingEditionsMeta(siblings) {
     const list = (siblings || []).filter(Boolean);
@@ -11708,8 +12172,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   /** 按标题搜相关上传并入 Work；同 work 5 分钟内最多一次 */
-  async function autoImportRelatedOnlineEditions(edition) {
+  async function autoImportRelatedOnlineEditions(edition, options) {
     if (!edition || !edition.work_id) return;
+    options = options || {};
     const key = 'exc_rel_imp_' + edition.work_id;
     let skipSearch = false;
     try {
@@ -11727,7 +12192,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           minSim: 0.68,
         });
       }
-      const sibs = await listEditionsByWork(edition.work_id);
+      const sibs = r && r.imported > 0
+        ? await listEditionsByWork(edition.work_id)
+        : Array.isArray(options.siblings)
+          ? options.siblings
+          : await listEditionsByWork(edition.work_id);
       const filled = await enrichSiblingEditionsMeta(sibs);
       if ((r && r.imported > 0) || filled > 0) {
         await enhanceGalleryPage({ skipRelatedImport: true });
@@ -11752,9 +12221,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     } catch (e) {
       console.warn('[ExC] auto bp', e);
     }
-    const work = await idbGet(STORE_WORKS, edition.work_id);
-    const lib = await resolveLibraryState(edition);
-    let siblings = await listEditionsByWork(edition.work_id);
+    const [storageSnapshot, prog] = await Promise.all([
+      loadLibraryStorageSnapshot(),
+      getProgress(edition.work_id),
+    ]);
+    const work = storageSnapshot.worksById.get(edition.work_id) || null;
+    const lib = await resolveLibraryState(edition, storageSnapshot);
+    let siblings = storageSnapshot.editionsByWork.get(edition.work_id) || [];
     // 已有兄弟但缺体积/时间：进页就补一轮（不依赖搜索）
     if (opts.skipRelatedImport && siblings && siblings.length) {
       try {
@@ -11762,7 +12235,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         siblings = await listEditionsByWork(edition.work_id);
       } catch (_) { /* ignore */ }
     }
-    const prog = await getProgress(edition.work_id);
 
     let panel = document.getElementById('exc-gallery-panel');
     if (!panel) {
@@ -11951,7 +12423,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     // 后台自动搜相关线上版本（同 work 5 分钟内最多一次）
     if (!opts.skipRelatedImport) {
-      void autoImportRelatedOnlineEditions(edition);
+      void autoImportRelatedOnlineEditions(edition, { siblings });
     }
     return edition;
   }
@@ -11994,37 +12466,259 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
   }
 
+  const listItemRuntimeState = new WeakMap();
+  let listEnhancementQueue = Promise.resolve();
+
+  async function loadListTrackingRecord(pageContext) {
+    if (!pageContext || !pageContext.trackable) return null;
+    try {
+      return typeof findTrackingForContext === 'function'
+        ? await findTrackingForContext(pageContext)
+        : await getTrackingBySignature(pageContext.query_signature);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function getCurrentListRuntimeItems() {
+    return queryListItems()
+      .map((el) => listItemRuntimeState.get(el))
+      .filter(Boolean);
+  }
+
+  async function enhanceListPageNow(options) {
+    const opts = options || {};
+    bindListLiveRefresh();
+    const allItems = Array.from(opts.items || queryListItems()).filter(
+      (el) => el && el.isConnected !== false
+    );
+    const entries = [];
+    for (const el of allItems) {
+      if (el.dataset.excEnhanced === '1') continue;
+      const partial = parseListCard(el);
+      if (partial && partial.gid) entries.push({ el, partial });
+    }
+
+    if (!entries.length) {
+      if (!document.getElementById('exc-tracking-bar')) injectTrackingBar();
+      if (opts.reapplyFold) applyWorkFold(getCurrentListRuntimeItems());
+      return 0;
+    }
+
+    injectTrackingBar();
+    let prepared = null;
+    try {
+      prepared = await upsertListEditions(entries.map((entry) => entry.partial));
+    } catch (error) {
+      console.warn('[ExC] batch list storage', error);
+    }
+
+    const pageContext = parseExhPageContext(location.href);
+    const trackingRecord = await loadListTrackingRecord(pageContext);
+    const seenGids = loadSeenGids();
+    const enhanced = [];
+
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index];
+      let edition = prepared && prepared.editions[index];
+      let storageSnapshot = prepared && prepared.snapshot;
+      let work;
+      if (!edition) {
+        try {
+          edition = await upsertEdition(entry.partial);
+          work = edition.work_id ? await idbGet(STORE_WORKS, edition.work_id) : null;
+          storageSnapshot = null;
+        } catch (error) {
+          console.warn('[ExC] upsert list edition', error);
+          continue;
+        }
+      } else {
+        work = storageSnapshot.worksById.get(edition.work_id) || null;
+      }
+      let result = null;
+      try {
+        result = await enhanceListItem(entry.el, {
+          partial: entry.partial,
+          edition,
+          work,
+          storageSnapshot,
+          seenGids,
+          pageContext,
+          trackingRecord,
+          trackingResolved: true,
+        });
+      } catch (error) {
+        delete entry.el.dataset.excEnhanced;
+        console.warn('[ExC] render list edition', error);
+      }
+      if (result) {
+        enhanced.push(result);
+        listItemRuntimeState.set(entry.el, result);
+      }
+      if ((index + 1) % 10 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    applyWorkFold(getCurrentListRuntimeItems());
+    tryConsumeBreakpointScroll();
+    return enhanced.length;
+  }
+
+  function enhanceListPage(options) {
+    const run = () => enhanceListPageNow(options);
+    const pending = listEnhancementQueue.then(run, run);
+    listEnhancementQueue = pending.catch(() => {});
+    return pending;
+  }
+
+  function applyListVolatileState(seenGids, trackingRecord) {
+    document.querySelectorAll('.exc-gl-item').forEach((el) => {
+      const gid = String(el.dataset.excGid || '');
+      el.classList.toggle('is-exc-seen', !!(gid && seenGids && seenGids[gid]));
+      const isBreakpoint = !!(
+        gid &&
+        trackingRecord &&
+        String(trackingRecord.breakpoint_gid || '') === gid
+      );
+      el.classList.toggle('is-exc-breakpoint', isBreakpoint);
+      const breakpointButton = el.querySelector('[data-exc-act="breakpoint"]');
+      if (breakpointButton) {
+        breakpointButton.classList.toggle('is-on', isBreakpoint);
+        breakpointButton.classList.toggle('is-bp', isBreakpoint);
+      }
+      if (trackingRecord && trackingRecord.id) {
+        el.dataset.excTrackId = String(trackingRecord.id);
+        if (trackingRecord.last_page != null) {
+          el.dataset.excTrackLastPage = String(trackingRecord.last_page);
+        }
+      } else {
+        delete el.dataset.excTrackId;
+        delete el.dataset.excTrackLastPage;
+      }
+    });
+  }
+
+  async function refreshListVolatileState() {
+    const kind = detectPageKind();
+    if (kind === 'gallery' || kind === 'image') return;
+    const pageContext = parseExhPageContext(location.href);
+    const trackingRecord = await loadListTrackingRecord(pageContext);
+    applyListVolatileState(loadSeenGids(), trackingRecord);
+    if (typeof refreshTrackingBarState === 'function') {
+      await refreshTrackingBarState({
+        context: pageContext,
+        record: trackingRecord,
+        resolved: true,
+      });
+    }
+  }
+
+  let listLiveRefreshTimer = null;
+  function scheduleListLiveRefresh(reason) {
+    if (listLiveRefreshTimer) clearTimeout(listLiveRefreshTimer);
+    listLiveRefreshTimer = setTimeout(() => {
+      listLiveRefreshTimer = null;
+      refreshListVolatileState().catch((error) => {
+        console.warn('[ExC] list live refresh', reason, error);
+      });
+    }, 200);
+  }
+
+  function bindListLiveRefresh() {
+    if (window.__excListLiveBound) return;
+    window.__excListLiveBound = true;
+    window.addEventListener('pageshow', () => scheduleListLiveRefresh('pageshow'));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') scheduleListLiveRefresh('visible');
+    });
+    window.addEventListener('focus', () => scheduleListLiveRefresh('focus'));
+  }
+
   function observeListMutations() {
-    // 只观察列表本体，避开 #nb / 追更条自身，减少闪烁
-    const root =
+    const listRoot =
       document.querySelector('table.itg') ||
       document.querySelector('.itg') ||
       document.getElementById('gdt') ||
       document.getElementById('ido') ||
       document.body;
+    const observerRoot =
+      listRoot === document.body ? listRoot : listRoot.parentElement || listRoot;
+    const changedRoots = new Set();
+    let reapplyFold = false;
     let timer = null;
-    const mo = new MutationObserver((mutations) => {
-      // 忽略追更条内部变更
-      let relevant = false;
-      for (const m of mutations) {
-        const t = m.target;
-        if (t && t.closest && t.closest('#exc-tracking-bar, #jlc-wb, #jlc-wb-fab, #exc-hover-preview')) {
+    const runtimeUiSelector =
+      '#exc-tracking-bar, #jlc-wb, #jlc-wb-fab, #exc-hover-preview, ' +
+      '.exc-badge-container, .exc-tag-stream, .exc-tool-bar, .exc-enhance-host';
+    const isRuntimeUiNode = (node) =>
+      !!(
+        node &&
+        node.nodeType === 1 &&
+        ((node.matches && node.matches(runtimeUiSelector)) ||
+          (node.closest && node.closest(runtimeUiSelector)))
+      );
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        const target = mutation.target;
+        if (
+          target &&
+          target.closest &&
+          target.closest(runtimeUiSelector)
+        ) {
           continue;
         }
-        relevant = true;
-        break;
+        if (
+          mutation.removedNodes &&
+          Array.from(mutation.removedNodes).some((node) => !isRuntimeUiNode(node))
+        ) {
+          reapplyFold = true;
+        }
+        mutation.addedNodes.forEach((node) => {
+          if (node && node.nodeType === 1 && !isRuntimeUiNode(node)) changedRoots.add(node);
+        });
       }
-      if (!relevant) return;
+      if (!changedRoots.size && !reapplyFold) return;
       clearTimeout(timer);
       timer = setTimeout(() => {
-        enhanceListPage().catch((e) => console.warn('[ExC] list enhance', e));
+        const roots = Array.from(changedRoots);
+        changedRoots.clear();
+        const shouldReapplyFold = reapplyFold;
+        reapplyFold = false;
+        const candidates = queryListItems().filter((item) =>
+          roots.some((changed) =>
+            changed === item || changed.contains(item) || item.contains(changed)
+          )
+        );
+        enhanceListPage({ items: candidates, reapplyFold: shouldReapplyFold }).catch((error) => {
+          console.warn('[ExC] list enhance', error);
+        });
       }, 400);
     });
-    mo.observe(root, { childList: true, subtree: true });
+    observer.observe(observerRoot, { childList: true, subtree: true });
   }
   let wbSession = null;
   /** 主动检查更新运行态 */
   let trackingCheckRuntime = null;
+  let trackingListPaintId = 0;
+  let trackingListPaintTimer = null;
+  const TRACKING_QUERY_DEBOUNCE_MS = 180;
+
+  function cancelScheduledTrackingListPaint() {
+    if (!trackingListPaintTimer) return;
+    clearTimeout(trackingListPaintTimer);
+    trackingListPaintTimer = null;
+  }
+
+  function invalidateTrackingListPaint() {
+    cancelScheduledTrackingListPaint();
+    trackingListPaintId += 1;
+  }
+
+  function scheduleTrackingListPaint() {
+    invalidateTrackingListPaint();
+    trackingListPaintTimer = setTimeout(() => {
+      trackingListPaintTimer = null;
+      void paintTrackingList();
+    }, TRACKING_QUERY_DEBOUNCE_MS);
+  }
 
   function ensureCreamuSync() {
     if (window.__creamuWdExh) return window.__creamuWdExh;
@@ -12231,6 +12925,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   function activateNav(nav) {
+    if (nav !== 'tracking') invalidateTrackingListPaint();
     const shell = document.getElementById('jlc-wb');
     if (!shell) return;
     shell.querySelectorAll('.jlc-wb-nav button').forEach((b) => {
@@ -12615,6 +13310,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           showToast('工作台内容渲染失败（面板应已打开）: ' + ((e && e.message) || e));
         });
     } else {
+      invalidateTrackingListPaint();
       forceWorkbenchHidden(wb);
       saveSession(wbSession);
       console.info('[ExC] workbench close');
@@ -12725,6 +13421,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   async function renderTrackingPage() {
+    invalidateTrackingListPaint();
     const root = document.getElementById('exc-wb-tracking-root');
     if (!root) return;
     const query = compactText(wbSession.trackingQuery || '');
@@ -12777,7 +13474,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     document.getElementById('exc-trk-q').oninput = (e) => {
       wbSession.trackingQuery = e.target.value;
       saveSession(wbSession);
-      paintTrackingList();
+      scheduleTrackingListPaint();
     };
     document.getElementById('exc-trk-group').onchange = (e) => {
       wbSession.trackingGroup = e.target.value;
@@ -13091,11 +13788,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   async function paintTrackingList() {
+    cancelScheduledTrackingListPaint();
+    const paintId = ++trackingListPaintId;
     const host = document.getElementById('jlc-wb-list-scroll');
     if (!host) return;
-    let list = await listTrackingSearches();
     const q = compactText(wbSession.trackingQuery || '').toLowerCase();
     const gf = wbSession.trackingGroup || 'all';
+    const isCurrentPaint = () =>
+      paintId === trackingListPaintId &&
+      host.isConnected &&
+      document.getElementById('jlc-wb-list-scroll') === host;
+    let list = await listTrackingSearches();
+    if (!isCurrentPaint()) return;
     if (gf === 'none') {
       list = list.filter((r) => !compactText(r.custom_folder || ''));
     } else if (gf.indexOf('uf:') === 0) {
@@ -13120,8 +13824,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     // 旧记录可能没有发布时间：DOM / editions / gdata 批量回填
     try {
-      await enrichTrackingListPosted(list);
+      await enrichTrackingListPosted(list, { shouldContinue: isCurrentPaint });
     } catch (_) { /* ignore */ }
+    if (!isCurrentPaint()) return;
 
     if (!(trackingCheckRuntime && trackingCheckRuntime.active)) {
       const pending = list.filter((r) =>
@@ -13435,21 +14140,25 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   async function paintWorksList(tab) {
     const host = document.getElementById('jlc-wb-works-scroll');
     if (!host) return;
+    const storageSnapshot = await loadLibraryStorageSnapshot();
 
     // LRR 在库：直接列档案（同步后即有），不依赖是否点过画廊
     if (tab === 'lrr') {
-      await paintLrrLibraryList(host);
+      await paintLrrLibraryList(host, storageSnapshot);
       return;
     }
 
     let works = [];
-    if (tab === 'blocked') works = await listBlockedWorks();
+    if (tab === 'blocked') works = await listBlockedWorks(storageSnapshot);
     else if (tab === 'better') {
-      const all = await listAllWorks();
+      const all = await listAllWorks(storageSnapshot);
       for (const w of all) {
-        const eds = await listEditionsByWork(w.work_id);
+        const eds = storageSnapshot.editionsByWork.get(w.work_id) || [];
         if (!eds.length) continue;
-        const lib = await resolveLibraryState(Object.assign({}, eds[0], { work_id: w.work_id }));
+        const lib = await resolveLibraryState(
+          Object.assign({}, eds[0], { work_id: w.work_id }),
+          storageSnapshot
+        );
         if (lib.has_better_remote) works.push(Object.assign({}, w, { _lib: lib }));
       }
     }
@@ -13462,7 +14171,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
     const chunks = [];
     for (const w of works.slice(0, 80)) {
-      const eds = await listEditionsByWork(w.work_id);
+      const eds = storageSnapshot.editionsByWork.get(w.work_id) || [];
       const best = pickBestEdition(eds, config);
       const title = w.title_raw || (best && best.title_raw) || w.work_id;
       const url = best ? best.url || buildGalleryUrl(location.origin, best.gid, best.token) : '';
@@ -13495,8 +14204,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     };
   }
 
-  async function paintLrrLibraryList(host) {
-    const entries = typeof listLibraryArchiveEntries === 'function' ? await listLibraryArchiveEntries() : [];
+  async function paintLrrLibraryList(host, storageSnapshot) {
+    const entries = typeof listLibraryArchiveEntries === 'function'
+      ? await listLibraryArchiveEntries(storageSnapshot)
+      : [];
     const total = entries.length;
     setFooterSummary((total ? total + ' 本' : '无') + ' · LRR 档案');
     if (!total) {

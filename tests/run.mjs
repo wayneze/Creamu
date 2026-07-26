@@ -16,6 +16,12 @@ const files = [
   'tests/jlc/meta-fetching.mjs',
   'tests/jlc/meta-scheduling.mjs',
   'tests/jlc/workbench-navigation.mjs',
+  'tests/scout/page-runtime.mjs',
+  'tests/scout/lifecycle.mjs',
+  'tests/scout/preview-runtime.mjs',
+  'tests/scout/list-enhancements.mjs',
+  'tests/scout/detail-enhancements.mjs',
+  'tests/scout/workbench-pages.mjs',
   'packages/scout-commander/scripts/test-core.mjs',
 ];
 

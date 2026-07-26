@@ -14,6 +14,158 @@ let failed = 0;
 const MAX_BATCH_TRANSACTIONS = 16;
 const MAX_STARTUP_TRACKING_TRANSACTIONS = 4;
 const MAX_INITIAL_META_REQUESTS = 24;
+const SCOUT_THEME_FIXTURE = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+  + '<title>Scout theme fixture</title></head><body><main>Scout</main></body></html>';
+const SCOUT_THEME_CASES = [
+  {
+    host: 'www.xvideos.com',
+    className: 'creamu-site-xvideos',
+    accent: 'rgb(229, 72, 64)',
+    dark: 'rgb(158, 42, 36)',
+    nativeInput: 'rgb(34, 24, 26)',
+  },
+  {
+    host: 'www.xnxx.com',
+    className: 'creamu-site-xnxx',
+    accent: 'rgb(46, 112, 229)',
+    dark: 'rgb(26, 63, 150)',
+    nativeInput: 'rgb(24, 30, 42)',
+  },
+  {
+    host: 'www.eporner.com',
+    className: 'creamu-site-eporner',
+    accent: 'rgb(46, 168, 84)',
+    dark: 'rgb(24, 107, 52)',
+    nativeInput: 'rgb(22, 30, 24)',
+  },
+];
+const SCOUT_WORKBENCH_FIXTURE_DATA = {
+  scout_combo_tokens: ['documentary', 'city walk'],
+  creamu_scout_config: {
+    webdav_enabled: false,
+    webdav_url: 'https://dav.example.test/',
+    webdav_user: 'tester@example.test',
+    webdav_password: 'app-password',
+    webdav_path: '/Creamu',
+    webdav_auto: false,
+    webdav_conflict: 'ask',
+    cream_site_theme: true,
+    open_videos_new_tab: true,
+    block_site_auto_preview: true,
+    combo_join: 'and',
+  },
+  creamu_scout_lexicon_types: ['Topic', 'Scene', 'Unsorted'],
+  creamu_scout_lexicon_terms: [
+    {
+      id: 'term-documentary',
+      text: 'documentary',
+      zh: 'Documentary',
+      type: 'Topic',
+      status: 'confirmed',
+      heat: 8,
+      use: 3,
+      good: 2,
+      bad: 0,
+      loved: true,
+      updated_at: '2026-06-15T08:30:00.000Z',
+    },
+    {
+      id: 'term-city-walk',
+      text: 'city walk',
+      zh: '',
+      type: 'Scene',
+      status: 'unreviewed',
+      heat: 4,
+      use: 1,
+      good: 0,
+      bad: 0,
+      loved: false,
+      updated_at: '2026-06-15T08:30:00.000Z',
+    },
+    {
+      id: 'term-night',
+      text: 'night',
+      zh: 'Night',
+      type: 'Scene',
+      status: 'unreviewed',
+      heat: 2,
+      use: 0,
+      good: 0,
+      bad: 0,
+      loved: false,
+      updated_at: '2026-06-15T08:30:00.000Z',
+    },
+  ],
+  creamu_scout_publishers: [
+    { id: 'publisher-north', name: 'Studio North', site: 'xvideos', status: 'loved', note: 'Regular updates' },
+    { id: 'publisher-south', name: 'Channel South', site: 'xnxx', status: 'blocked', note: 'Repeated clips' },
+  ],
+  creamu_scout_works: [
+    {
+      id: 'xvideos|alpha001',
+      site: 'xvideos',
+      videoId: 'alpha001',
+      title: 'Documentary City Walk',
+      url: 'https://www.xvideos.com/video.alpha001/documentary-city-walk',
+      thumb: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+      uploader: 'Studio North',
+      tags: ['documentary', 'city walk', 'night'],
+      updated_at: '2026-06-15T08:30:00.000Z',
+    },
+  ],
+  creamu_scout_tracks: [
+    {
+      id: 'track-xvideos',
+      site: 'xvideos',
+      query: 'documentary city',
+      label: 'Documentary City',
+      url: 'https://www.xvideos.com/?k=documentary+city',
+      last_seen_item: 'alpha001',
+      last_seen_page: 3,
+      updated_at: '2026-06-15T08:30:00.000Z',
+    },
+    {
+      id: 'track-xnxx',
+      site: 'xnxx',
+      query: 'Documentary AND City',
+      label: 'Documentary City',
+      url: 'https://www.xnxx.com/search/documentary+city',
+      last_seen_item: '',
+      last_seen_page: 2,
+      updated_at: '2026-06-15T08:30:00.000Z',
+    },
+  ],
+  creamu_scout_block_list: [
+    { id: 'block-spoiler', text: 'spoiler', zh: '', reason: 'Preview text', mode: 'hide', match: 'word', scope: 'both' },
+    { id: 'block-clickbait', text: 'clickbait', zh: '', reason: 'Noisy title', mode: 'dim', match: 'sub', scope: 'title' },
+  ],
+};
+const SCOUT_DETAIL_FIXTURE_DATA = {
+  ...SCOUT_WORKBENCH_FIXTURE_DATA,
+  creamu_scout_lexicon_terms: SCOUT_WORKBENCH_FIXTURE_DATA.creamu_scout_lexicon_terms.slice(0, 2),
+  creamu_scout_publishers: [],
+  creamu_scout_works: [],
+  creamu_scout_tracks: [],
+  creamu_scout_block_list: SCOUT_WORKBENCH_FIXTURE_DATA.creamu_scout_block_list.slice(0, 1),
+};
+const SCOUT_TRACKING_FIXTURE_DATA = {
+  ...SCOUT_WORKBENCH_FIXTURE_DATA,
+  creamu_scout_tracks: [
+    {
+      ...SCOUT_WORKBENCH_FIXTURE_DATA.creamu_scout_tracks[0],
+      last_seen_page: 1,
+    },
+  ],
+};
+const SCOUT_LIST_FLOW_TERM = {
+  id: 'sample-term',
+  text: 'sample',
+  zh: 'Sample',
+  type: 'topic',
+  status: 'confirmed',
+  heat: 1,
+  use: 0,
+};
 
 function createJlcStressFixture(count) {
   const cards = Array.from({ length: count }, (_, index) => {
@@ -114,6 +266,242 @@ async function waitJlcListDecorated(page, expected = 1, timeout = 25000) {
   await waitWorkbenchClosed(page, timeout);
 }
 
+async function assertScoutWorkbenchStyles(page, expected) {
+  const style = await page.evaluate(() => {
+    const panel = document.getElementById('jlc-wb');
+    if (!panel) throw new Error('Scout workbench is missing');
+
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;left:-10000px;top:0;';
+    probe.innerHTML = `
+      <div class="jlc-wb-nav">
+        <button type="button">Idle</button>
+        <button type="button" class="active">Active</button>
+      </div>
+      <button type="button" class="jlc-wb-btn primary">Primary</button>
+      <button type="button" class="jlc-wb-btn ghost">Ghost</button>
+      <button type="button" class="jlc-wb-btn danger">Danger</button>
+      <input type="text" class="jlc-wb-search" value="input">
+      <div class="stat-box"><div class="stat-item"><b>1</b><span>Total</span></div></div>
+      <span data-dark-token style="background-color:var(--creamu-wb-accent-dark)"></span>
+    `;
+    panel.appendChild(probe);
+    const nativeInput = document.createElement('input');
+    nativeInput.type = 'text';
+    document.body.appendChild(nativeInput);
+    const read = (selector) => getComputedStyle(probe.querySelector(selector));
+    try {
+      const idleNav = read('.jlc-wb-nav button:not(.active)');
+      const activeNav = read('.jlc-wb-nav button.active');
+      const primary = read('.jlc-wb-btn.primary');
+      const ghost = read('.jlc-wb-btn.ghost');
+      const danger = read('.jlc-wb-btn.danger');
+      const input = read('.jlc-wb-search');
+      const nativeInputStyle = getComputedStyle(nativeInput);
+      const stat = read('.stat-box');
+      const statValue = read('.stat-item b');
+      return {
+        bodyClasses: [...document.body.classList],
+        accent: activeNav.backgroundColor,
+        dark: read('[data-dark-token]').backgroundColor,
+        idleNav: [idleNav.backgroundColor, idleNav.color],
+        activeNav: [activeNav.backgroundColor, activeNav.color],
+        primary: [primary.backgroundColor, primary.color],
+        ghost: [ghost.backgroundColor, ghost.color],
+        danger: [danger.backgroundColor, danger.color],
+        input: [input.backgroundColor, input.color, input.colorScheme],
+        nativeInput: [
+          nativeInputStyle.backgroundColor,
+          nativeInputStyle.color,
+          nativeInputStyle.colorScheme,
+        ],
+        stat: [stat.backgroundColor, stat.borderRadius, statValue.color],
+      };
+    } finally {
+      nativeInput.remove();
+      probe.remove();
+    }
+  });
+
+  const { bodyClasses, ...computedStyles } = style;
+  assert.ok(bodyClasses.includes(expected.className), 'expected Scout site class');
+  assert.deepEqual(computedStyles, {
+    accent: expected.accent,
+    dark: expected.dark,
+    idleNav: ['rgb(239, 228, 210)', 'rgb(138, 111, 85)'],
+    activeNav: [expected.accent, 'rgb(255, 255, 255)'],
+    primary: [expected.accent, 'rgb(255, 255, 255)'],
+    ghost: ['rgb(255, 250, 242)', 'rgb(90, 64, 48)'],
+    danger: ['rgb(243, 213, 208)', 'rgb(138, 58, 50)'],
+    input: ['rgb(255, 250, 243)', 'rgb(74, 55, 40)', 'light'],
+    nativeInput: [expected.nativeInput, 'rgb(232, 234, 239)', 'dark'],
+    stat: ['rgb(255, 253, 248)', '14px', expected.accent],
+  });
+}
+
+async function openScoutTab(page, tab) {
+  await page.locator(`#jlc-wb .jlc-wb-nav button[data-tab="${tab}"]`).click();
+  await page.locator(`[data-jlc-wb-page="${tab}"]:not([hidden])`).waitFor();
+}
+
+async function openScoutSettingsTab(page, tab) {
+  const drawer = page.locator('#jlc-wb-settings');
+  if (!await drawer.evaluate((element) => element.classList.contains('is-open'))) {
+    await page.locator('#scout-wb-settings-btn').click();
+    await drawer.locator('.jlc-wb-settings-panel').waitFor();
+  }
+  await drawer.locator(`[data-scout-settings-tab="${tab}"]`).click();
+  await drawer.locator(`[data-scout-settings-tab="${tab}"].active`).waitFor();
+}
+
+async function assertScoutPageLayout(page, tab) {
+  const metrics = await page.evaluate((tabName) => {
+    const panel = document.getElementById('jlc-wb');
+    const target = document.querySelector(`[data-jlc-wb-page="${tabName}"]:not([hidden])`);
+    if (!panel || !target) throw new Error('Scout page is not visible: ' + tabName);
+    const panelRect = panel.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const controls = Array.from(target.querySelectorAll('input, select, button'))
+      .filter((element) => element.getClientRects().length > 0)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, right: rect.right };
+      });
+    return {
+      inlineStyles: target.querySelectorAll('[style]').length,
+      horizontalOverflow: target.scrollWidth - target.clientWidth,
+      insidePanel:
+        targetRect.left >= panelRect.left - 1 &&
+        targetRect.right <= panelRect.right + 1,
+      controlsInsidePanel: controls.every(
+        (rect) => rect.left >= panelRect.left - 1 && rect.right <= panelRect.right + 1
+      ),
+    };
+  }, tab);
+  assert.equal(metrics.inlineStyles, 0, tab + ' should not render static inline styles');
+  assert.ok(metrics.horizontalOverflow <= 1, tab + ' should not overflow horizontally');
+  assert.ok(metrics.insidePanel, tab + ' should stay inside the workbench');
+  assert.ok(metrics.controlsInsidePanel, tab + ' controls should stay inside the workbench');
+}
+
+async function assertScoutSettingsLayout(page, tab) {
+  const metrics = await page.evaluate(() => {
+    const workbench = document.getElementById('jlc-wb');
+    const drawer = document.getElementById('jlc-wb-settings');
+    const panel = drawer?.querySelector('.jlc-wb-settings-panel');
+    const nav = drawer?.querySelector('.jlc-wb-settings-nav');
+    const body = document.getElementById('scout-settings-body');
+    if (!workbench || !drawer || !panel || !nav || !body) {
+      throw new Error('Scout settings drawer is incomplete');
+    }
+    const workbenchRect = workbench.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    const controls = Array.from(body.querySelectorAll('input, select, textarea, button'))
+      .filter((element) => element.getClientRects().length > 0)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, right: rect.right };
+      });
+    return {
+      inlineStyles: body.querySelectorAll('[style]').length,
+      bodyOverflow: body.scrollWidth - body.clientWidth,
+      navOverflow: nav.scrollWidth - nav.clientWidth,
+      panelInsideWorkbench:
+        panelRect.left >= workbenchRect.left - 1 &&
+        panelRect.right <= workbenchRect.right + 1,
+      bodyInsidePanel:
+        bodyRect.left >= panelRect.left - 1 &&
+        bodyRect.right <= panelRect.right + 1,
+      controlsInsidePanel: controls.every(
+        (rect) => rect.left >= panelRect.left - 1 && rect.right <= panelRect.right + 1
+      ),
+    };
+  });
+  assert.equal(metrics.inlineStyles, 0, tab + ' settings should not render static inline styles');
+  assert.ok(metrics.bodyOverflow <= 1, tab + ' settings should not overflow horizontally');
+  assert.ok(metrics.navOverflow <= 1, 'settings navigation should not overflow horizontally');
+  assert.ok(metrics.panelInsideWorkbench, 'settings panel should stay inside the workbench');
+  assert.ok(metrics.bodyInsidePanel, 'settings body should stay inside the settings panel');
+  assert.ok(metrics.controlsInsidePanel, tab + ' settings controls should stay inside the panel');
+}
+
+async function assertNoInlinePresentation(page, selector, label) {
+  const count = await page.evaluate((rootSelector) => {
+    return Array.from(document.querySelectorAll(rootSelector)).reduce((total, root) => {
+      return total + (root.hasAttribute('style') ? 1 : 0) + root.querySelectorAll('[style]').length;
+    }, 0);
+  }, selector);
+  assert.equal(count, 0, label + ' should not render static inline styles');
+}
+
+async function assertScoutListFlowStyles(page, { mobile = false } = {}) {
+  await page.locator('.scout-lex-flow-overlay').waitFor();
+  await assertNoInlinePresentation(page, '.scout-lex-overlay-host', 'list lexicon flow');
+  const metrics = await page.evaluate(() => {
+    const flow = document.querySelector('.scout-lex-flow-overlay');
+    const chip = flow?.querySelector('.scout-lex-chip');
+    const host = flow?.parentElement;
+    const flowStyle = getComputedStyle(flow);
+    const chipStyle = getComputedStyle(chip);
+    const hostStyle = getComputedStyle(host);
+    return {
+      flow: [
+        flowStyle.display,
+        flowStyle.gap,
+        flowStyle.left,
+        flowStyle.right,
+        flowStyle.bottom,
+        flowStyle.paddingTop,
+        flowStyle.maxHeight,
+      ],
+      chip: [chipStyle.fontSize, chipStyle.paddingLeft, chipStyle.borderRadius],
+      host: [
+        host.classList.contains('scout-lex-overlay-host'),
+        host.classList.contains('scout-lex-overlay-positioned'),
+        hostStyle.position,
+        hostStyle.overflow,
+      ],
+    };
+  });
+  assert.deepEqual(metrics, {
+    flow: ['flex', '3px', '4px', '4px', '4px', mobile ? '3px' : '4px', mobile ? '36%' : '54%'],
+    chip: [mobile ? '9px' : '10px', '7px', '999px'],
+    host: [true, true, 'relative', 'hidden'],
+  });
+}
+
+async function assertVisibleElementsInsideViewport(page, selector, label) {
+  const result = await page.evaluate((targetSelector) => {
+    const visible = Array.from(document.querySelectorAll(targetSelector))
+      .filter((element) => element.getClientRects().length > 0)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, right: rect.right };
+      });
+    return {
+      count: visible.length,
+      inside: visible.every((rect) => rect.left >= -1 && rect.right <= window.innerWidth + 1),
+    };
+  }, selector);
+  assert.ok(result.count > 0, label + ' should render visible elements');
+  assert.ok(result.inside, label + ' should stay inside the viewport');
+}
+
+async function assertRenderedFixture(page, expected) {
+  const url = new URL(page.url());
+  assert.equal(url.pathname, expected.pathname, 'unexpected fixture route');
+  assert.match(await page.title(), expected.title, 'unexpected fixture title');
+  assert.ok((await page.locator('body').innerText()).trim().length > 20, 'fixture should not be blank');
+  assert.equal(
+    await page.locator(
+      '#vite-error-overlay, [data-nextjs-dialog-overlay], #webpack-dev-server-client-overlay'
+    ).count(),
+    0,
+    'fixture should not render a framework error overlay'
+  );
+}
+
 let browser;
 try {
   browser = await chromium.launch({ headless: true });
@@ -128,21 +516,7 @@ try {
     },
     async (page) => {
       await openAndCheckTitle(page, /Scout/i);
-      const themeColors = await page.evaluate(() => {
-        const panel = document.getElementById('jlc-wb');
-        const probe = document.createElement('span');
-        probe.style.color = 'var(--creamu-wb-accent)';
-        probe.style.backgroundColor = 'var(--creamu-wb-accent-dark)';
-        panel.appendChild(probe);
-        const style = getComputedStyle(probe);
-        const colors = { accent: style.color, dark: style.backgroundColor };
-        probe.remove();
-        return colors;
-      });
-      assert.deepEqual(themeColors, {
-        accent: 'rgb(229, 72, 64)',
-        dark: 'rgb(158, 42, 36)',
-      });
+      await assertScoutWorkbenchStyles(page, SCOUT_THEME_CASES[0]);
       await exerciseWorkbenchGeometry(page, {
         fab: 'scoutDragBound',
         panel: 'scoutPanelResizeBound',
@@ -160,6 +534,681 @@ try {
 
       await page.locator('#scout-wb-close-btn').click();
       await waitWorkbenchClosed(page);
+
+      await page.waitForFunction(() => (
+        !!window.__creamuScoutBlockSitePreviewRuntime &&
+        !!window.__creamuScoutListPreviewRuntime &&
+        window.__creamuScoutClickTrackTarget === document.body &&
+        !window.__creamuScoutSeekGestureRuntime
+      ));
+      await page.evaluate(() => history.pushState({}, '', '/video.alpha001/sample-title-alpha'));
+      await page.waitForFunction(() => (
+        !window.__creamuScoutBlockSitePreviewRuntime &&
+        !window.__creamuScoutListPreviewRuntime &&
+        !window.__creamuScoutClickTrackTarget &&
+        !!window.__creamuScoutSeekGestureRuntime
+      ));
+      await page.evaluate(() => history.pushState({}, '', '/?k=sample'));
+      await page.waitForFunction(() => (
+        !!window.__creamuScoutBlockSitePreviewRuntime &&
+        !!window.__creamuScoutListPreviewRuntime &&
+        window.__creamuScoutClickTrackTarget === document.body &&
+        !window.__creamuScoutSeekGestureRuntime
+      ));
+    }
+  );
+
+  await runCase(
+    'Scout: workbench renders pages lazily and reuses stable tabs',
+    {
+      host: 'www.xvideos.com',
+      fixtureFile: 'xvideos-list.html',
+      scriptPath: PATHS.scoutDist,
+      gmValues: SCOUT_WORKBENCH_FIXTURE_DATA,
+      beforeScript: (page) => page.evaluate(() => {
+        history.replaceState({}, '', '/?k=lazy+render');
+        const nativeGetValue = window.GM_getValue;
+        const nativeSetValue = window.GM_setValue;
+        window.__testWorkbenchGmReads = {};
+        window.__testWorkbenchGmWrites = {};
+        window.__testResetWorkbenchGmReads = () => {
+          window.__testWorkbenchGmReads = {};
+          window.__testWorkbenchGmWrites = {};
+        };
+        window.GM_getValue = (key, ...args) => {
+          const reads = window.__testWorkbenchGmReads;
+          reads[key] = (reads[key] || 0) + 1;
+          return nativeGetValue(key, ...args);
+        };
+        window.GM_setValue = (key, value) => {
+          const writes = window.__testWorkbenchGmWrites;
+          writes[key] = (writes[key] || 0) + 1;
+          return nativeSetValue(key, value);
+        };
+      }),
+    },
+    async (page) => {
+      await waitFab(page);
+      const startup = await page.evaluate(() => ({
+        autoTrackReads: window.__testWorkbenchGmReads.scout_combo_auto_track || 0,
+        comboChildren: document.querySelector('[data-jlc-wb-page="combo"]')?.childElementCount || 0,
+        comboTokenReads: window.__testWorkbenchGmReads.scout_combo_tokens || 0,
+        lexiconTypeReads: window.__testWorkbenchGmReads.creamu_scout_lexicon_types || 0,
+      }));
+      assert.deepEqual(startup, {
+        autoTrackReads: 0,
+        comboChildren: 0,
+        comboTokenReads: 0,
+        lexiconTypeReads: 0,
+      });
+
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await page.locator('#scout-search-track-toggle').click();
+      await page.locator('#scout-search-track-toggle', { hasText: '取消' }).waitFor();
+      const hiddenAction = await page.evaluate(() => ({
+        comboChildren: document.querySelector('[data-jlc-wb-page="combo"]')?.childElementCount || 0,
+        comboTokenReads: window.__testWorkbenchGmReads.scout_combo_tokens || 0,
+      }));
+      assert.deepEqual(hiddenAction, { comboChildren: 0, comboTokenReads: 0 });
+
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await openAndCheckTitle(page, /Scout/i);
+      const firstOpen = await page.evaluate(() => {
+        window.__testComboPageRoot = document.querySelector('[data-jlc-wb-page="combo"]')?.firstElementChild;
+        return { ...window.__testWorkbenchGmReads };
+      });
+      assert.equal(firstOpen.scout_combo_tokens, 1);
+
+      await page.locator('#scout-wb-close-btn').click();
+      await waitWorkbenchClosed(page);
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await page.locator('#jlc-wb-fab').click();
+      await waitWorkbenchOpen(page);
+      const reopened = await page.evaluate(() => ({
+        dataReads: [
+          'creamu_scout_config',
+          'creamu_scout_lexicon_terms',
+          'creamu_scout_lexicon_types',
+          'scout_combo_auto_track',
+          'scout_combo_tokens',
+        ].reduce((total, key) => total + (window.__testWorkbenchGmReads[key] || 0), 0),
+        preserved: document.querySelector('[data-jlc-wb-page="combo"]')?.firstElementChild
+          === window.__testComboPageRoot,
+      }));
+      assert.deepEqual(reopened, { dataReads: 0, preserved: true });
+
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await openScoutTab(page, 'lexicon');
+      const firstLexiconOpen = await page.evaluate(() => {
+        window.__testLexiconPageRoot = document.querySelector('[data-jlc-wb-page="lexicon"]')?.firstElementChild;
+        return { ...window.__testWorkbenchGmReads };
+      });
+      assert.equal(firstLexiconOpen.creamu_scout_lexicon_terms, 1);
+      assert.equal(firstLexiconOpen.creamu_scout_lexicon_types, 1);
+
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await openScoutTab(page, 'combo');
+      const stableCombo = await page.evaluate(() => ({
+        preserved: document.querySelector('[data-jlc-wb-page="combo"]')?.firstElementChild
+          === window.__testComboPageRoot,
+        reads: Object.values(window.__testWorkbenchGmReads).reduce((total, count) => total + count, 0),
+      }));
+      assert.deepEqual(stableCombo, { preserved: true, reads: 0 });
+
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await openScoutTab(page, 'lexicon');
+      const stableLexicon = await page.evaluate(() => ({
+        preserved: document.querySelector('[data-jlc-wb-page="lexicon"]')?.firstElementChild
+          === window.__testLexiconPageRoot,
+        reads: Object.values(window.__testWorkbenchGmReads).reduce((total, count) => total + count, 0),
+      }));
+      assert.deepEqual(stableLexicon, { preserved: true, reads: 0 });
+
+      await page.locator('[data-id="term-night"] .jlc-wb-more-btn').click();
+      await page.locator('[data-id="term-night"] .scout-edit-zh').fill('Updated Night');
+      await page.locator('[data-id="term-night"] .scout-save-btn').click();
+      await page.locator('[data-id="term-night"] .jlc-wb-item-title', { hasText: 'Updated Night' }).waitFor();
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await openScoutTab(page, 'combo');
+      const refreshedCombo = await page.evaluate(() => ({
+        changed: document.querySelector('[data-jlc-wb-page="combo"]')?.firstElementChild
+          !== window.__testComboPageRoot,
+        termReads: window.__testWorkbenchGmReads.creamu_scout_lexicon_terms || 0,
+      }));
+      assert.deepEqual(refreshedCombo, { changed: true, termReads: 1 });
+      assert.match(await page.locator('#scout-combo-pool').textContent() || '', /Updated Night/);
+
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await page.locator('#scout-combo-free-input').fill('night, portrait');
+      await page.locator('#scout-combo-add-btn').click();
+      await page.locator('[data-combo-token="portrait"]').waitFor();
+      const batchIo = await page.evaluate(() => ({
+        reads: window.__testWorkbenchGmReads.scout_combo_tokens || 0,
+        writes: window.__testWorkbenchGmWrites.scout_combo_tokens || 0,
+      }));
+      assert.deepEqual(batchIo, { reads: 2, writes: 1 });
+
+      await page.locator('#scout-wb-settings-btn').click();
+      await page.locator('#jlc-wb-settings.is-open').waitFor();
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await openScoutSettingsTab(page, 'ui');
+      const uiReads = await page.evaluate(() => ({ ...window.__testWorkbenchGmReads }));
+      assert.deepEqual(uiReads, { creamu_scout_config: 1 });
+
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await openScoutSettingsTab(page, 'backup');
+      const backupReads = await page.evaluate(() => ({ ...window.__testWorkbenchGmReads }));
+      assert.deepEqual(backupReads, {});
+
+      await page.locator('#scout-ai-export').click();
+      await page.evaluate(() => {
+        window.__testComboBeforeSettingsImport = document.querySelector(
+          '[data-jlc-wb-page="combo"]'
+        )?.firstElementChild;
+        window.__testLexiconBeforeSettingsImport = document.querySelector(
+          '[data-jlc-wb-page="lexicon"]'
+        )?.firstElementChild;
+      });
+      page.once('dialog', (dialog) => dialog.accept());
+      await page.locator('#scout-ai-import-merge').click();
+      const settingsImportRender = await page.evaluate(() => ({
+        comboRefreshed: document.querySelector('[data-jlc-wb-page="combo"]')?.firstElementChild
+          !== window.__testComboBeforeSettingsImport,
+        lexiconPreserved: document.querySelector('[data-jlc-wb-page="lexicon"]')?.firstElementChild
+          === window.__testLexiconBeforeSettingsImport,
+        blocksChildren: document.querySelector('[data-jlc-wb-page="blocks"]')?.childElementCount || 0,
+      }));
+      assert.deepEqual(settingsImportRender, {
+        comboRefreshed: true,
+        lexiconPreserved: true,
+        blocksChildren: 0,
+      });
+
+      await page.evaluate(() => window.__testResetWorkbenchGmReads());
+      await openScoutSettingsTab(page, 'sync');
+      const syncReads = await page.evaluate(() => ({ ...window.__testWorkbenchGmReads }));
+      assert.deepEqual(syncReads, {
+        creamu_scout_config: 2,
+        creamu_wd_meta_scout: 1,
+      });
+    }
+  );
+
+  await runCase(
+    'Scout: library and tracking pages share stable layout components',
+    {
+      host: 'www.xvideos.com',
+      fixtureFile: 'xvideos-list.html',
+      scriptPath: PATHS.scoutDist,
+      gmValues: SCOUT_WORKBENCH_FIXTURE_DATA,
+    },
+    async (page) => {
+      await openAndCheckTitle(page, /Scout/i);
+
+      await openScoutTab(page, 'lexicon');
+      await assertScoutPageLayout(page, 'lexicon');
+      await page.locator('#scout-lexicon-search').fill('city');
+      assert.equal(await page.locator('[data-jlc-wb-page="lexicon"] .jlc-wb-item').count(), 1);
+      await page.locator('[data-jlc-wb-page="lexicon"] .jlc-wb-more-btn').click();
+      await page.locator('[data-jlc-wb-page="lexicon"] .jlc-wb-item-edit.is-open').waitFor();
+      await page.locator('[data-jlc-wb-page="lexicon"] .scout-cancel-btn').click();
+      assert.equal(
+        await page.locator('[data-jlc-wb-page="lexicon"] .jlc-wb-item-edit.is-open').count(),
+        0
+      );
+
+      await openScoutTab(page, 'works');
+      await assertScoutPageLayout(page, 'works');
+      assert.equal(await page.locator('.scout-work-site-chip').count(), 3);
+
+      await openScoutTab(page, 'publishers');
+      await assertScoutPageLayout(page, 'publishers');
+      assert.equal(await page.locator('[data-jlc-wb-page="publishers"] .person-item').count(), 2);
+
+      await openScoutTab(page, 'tracks');
+      await assertScoutPageLayout(page, 'tracks');
+      assert.equal(await page.locator('.scout-track-group').count(), 1);
+      await page.locator('.scout-track-expand-btn').click();
+      await page.locator('.scout-track-group-sites.is-open').waitFor();
+      assert.equal(await page.locator('.scout-track-site-row').count(), 3);
+      await page.locator('.scout-track-more-btn').click();
+      await page.locator('.scout-track-edit.is-open').waitFor();
+      await page.locator('.scout-track-cancel-btn').click();
+      assert.equal(await page.locator('.scout-track-edit.is-open').count(), 0);
+
+      await openScoutTab(page, 'blocks');
+      await assertScoutPageLayout(page, 'blocks');
+      assert.equal(await page.locator('[data-jlc-wb-page="blocks"] .person-item').count(), 2);
+      await page.locator('.scout-toggle-mode-btn[data-id="block-spoiler"]').click();
+      await page.locator('.scout-toggle-mode-btn[data-id="block-spoiler"]', { hasText: '弱淡化' }).waitFor();
+      await page.locator('#scout-add-block-text').fill('trailer');
+      await page.locator('input[name="scout-add-block-mode"][value="hide"]').check();
+      await page.locator('input[name="scout-add-block-scope"][value="both"]').check();
+      await page.locator('#scout-add-block-btn').click();
+      assert.equal(await page.locator('[data-jlc-wb-page="blocks"] .person-item').count(), 3);
+    }
+  );
+
+  await runCase(
+    'Scout: combo and settings preserve state across responsive renders',
+    {
+      host: 'www.xvideos.com',
+      fixtureFile: 'xvideos-list.html',
+      scriptPath: PATHS.scoutDist,
+      gmValues: SCOUT_WORKBENCH_FIXTURE_DATA,
+    },
+    async (page) => {
+      await openAndCheckTitle(page, /Scout/i);
+
+      await openScoutTab(page, 'combo');
+      await assertScoutPageLayout(page, 'combo');
+      assert.deepEqual(
+        await page.locator('[data-combo-token]').evaluateAll(
+          (elements) => elements.map((element) => element.getAttribute('data-combo-token'))
+        ),
+        ['documentary', 'city walk']
+      );
+      assert.equal(
+        await page.locator('.scout-combo-preview-value').textContent(),
+        'documentary and city walk'
+      );
+
+      await page.locator('#scout-combo-free-input').fill('night');
+      await page.locator('#scout-combo-add-btn').click();
+      await page.locator('[data-combo-token="night"]').waitFor();
+      assert.equal(
+        await page.locator('.scout-combo-preview-value').textContent(),
+        'documentary and city walk and night'
+      );
+      await page.locator('[data-combo-token="city walk"]').click();
+      assert.equal(await page.locator('[data-combo-token="city walk"]').count(), 0);
+      assert.equal(
+        await page.locator('.scout-combo-preview-value').textContent(),
+        'documentary and night'
+      );
+      await page.locator('input[name="scout-combo-join"][value="or"]').check();
+      await page.locator('input[name="scout-combo-join"][value="or"]:checked').waitFor();
+      assert.equal(
+        await page.locator('.scout-combo-preview-value').textContent(),
+        'documentary or night'
+      );
+      await assertScoutPageLayout(page, 'combo');
+
+      await openScoutSettingsTab(page, 'overview');
+      await assertScoutSettingsLayout(page, 'overview');
+      assert.deepEqual(
+        await page.locator('#scout-settings-body .stat-item > b').allTextContents(),
+        ['3', '2', '2', '2', '1', '0']
+      );
+
+      await openScoutSettingsTab(page, 'ui');
+      await assertScoutSettingsLayout(page, 'ui');
+      assert.deepEqual(
+        await page.locator('#scout-settings-body input[type="checkbox"]').evaluateAll(
+          (elements) => elements.map((element) => element.checked)
+        ),
+        [true, true, true]
+      );
+
+      await openScoutSettingsTab(page, 'backup');
+      await assertScoutSettingsLayout(page, 'backup');
+      await page.locator('#scout-ai-export').click();
+      await page.locator('#scout-export-btn').click();
+      const exported = await page.evaluate(() => ({
+        ai: document.getElementById('scout-ai-textarea')?.value || '',
+        backup: document.getElementById('scout-backup-textarea')?.value || '',
+      }));
+      const aiPackage = JSON.parse(exported.ai);
+      const backupPackage = JSON.parse(exported.backup);
+      assert.equal(aiPackage.format, 'creamu-scout-ai');
+      assert.equal(aiPackage.terms.length, 3);
+      assert.equal(aiPackage.blocks.length, 2);
+      assert.equal(backupPackage.format, 'creamu-scout-lexicon');
+      assert.equal(backupPackage.works.length, 1);
+      assert.equal(backupPackage.publishers.length, 2);
+      assert.equal(backupPackage.tracks.length, 2);
+
+      await openScoutSettingsTab(page, 'sync');
+      await assertScoutSettingsLayout(page, 'sync');
+      assert.equal(await page.locator('#scout-wd-form').getAttribute('hidden'), '');
+      await page.locator('#scout-wd-enabled').check();
+      await page.locator('#scout-wd-form:not([hidden])').waitFor();
+      assert.equal(await page.locator('#scout-wd-url').inputValue(), 'https://dav.example.test/');
+      assert.equal(await page.locator('#scout-wd-user').inputValue(), 'tester@example.test');
+      assert.equal(await page.locator('#scout-wd-path').inputValue(), '/Creamu');
+      await assertScoutSettingsLayout(page, 'sync');
+      await page.locator('#scout-wd-enabled').uncheck();
+      await page.locator('#scout-wd-form[hidden]').waitFor({ state: 'attached' });
+      assert.equal(await page.locator('#scout-wd-form').getAttribute('hidden'), '');
+
+      await page.locator('#jlc-wb-settings-close').click();
+      await page.waitForFunction(
+        () => !document.getElementById('jlc-wb-settings')?.classList.contains('is-open')
+      );
+    }
+  );
+
+  await runCase(
+    'Scout mobile: workbench pages and settings fit the viewport',
+    {
+      host: 'www.xvideos.com',
+      fixtureFile: 'xvideos-list.html',
+      scriptPath: PATHS.scoutDist,
+      gmValues: {
+        ...SCOUT_WORKBENCH_FIXTURE_DATA,
+        creamu_scout_lexicon_terms: [
+          ...SCOUT_WORKBENCH_FIXTURE_DATA.creamu_scout_lexicon_terms,
+          SCOUT_LIST_FLOW_TERM,
+        ],
+      },
+      viewport: { width: 390, height: 844 },
+    },
+    async (page) => {
+      await assertScoutListFlowStyles(page, { mobile: true });
+      await openAndCheckTitle(page, /Scout/i);
+      for (const tab of ['combo', 'lexicon', 'works', 'publishers', 'tracks', 'blocks']) {
+        await openScoutTab(page, tab);
+        await assertScoutPageLayout(page, tab);
+      }
+      for (const tab of ['overview', 'ui', 'backup', 'sync']) {
+        await openScoutSettingsTab(page, tab);
+        await assertScoutSettingsLayout(page, tab);
+      }
+    }
+  );
+
+  await runCase(
+    'Scout detail: tag, work, and publisher actions use page components',
+    {
+      host: 'www.xvideos.com',
+      fixtureFile: 'xvideos-detail.html',
+      scriptPath: PATHS.scoutDist,
+      gmValues: SCOUT_DETAIL_FIXTURE_DATA,
+      beforeScript: (page) => page.evaluate(() => {
+        history.replaceState({}, '', '/video.alpha001/sample-documentary');
+        const nativeGetValue = window.GM_getValue;
+        const nativeSetInterval = window.setInterval.bind(window);
+        window.__testDetailGmReads = 0;
+        window.__testEightSecondIntervals = [];
+        window.GM_getValue = (...args) => {
+          window.__testDetailGmReads += 1;
+          return nativeGetValue(...args);
+        };
+        window.setInterval = (callback, delay, ...args) => {
+          if (delay === 8000) {
+            window.__testEightSecondIntervals.push(() => callback(...args));
+            return 80000 + window.__testEightSecondIntervals.length;
+          }
+          return nativeSetInterval(callback, delay, ...args);
+        };
+      }),
+    },
+    async (page) => {
+      await assertRenderedFixture(page, {
+        pathname: '/video.alpha001/sample-documentary',
+        title: /Sample Documentary Detail/,
+      });
+      await page.locator('#scout-work-fav-btn').waitFor();
+      await page.locator('.scout-pub-addon').waitFor();
+      assert.equal(await page.locator('.scout-tag-addon').count(), 4);
+      await assertNoInlinePresentation(
+        page,
+        '#scout-work-fav-bar, .scout-tag-addon, .scout-pub-addon',
+        'detail enhancements'
+      );
+
+      const componentStyles = await page.evaluate(() => {
+        const add = getComputedStyle(document.querySelector('.scout-tag-add-action'));
+        const block = getComputedStyle(document.querySelector('.scout-tag-block-action'));
+        const publisher = getComputedStyle(document.querySelector('.scout-pub-addon'));
+        const action = getComputedStyle(document.querySelector('.scout-pub-action'));
+        return {
+          tagColors: [add.color, block.color],
+          publisher: [publisher.display, publisher.gap, publisher.marginLeft, publisher.fontSize],
+          action: [action.height, action.paddingTop, action.paddingRight, action.borderRadius, action.fontSize],
+        };
+      });
+      assert.deepEqual(componentStyles, {
+        tagColors: ['rgb(143, 212, 160)', 'rgb(240, 144, 136)'],
+        publisher: ['flex', '4px', '8px', '12px'],
+        action: ['24px', '2px', '8px', '6px', '11.5px'],
+      });
+
+      const lifecycleResult = await page.evaluate(() => {
+        const callback = window.__testEightSecondIntervals?.[0];
+        const favoriteButton = document.getElementById('scout-work-fav-btn');
+        const publisherAddon = document.querySelector('.scout-pub-addon');
+        const tagAddon = document.querySelector('.scout-tag-addon');
+        window.__testDetailGmReads = 0;
+        callback?.();
+        const stableReads = window.__testDetailGmReads;
+        const stableNodesPreserved =
+          document.getElementById('scout-work-fav-btn') === favoriteButton &&
+          document.querySelector('.scout-pub-addon') === publisherAddon &&
+          document.querySelector('.scout-tag-addon') === tagAddon;
+
+        const firstTag = document.querySelector('.video-tags-list a.is-keyword');
+        firstTag?.setAttribute('href', '/tags/documentary-updated');
+        window.__testDetailGmReads = 0;
+        callback?.();
+        return {
+          callbackCount: window.__testEightSecondIntervals?.length || 0,
+          changedReads: window.__testDetailGmReads,
+          stableNodesPreserved,
+          stableReads,
+        };
+      });
+      assert.deepEqual(
+        {
+          callbackCount: lifecycleResult.callbackCount,
+          stableNodesPreserved: lifecycleResult.stableNodesPreserved,
+          stableReads: lifecycleResult.stableReads,
+        },
+        { callbackCount: 1, stableNodesPreserved: true, stableReads: 0 }
+      );
+      assert.ok(lifecycleResult.changedReads > 0, 'changed detail content should refresh stored data');
+
+      await page.locator('#scout-work-fav-btn').click();
+      await page.locator('#scout-work-fav-btn.is-saved').waitFor();
+      assert.equal(await page.locator('#scout-work-fav-btn').getAttribute('aria-pressed'), 'true');
+      await page.locator('[data-scout-tag="night"] .scout-tag-add-action').click();
+      await page.locator('#scout-collect-dialog').waitFor();
+      await page.locator('#scout-collect-cancel').click();
+      await page.locator('.scout-pub-love-action').click();
+      await page.locator('.scout-pub-love-action.is-loved').waitFor();
+      assert.match(await page.locator('.scout-pub-love-action').textContent() || '', /已关注/);
+    }
+  );
+
+  await runCase(
+    'Scout detail mobile: tags and description expand inside the viewport',
+    {
+      host: 'www.xvideos.com',
+      fixtureFile: 'xvideos-detail.html',
+      scriptPath: PATHS.scoutDist,
+      gmValues: SCOUT_DETAIL_FIXTURE_DATA,
+      viewport: { width: 390, height: 844 },
+      beforeScript: (page) => page.evaluate(() => {
+        history.replaceState({}, '', '/video.alpha001/sample-documentary');
+      }),
+    },
+    async (page) => {
+      await assertRenderedFixture(page, {
+        pathname: '/video.alpha001/sample-documentary',
+        title: /Sample Documentary Detail/,
+      });
+      await page.locator('#scout-tags-toggle').waitFor();
+      await page.locator('#scout-desc-toggle').waitFor();
+      await page.locator('.video-tags-list.scout-tags-collapsed').waitFor();
+      await page.locator('.video-description.scout-desc-collapsed').waitFor();
+      await assertNoInlinePresentation(
+        page,
+        '.video-tags-list, .video-description, #scout-tags-toggle, #scout-desc-toggle, .scout-pub-addon',
+        'mobile detail enhancements'
+      );
+      await assertVisibleElementsInsideViewport(
+        page,
+        '#scout-work-fav-btn, #scout-tags-toggle, #scout-desc-toggle, .scout-pub-action',
+        'mobile detail controls'
+      );
+
+      await page.locator('#scout-tags-toggle').click();
+      await page.locator('.video-tags-list.scout-tags-expanded').waitFor();
+      assert.equal(await page.locator('#scout-tags-toggle').getAttribute('aria-expanded'), 'true');
+      await page.locator('#scout-desc-toggle').click();
+      await page.locator('.video-description.scout-desc-expanded').waitFor();
+      assert.equal(await page.locator('#scout-desc-toggle').getAttribute('aria-expanded'), 'true');
+      await assertVisibleElementsInsideViewport(
+        page,
+        '#scout-work-fav-btn, #scout-tags-toggle, #scout-desc-toggle, .scout-pub-action',
+        'expanded mobile detail controls'
+      );
+    }
+  );
+
+  await runCase(
+    'Scout tracking mobile: breakpoint bar dismisses and locates the saved item',
+    {
+      host: 'www.xvideos.com',
+      fixtureFile: 'xvideos-list.html',
+      scriptPath: PATHS.scoutDist,
+      gmValues: SCOUT_TRACKING_FIXTURE_DATA,
+      viewport: { width: 390, height: 844 },
+      beforeScript: (page) => page.evaluate(() => {
+        history.replaceState({}, '', '/?k=documentary+city');
+      }),
+    },
+    async (page) => {
+      await assertRenderedFixture(page, {
+        pathname: '/',
+        title: /site list fixture/,
+      });
+      const pagebar = page.locator('#jlc-tracking-pagebar');
+      await pagebar.waitFor({ timeout: 5000 });
+      await assertNoInlinePresentation(page, '#jlc-tracking-pagebar', 'tracking pagebar');
+      await assertVisibleElementsInsideViewport(
+        page,
+        '#jlc-tracking-pagebar, #jlc-tracking-pagebar button',
+        'tracking pagebar controls'
+      );
+      assert.match(await pagebar.textContent() || '', /本页有断点/);
+      assert.match(await page.locator('#scout-bp-jump-btn').textContent() || '', /定位/);
+
+      await page.locator('#scout-bp-close-bar-btn').click();
+      await pagebar.waitFor({ state: 'detached' });
+      await page.evaluate(() => history.pushState({}, '', '/?k=other'));
+      await page.waitForTimeout(400);
+      await page.evaluate(() => history.pushState({}, '', '/?k=documentary+city'));
+      await pagebar.waitFor({ timeout: 5000 });
+      await page.locator('#scout-bp-jump-btn').click();
+      await pagebar.waitFor({ state: 'detached' });
+      await page.locator('#video_alpha001.scout-breakpoint-highlight').waitFor();
+    }
+  );
+
+  for (const theme of SCOUT_THEME_CASES.slice(1)) {
+    await runCase(
+      'Scout: shared workbench theme on ' + theme.host,
+      {
+        host: theme.host,
+        fixtureHtml: SCOUT_THEME_FIXTURE,
+        scriptPath: PATHS.scoutDist,
+      },
+      async (page) => {
+        await openAndCheckTitle(page, /Scout/i);
+        await assertScoutWorkbenchStyles(page, theme);
+        await page.locator('#scout-wb-close-btn').click();
+        await waitWorkbenchClosed(page);
+      }
+    );
+  }
+
+  await runCase(
+    'Scout: list lifecycle refreshes mutations and skips stable polling',
+    {
+      host: 'www.xvideos.com',
+      fixtureFile: 'xvideos-list.html',
+      scriptPath: PATHS.scoutDist,
+      gmValues: {
+        creamu_scout_lexicon_terms: [SCOUT_LIST_FLOW_TERM],
+        creamu_scout_clicks: {
+          'xvideos|legacy-alpha': {
+            site: 'xvideos',
+            id: '/video.alpha001/sample-title-alpha',
+            clicked: true,
+          },
+        },
+      },
+      beforeScript: (page) => page.evaluate(() => {
+        const nativeSetInterval = window.setInterval.bind(window);
+        window.__testEightSecondIntervals = [];
+        window.__testEightSecondCallbackRuns = 0;
+        window.setInterval = (callback, delay, ...args) => {
+          if (delay === 8000) {
+            window.__testEightSecondIntervals.push(() => {
+              window.__testEightSecondCallbackRuns += 1;
+              return callback(...args);
+            });
+            return 80000 + window.__testEightSecondIntervals.length;
+          }
+          return nativeSetInterval(callback, delay, ...args);
+        };
+      }),
+    },
+    async (page) => {
+      const flow = page.locator('.scout-lex-flow-overlay');
+      await flow.waitFor();
+      await assertScoutListFlowStyles(page);
+
+      const stableResult = await page.evaluate(() => {
+        const callbacks = window.__testEightSecondIntervals || [];
+        const currentFlow = document.querySelector('.scout-lex-flow-overlay');
+        const firstChip = currentFlow?.firstElementChild || null;
+        window.__testOriginalFlowChip = firstChip;
+        callbacks[0]?.();
+        return {
+          callbackCount: callbacks.length,
+          callbackRuns: window.__testEightSecondCallbackRuns,
+          preserved: currentFlow?.firstElementChild === firstChip,
+          legacyClickMarked: document.getElementById('video_alpha001')
+            ?.classList.contains('scout-visited-item'),
+        };
+      });
+      assert.deepEqual(stableResult, {
+        callbackCount: 1,
+        callbackRuns: 1,
+        preserved: true,
+        legacyClickMarked: true,
+      });
+
+      await page.evaluate(() => {
+        const card = document.createElement('div');
+        card.id = 'video_beta002';
+        card.className = 'thumb-block';
+        card.innerHTML = '<div class="thumb-under"><p class="title">'
+          + '<a href="/video.beta002/sample-title-beta" title="Sample Title Beta">'
+          + 'Sample Title Beta</a></p></div>';
+        document.querySelector('.mozaique').appendChild(card);
+      });
+      await page.locator('#video_beta002 .scout-lex-flow-overlay').waitFor({ timeout: 2000 });
+      const changedResult = await page.evaluate(() => {
+        const card = document.getElementById('video_beta002');
+        return {
+          cards: document.querySelectorAll('.mozaique .thumb-block').length,
+          callbackRuns: window.__testEightSecondCallbackRuns,
+          enhanced: !!card.querySelector('.scout-lex-flow-overlay'),
+          clickBound: card.dataset.scoutClickBound,
+          preservedExisting: document.querySelector('.scout-lex-flow-overlay')
+            ?.firstElementChild === window.__testOriginalFlowChip,
+        };
+      });
+      assert.deepEqual(changedResult, {
+        cards: 2,
+        callbackRuns: 1,
+        enhanced: true,
+        clickBound: '1',
+        preservedExisting: true,
+      });
     }
   );
 

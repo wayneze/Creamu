@@ -5,8 +5,19 @@ import { createContext, runInContext } from 'node:vm';
 
 const root = process.cwd();
 const source = fs.readFileSync(path.join(root, 'packages/shared/creamu-workbench-css.js'), 'utf8');
-const scoutThemeSource = fs.readFileSync(
-  path.join(root, 'packages/scout-commander/src/parts/25-theme.js'),
+const scoutThemeSources = [
+  '25-theme.js',
+  '27-page-enhancement-theme.js',
+  '29-site-layout-theme.js',
+].map((filename) => ({
+  filename,
+  source: fs.readFileSync(
+    path.join(root, 'packages/scout-commander/src/parts', filename),
+    'utf8'
+  ),
+}));
+const scoutSiteThemeSource = fs.readFileSync(
+  path.join(root, 'packages/scout-commander/src/parts/26-site-theme.js'),
   'utf8'
 );
 
@@ -57,6 +68,10 @@ console.log('Shared workbench styles');
   assert.ok(css.includes('0 0 0 2px var(--creamu-wb-accent-ring)'));
   assert.ok(css.includes('background: var(--creamu-wb-accent-overlay)'));
   assert.ok(css.includes('var(--creamu-wb-border)'));
+  assert.ok(css.includes('#jlc-wb .jlc-wb-view-block {'));
+  assert.ok(css.includes('#jlc-wb .jlc-wb-view-title {'));
+  assert.ok(css.includes('#jlc-wb .stat-box {'));
+  assert.ok(css.includes('#jlc-wb .stat-item b {'));
   assert.match(css, /#jlc-wb\s*\{[^}]*box-sizing:\s*border-box/s);
   assert.ok(css.includes('#jlc-wb-fab.is-panel-open'));
   assert.ok(!css.includes('#jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-title'));
@@ -120,14 +135,72 @@ console.log('Shared workbench styles');
 
 {
   const context = createContext({});
-  runInContext(scoutThemeSource, context, { filename: '25-theme.js' });
+  scoutThemeSources.forEach(({ filename, source: themeSource }) => {
+    runInContext(themeSource, context, { filename });
+  });
   const css = context.getScoutThemeCss();
+  const workbenchCss = context.getScoutWorkbenchThemeCss();
+  const pageEnhancementCss = context.getScoutPageEnhancementThemeCss();
+  const siteLayoutCss = context.getScoutSiteLayoutThemeCss();
+  assert.equal(css, workbenchCss + pageEnhancementCss + siteLayoutCss);
+  assert.ok(workbenchCss.includes('#jlc-wb .scout-combo-dock {'));
+  assert.ok(pageEnhancementCss.includes('.scout-breakpoint-highlight {'));
+  assert.ok(pageEnhancementCss.includes('.scout-work-fav-bar {'));
+  assert.ok(siteLayoutCss.includes('body.creamu-site-xvideos .mozaique .thumb-block'));
+  assert.ok(siteLayoutCss.includes('@media (max-width: 820px)'));
   assert.ok(css.includes('--creamu-wb-accent: var(--scout-theme-color)'));
   assert.ok(css.includes('--creamu-wb-accent-dark: var(--scout-theme-dark)'));
   assert.ok(css.includes('--creamu-wb-accent-ring: var(--scout-theme-shadow)'));
-  assert.ok(css.includes('background: var(--creamu-wb-surface-muted) !important'));
-  assert.ok(css.includes('box-shadow: 0 2px 0 var(--creamu-wb-control-shadow) !important'));
-  console.log('  OK  Scout theme maps site colors to shared tokens');
+  assert.ok(css.includes('#jlc-wb-fab {'), 'Scout keeps its product-specific FAB visibility layer');
+  assert.ok(css.includes('#jlc-wb .scout-combo-dock-actions .jlc-wb-btn {'));
+  [
+    '#jlc-wb .jlc-wb-nav button,',
+    '#jlc-wb .jlc-wb-btn.primary {',
+    '#jlc-wb .jlc-wb-chip {',
+    '#jlc-wb .jlc-wb-icon-btn {',
+    '#jlc-wb .jlc-wb-open-btn {',
+    '#jlc-wb .jlc-wb-more-btn {',
+    '#jlc-wb .jlc-wb-view-block {',
+    '#jlc-wb .jlc-wb-view-title {',
+    '#jlc-wb .stat-box {',
+    '#jlc-wb .stat-item {',
+  ].forEach((selector) => {
+    assert.ok(!css.includes(selector), 'Scout should inherit shared base selector: ' + selector);
+  });
+  assert.ok(
+    css.includes('#jlc-wb .jlc-wb-nav button {'),
+    'Scout keeps the mobile-only navigation sizing rule'
+  );
+  assert.equal(
+    (css.match(/#jlc-wb \.jlc-wb-btn \{/g) || []).length,
+    1,
+    'Scout should only retain the mobile button sizing rule'
+  );
+  assert.match(
+    css,
+    /@media \(max-width: 820px\)[\s\S]*#jlc-wb \.jlc-wb-btn \{\s*min-height: 40px !important;/
+  );
+  console.log('  OK  Scout maps tokens without copying shared base components');
 }
 
-console.log('Shared workbench style tests passed (5)');
+{
+  const context = createContext({});
+  runInContext(scoutSiteThemeSource, context, { filename: '26-site-theme.js' });
+  const css = context.getScoutSitePageThemeCss();
+  assert.ok(css.includes('button:where(:not(#jlc-wb *))'));
+  assert.ok(css.includes(
+    'input[type="text"]:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *))'
+  ));
+  assert.ok(!css.includes('html.scout-cream-site #jlc-wb input'));
+  [
+    'html.scout-cream-site #jlc-wb .jlc-wb-nav button',
+    'html.scout-cream-site #jlc-wb .jlc-wb-btn',
+    'html.scout-cream-site #jlc-wb .jlc-wb-chip',
+    'html.scout-cream-site #jlc-wb .jlc-wb-open-btn',
+  ].forEach((selector) => {
+    assert.ok(!css.includes(selector), 'site theme should not restyle workbench components: ' + selector);
+  });
+  console.log('  OK  Scout site theme isolates native controls from the workbench');
+}
+
+console.log('Shared workbench style tests passed (6)');

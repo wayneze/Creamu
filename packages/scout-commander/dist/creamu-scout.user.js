@@ -12,6 +12,7 @@
 // @match        *://*.eporner.com/*
 // @match        *://eporner.com/*
 // @grant        GM_addStyle
+// @grant        GM_addValueChangeListener
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -356,8 +357,58 @@ function showToast(msg, isError = false) {
     }, 200);
   }, 3500);
 }
+// 12-library-state.js
 
-// 
+let __scoutLibraryRevision = 0;
+let __scoutStorageListenersInstalled = false;
+const SCOUT_DETAIL_LIBRARY_KEYS = new Set([
+  'creamu_scout_lexicon_terms',
+  'creamu_scout_block_list',
+  'creamu_scout_publishers',
+  'creamu_scout_works',
+]);
+const SCOUT_STORAGE_PAGE_DEPENDENCIES = {
+  creamu_scout_lexicon_types: ['combo', 'lexicon'],
+  creamu_scout_lexicon_terms: ['combo', 'lexicon', 'settings'],
+  creamu_scout_block_list: ['blocks', 'settings'],
+  creamu_scout_publishers: ['publishers', 'settings'],
+  creamu_scout_works: ['works', 'settings'],
+  creamu_scout_tracks: ['tracks', 'settings'],
+  creamu_scout_config: ['combo', 'settings'],
+  creamu_scout_clicks: ['settings'],
+  scout_combo_tokens: ['combo'],
+  scout_combo_auto_track: ['combo'],
+};
+
+function markScoutLibraryChanged() {
+  __scoutLibraryRevision += 1;
+  return __scoutLibraryRevision;
+}
+
+function getScoutLibraryRevision() {
+  return __scoutLibraryRevision;
+}
+
+function markScoutStorageChanged(key) {
+  const storageKey = String(key || '');
+  if (SCOUT_DETAIL_LIBRARY_KEYS.has(storageKey)) markScoutLibraryChanged();
+  const pages = SCOUT_STORAGE_PAGE_DEPENDENCIES[storageKey];
+  if (pages && typeof markScoutWorkbenchPagesDirty === 'function') {
+    markScoutWorkbenchPagesDirty(...pages);
+  }
+}
+
+function setupScoutStorageChangeListeners() {
+  if (__scoutStorageListenersInstalled) return;
+  if (typeof GM_addValueChangeListener !== 'function') return;
+  __scoutStorageListenersInstalled = true;
+  Object.keys(SCOUT_STORAGE_PAGE_DEPENDENCIES).forEach((key) => {
+    GM_addValueChangeListener(key, (name, _oldValue, _newValue, remote) => {
+      if (remote === true) markScoutStorageChanged(name || key);
+    });
+  });
+}
+
 const DEFAULT_TYPES = ['主题', '角色', '场景', '其他', '未分类'];
 
 // Lexicon Types
@@ -369,6 +420,7 @@ function getLexiconTypes() {
 
 function saveLexiconTypes(types) {
   GM_setValue('creamu_scout_lexicon_types', types);
+  markScoutStorageChanged('creamu_scout_lexicon_types');
 }
 
 // Lexicon Terms
@@ -383,6 +435,7 @@ function getLexiconTerms() {
 
 function saveLexiconTerms(terms) {
   GM_setValue('creamu_scout_lexicon_terms', terms);
+  markScoutStorageChanged('creamu_scout_lexicon_terms');
 }
 
 /**
@@ -523,30 +576,70 @@ function compactLexKey(s) {
   return normalizeLexKey(s).replace(/\s+/g, '');
 }
 
+function prepareLexiconText(value) {
+  const key = normalizeLexKey(value);
+  return {
+    key,
+    compactKey: key.replace(/\s+/g, '')
+  };
+}
+
+function createLexiconWordPattern(key) {
+  const parts = String(key || '').split(/\s+/).filter(Boolean).map(escapeRegExp);
+  if (!parts.length) return null;
+  try {
+    return new RegExp('(^|[^a-z0-9_])' + parts.join('\\s+') + '([^a-z0-9_]|$)', 'i');
+  } catch (_) {
+    return null;
+  }
+}
+
+function prepareLexiconTerm(term) {
+  if (!term || term.status === 'retired' || !compactText(term.text)) return null;
+  const preparedText = prepareLexiconText(term.text);
+  if (!preparedText.key) return null;
+  return {
+    term,
+    key: preparedText.key,
+    compactKey: preparedText.compactKey,
+    wordPattern: createLexiconWordPattern(preparedText.key)
+  };
+}
+
+function prepareLexiconMatcher(terms) {
+  const source = Array.isArray(terms) ? terms : getLexiconTerms();
+  return source.map(prepareLexiconTerm).filter(Boolean);
+}
+
+function buildLexiconTermIndex(preparedTerms) {
+  const index = new Map();
+  (Array.isArray(preparedTerms) ? preparedTerms : []).forEach((prepared) => {
+    const term = prepared && prepared.term;
+    if (!term) return;
+    const key = lexiconIdentityKey(term.text);
+    if (key && !index.has(key)) index.set(key, term);
+  });
+  return index;
+}
+
+function preparedLexiconTermHitsText(term, haystack) {
+  if (!term || !term.key || !haystack || !haystack.key) return false;
+  const wordHit = term.wordPattern
+    ? term.wordPattern.test(haystack.key)
+    : haystack.key.includes(term.key);
+  if (wordHit) return true;
+  if (!term.compactKey || !haystack.compactKey) return false;
+  if (term.compactKey === haystack.compactKey) return true;
+  return term.compactKey.length >= 5 && haystack.compactKey.includes(term.compactKey);
+}
+
 /**
  * 词库词是否命中一段文本（标题/slug/标签）。
  * 整词匹配 + 紧凑等价（空格/连字符写法对齐）
  */
 function lexiconTermHitsText(termText, haystack) {
-  const term = normalizeLexKey(termText);
-  const hay = normalizeLexKey(haystack);
-  if (!term || !hay) return false;
-  // 1) 标准整词
-  if (typeof textMatchesBlock === 'function') {
-    if (textMatchesBlock(hay, { text: term, match: 'word' })) return true;
-  } else if (hay === term || (' ' + hay + ' ').includes(' ' + term + ' ')) {
-    return true;
-  }
-  // 2) 紧凑形：整段相等，或紧凑 hay 中按整段命中长词（≥5 防短词误伤）
-  const tc = compactLexKey(term);
-  const hc = compactLexKey(hay);
-  if (!tc || !hc) return false;
-  if (tc === hc) return true;
-  if (tc.length >= 5) {
-    // 长词：紧凑串包含即视为命中（短词走整词规则防误伤）
-    if (hc.indexOf(tc) >= 0) return true;
-  }
-  return false;
+  const term = prepareLexiconTerm({ text: termText });
+  return preparedLexiconTermHitsText(term, prepareLexiconText(haystack));
 }
 
 /**
@@ -555,9 +648,9 @@ function lexiconTermHitsText(termText, haystack) {
  */
 function matchLexiconHits(meta, options) {
   const opts = options || {};
-  const terms = (opts.terms || getLexiconTerms()).filter(
-    (t) => t && t.status !== 'retired' && compactText(t.text)
-  );
+  const preparedTerms = Array.isArray(opts.preparedTerms)
+    ? opts.preparedTerms
+    : prepareLexiconMatcher(opts.terms);
   const title = compactText(meta && meta.title);
   const uploader = compactText(meta && meta.uploader);
   let tags = Array.isArray(meta && meta.tags)
@@ -569,7 +662,7 @@ function matchLexiconHits(meta, options) {
     try {
       const path = new URL(url, typeof location !== 'undefined' ? location.origin : 'https://x.com').pathname || '';
       const slug = path.split('/').filter(Boolean).pop() || '';
-      const spaced = slug.replace(/[-_]+/g, ' ');
+      const spaced = slug.replace(/[-_~.]+/g, ' ');
       if (spaced) tags = tags.concat(spaced.split(/\s+/).filter((w) => w.length >= 2));
       tags.push(spaced);
     } catch (_) { /* ignore */ }
@@ -585,24 +678,37 @@ function matchLexiconHits(meta, options) {
 
   const hits = [];
   const seen = new Set();
+  const preparedTags = tags.map(prepareLexiconText).filter((tag) => tag.key);
+  const preparedTitle = prepareLexiconText(title);
+  const preparedUploader = prepareLexiconText(uploader);
 
-  terms.forEach((term) => {
-    const key = normalizeLexKey(term.text);
-    if (!key || seen.has(key) || seen.has(compactLexKey(key))) return;
+  preparedTerms.forEach((preparedTerm) => {
+    const term = preparedTerm.term;
+    const key = preparedTerm.key;
+    const compactKey = preparedTerm.compactKey;
+    if (!term || !key || seen.has(key) || seen.has(compactKey)) return;
 
     let via = '';
-    for (let i = 0; i < tags.length; i++) {
-      if (lexiconTermHitsText(term.text, tags[i])) {
+    for (let i = 0; i < preparedTags.length; i++) {
+      if (preparedLexiconTermHitsText(preparedTerm, preparedTags[i])) {
         via = 'tag';
         break;
       }
     }
-    if (!via && title && lexiconTermHitsText(term.text, title)) via = 'title';
-    if (!via && uploader && lexiconTermHitsText(term.text, uploader)) via = 'uploader';
+    if (!via && preparedTitle.key && preparedLexiconTermHitsText(preparedTerm, preparedTitle)) {
+      via = 'title';
+    }
+    if (
+      !via &&
+      preparedUploader.key &&
+      preparedLexiconTermHitsText(preparedTerm, preparedUploader)
+    ) {
+      via = 'uploader';
+    }
     if (!via) return;
 
     seen.add(key);
-    seen.add(compactLexKey(key));
+    seen.add(compactKey);
     hits.push({
       text: term.text,
       zh: compactText(term.zh),
@@ -693,6 +799,7 @@ function getBlockList() {
 
 function saveBlockList(list) {
   GM_setValue('creamu_scout_block_list', list);
+  markScoutStorageChanged('creamu_scout_block_list');
 }
 
 /** match: word(整词，默认) | sub(子串) */
@@ -710,38 +817,86 @@ function escapeRegExp(str) {
   return String(str == null ? '' : str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function normalizeBlockText(value) {
+  return compactText(value).toLowerCase();
+}
+
+function prepareBlockMatcher(block) {
+  if (!block) return null;
+  const needle = normalizeBlockText(block.text);
+  if (!needle) return null;
+
+  const match = normalizeBlockMatch(block.match);
+  const scope = normalizeBlockScope(block.scope);
+  let wordPattern = null;
+  if (match === 'word') {
+    const parts = needle.split(/\s+/).filter(Boolean).map(escapeRegExp);
+    if (parts.length) {
+      try {
+        wordPattern = new RegExp(
+          '(^|[^a-z0-9_])' + parts.join('\\s+') + '([^a-z0-9_]|$)',
+          'i'
+        );
+      } catch (_) {
+        wordPattern = null;
+      }
+    }
+  }
+
+  return { block, needle, match, scope, wordPattern };
+}
+
+function prepareBlockMatchers(blocks) {
+  return (Array.isArray(blocks) ? blocks : [])
+    .map(prepareBlockMatcher)
+    .filter(Boolean);
+}
+
+function preparedBlockTextMatches(normalizedText, matcher) {
+  if (!normalizedText || !matcher || !matcher.needle) return false;
+  if (matcher.match === 'sub') return normalizedText.includes(matcher.needle);
+  if (matcher.wordPattern) return matcher.wordPattern.test(normalizedText);
+  return normalizedText.includes(matcher.needle);
+}
+
+function preparedBlockMatchesVideo(meta, matcher) {
+  if (!meta || !matcher) return false;
+  if (
+    (matcher.scope === 'title' || matcher.scope === 'both') &&
+    preparedBlockTextMatches(meta.title, matcher)
+  ) {
+    return true;
+  }
+  if (
+    (matcher.scope === 'uploader' || matcher.scope === 'both') &&
+    preparedBlockTextMatches(meta.uploader, matcher)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * 标题/上传者文本是否命中屏蔽词。
  * word：按词边界匹配（避免 ass 误伤 class）；多词短语允许中间空白。
  * sub：纯子串 contains。
  */
 function textMatchesBlock(haystack, block) {
-  const text = compactText(haystack).toLowerCase();
-  const needle = compactText(block && block.text).toLowerCase();
-  if (!text || !needle) return false;
-  if (normalizeBlockMatch(block.match) === 'sub') {
-    return text.includes(needle);
-  }
-  const parts = needle.split(/\s+/).filter(Boolean).map(escapeRegExp);
-  if (!parts.length) return false;
-  const body = parts.join('\\s+');
-  try {
-    return new RegExp('(^|[^a-z0-9_])' + body + '([^a-z0-9_]|$)', 'i').test(text);
-  } catch (_) {
-    return text.includes(needle);
-  }
+  return preparedBlockTextMatches(
+    normalizeBlockText(haystack),
+    prepareBlockMatcher(block)
+  );
 }
 
 function blockMatchesVideo(meta, block) {
   if (!meta || !block) return false;
-  const scope = normalizeBlockScope(block.scope);
-  if (scope === 'title' || scope === 'both') {
-    if (textMatchesBlock(meta.title, block)) return true;
-  }
-  if (scope === 'uploader' || scope === 'both') {
-    if (textMatchesBlock(meta.uploader || '', block)) return true;
-  }
-  return false;
+  return preparedBlockMatchesVideo(
+    {
+      title: normalizeBlockText(meta.title),
+      uploader: normalizeBlockText(meta.uploader || '')
+    },
+    prepareBlockMatcher(block)
+  );
 }
 
 function addBlockWord({ text, zh, reason, mode = 'dim', match, scope }) {
@@ -806,14 +961,30 @@ function getPublishers() {
 
 function savePublishers(list) {
   GM_setValue('creamu_scout_publishers', list);
+  markScoutStorageChanged('creamu_scout_publishers');
+}
+
+function publisherIdentityKey(name) {
+  return compactText(name).toLowerCase();
+}
+
+function buildPublisherIndex(publishers) {
+  const index = new Map();
+  (Array.isArray(publishers) ? publishers : []).forEach((publisher) => {
+    if (!publisher) return;
+    const key = publisherIdentityKey(publisher.name);
+    if (key && !index.has(key)) index.set(key, publisher);
+  });
+  return index;
 }
 
 function addPublisher({ name, site, status = 'loved', note = '' }) {
   const list = getPublishers();
   const nameNorm = compactText(name);
   if (!nameNorm) return null;
-  
-  const existing = list.find(p => p.name.toLowerCase().trim() === nameNorm.toLowerCase());
+
+  const nameKey = publisherIdentityKey(nameNorm);
+  const existing = list.find(p => publisherIdentityKey(p && p.name) === nameKey);
   if (existing) {
     existing.status = status || existing.status;
     if (note) existing.note = compactText(note);
@@ -872,6 +1043,7 @@ function getWorks() {
 
 function saveWorks(list) {
   GM_setValue(WORKS_KEY, list || []);
+  markScoutStorageChanged('creamu_scout_works');
 }
 
 function findWork(site, videoId) {
@@ -1159,6 +1331,7 @@ function shrinkImageDataUrl(dataUrl, maxW, maxH) {
     }
   });
 }
+// 14-tracking-state.js
 
 // Tracks：搜索追更（存储一站一条；UI 按 query 折叠）
 function getTracks() {
@@ -1172,6 +1345,7 @@ function getTracks() {
 
 function saveTracks(tracks) {
   GM_setValue('creamu_scout_tracks', tracks);
+  markScoutStorageChanged('creamu_scout_tracks');
 }
 
 /** 搜索词归一化：大小写、+、空白；and/or 折叠便于断点匹配 */
@@ -1388,6 +1562,7 @@ function getConfig() {
 
 function saveConfig(cfg) {
   GM_setValue('creamu_scout_config', cfg);
+  markScoutStorageChanged('creamu_scout_config');
   if (typeof applyScoutSiteTheme === 'function') {
     try { applyScoutSiteTheme(); } catch (_) { /* ignore */ }
   }
@@ -1498,6 +1673,7 @@ function getClickMap() {
 
 function saveClickMap(map) {
   GM_setValue(CLICK_MAP_KEY, map || {});
+  markScoutStorageChanged(CLICK_MAP_KEY);
 }
 
 function pruneClickMap(map) {
@@ -1511,6 +1687,36 @@ function pruneClickMap(map) {
   const drop = keys.length - CLICK_MAP_MAX;
   for (let i = 0; i < drop; i++) delete map[keys[i]];
   return map;
+}
+
+function addClickedVideoIdAliases(index, videoId) {
+  const raw = String(videoId || '').trim();
+  if (!raw) return;
+  index.add(raw);
+  if (typeof videoIdFromUrl !== 'function') return;
+  const normalized = String(videoIdFromUrl(raw) || '').trim();
+  if (normalized) index.add(normalized);
+}
+
+function buildClickedVideoIdIndex(site, map) {
+  const source = map && typeof map === 'object' ? map : getClickMap();
+  const siteNorm = String(site || '');
+  const index = new Set();
+  Object.values(source || {}).forEach((row) => {
+    if (!row || String(row.site || '') !== siteNorm) return;
+    addClickedVideoIdAliases(index, row.id || row.videoId);
+  });
+  return index;
+}
+
+function isVideoClickedInIndex(index, videoId) {
+  if (!index || typeof index.has !== 'function' || !videoId) return false;
+  const raw = String(videoId).trim();
+  if (!raw) return false;
+  if (index.has(raw)) return true;
+  if (typeof videoIdFromUrl !== 'function') return false;
+  const normalized = String(videoIdFromUrl(raw) || '').trim();
+  return !!(normalized && index.has(normalized));
 }
 
 function isVideoClicked(site, videoId) {
@@ -1651,6 +1857,7 @@ function mergeClickRecords(incoming) {
   pruneClickMap(map);
   saveClickMap(map);
 }
+// 16-data-portability.js
 
 // 导入导出（完整包含 tracks/clicks/works；lex 合包仅 terms+blocks）
 function exportLexiconPackage() {
@@ -2312,14 +2519,14 @@ function importLexiconPackage(jsonStr) {
     if (!pkg || pkg.format !== 'creamu-scout-lexicon') {
       throw new Error('导入失败：不是合法的 Creamu Scout 词库包');
     }
-    
+
     // Merge types
     if (Array.isArray(pkg.types)) {
       const currentTypes = getLexiconTypes();
       const mergedTypes = Array.from(new Set([...currentTypes, ...pkg.types]));
       saveLexiconTypes(mergedTypes);
     }
-    
+
     // Merge terms（identity 合并 + 清洗）
     if (Array.isArray(pkg.terms)) {
       dedupeLexiconTermsStore();
@@ -2369,7 +2576,7 @@ function importLexiconPackage(jsonStr) {
       saveLexiconTerms(currentTerms);
       dedupeLexiconTermsStore();
     }
-    
+
     // Merge blocks
     if (Array.isArray(pkg.blocks)) {
       dedupeBlockListStore();
@@ -2417,7 +2624,7 @@ function importLexiconPackage(jsonStr) {
       saveBlockList(currentBlocks);
       dedupeBlockListStore();
     }
-    
+
     // Merge publishers
     if (Array.isArray(pkg.publishers)) {
       const currentPubs = getPublishers();
@@ -2508,7 +2715,7 @@ function importLexiconPackage(jsonStr) {
       });
       saveWorks(Object.values(map));
     }
-    
+
     triggerWebDavDirty();
     return true;
   } catch(e) {
@@ -2516,6 +2723,7 @@ function importLexiconPackage(jsonStr) {
     return false;
   }
 }
+// 18-webdav.js
 
 // WebDAV（createCreamuWebDavSync 来自 shared 注入）
 let scoutSync = null;
@@ -2531,7 +2739,7 @@ function initScoutWebDav() {
     console.warn('[Creamu Scout] WebDAV module not found in shared script.');
     return;
   }
-  
+
   scoutSync = createCreamuWebDavSync({
     product: 'scout',
     notify(msg, isErr) {
@@ -2965,15 +3173,11 @@ function getCreamuWorkbenchCss(options = {}) {
             background: rgba(255,255,255,.55); font-size: 14.5px; line-height: 1.65;
         }
 
-        #jlc-wb #jlc-wb-view-root .jlc-wb-view-block,
-        #jlc-wb #jlc-wb-library-root .jlc-wb-view-block,
-        #jlc-wb #jlc-wb-filter-root .jlc-wb-view-block {
+        #jlc-wb .jlc-wb-view-block {
             background: var(--creamu-wb-surface); border: 1px solid #efe0cc; border-radius: 16px; padding: 14px; margin-bottom: 14px;
             box-shadow: 0 3px 0 #ead7bb;
         }
-        #jlc-wb #jlc-wb-view-root .jlc-wb-view-title,
-        #jlc-wb #jlc-wb-library-root .jlc-wb-view-title,
-        #jlc-wb #jlc-wb-filter-root .jlc-wb-view-title {
+        #jlc-wb .jlc-wb-view-title {
             font-size: 12px; color: var(--creamu-wb-accent); font-weight: 750; letter-spacing: .5px; margin: 0 0 12px;
             text-transform: uppercase;
         }
@@ -3062,17 +3266,13 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb #jlc-wb-library-root select:focus {
             border-color: var(--creamu-wb-accent); outline: none; background: var(--creamu-wb-surface-raised);
         }
-        #jlc-wb .jlc-wb-settings .stat-box,
-        #jlc-wb #jlc-wb-library-root .stat-box {
+        #jlc-wb .stat-box {
             display: flex; justify-content: space-around; background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
             border-radius: 14px; padding: 14px; margin-bottom: 14px;
         }
-        #jlc-wb .jlc-wb-settings .stat-item,
-        #jlc-wb #jlc-wb-library-root .stat-item { text-align: center; }
-        #jlc-wb .jlc-wb-settings .stat-item b,
-        #jlc-wb #jlc-wb-library-root .stat-item b { display: block; color: var(--creamu-wb-accent); font-size: 22px; margin-bottom: 4px; }
-        #jlc-wb .jlc-wb-settings .stat-item span,
-        #jlc-wb #jlc-wb-library-root .stat-item span { font-size: 11px; color: var(--creamu-wb-text-muted); }
+        #jlc-wb .stat-item { text-align: center; }
+        #jlc-wb .stat-item b { display: block; color: var(--creamu-wb-accent); font-size: 22px; margin-bottom: 4px; }
+        #jlc-wb .stat-item span { font-size: 11px; color: var(--creamu-wb-text-muted); }
         #jlc-wb .person-item {
             background: var(--creamu-wb-surface); padding: 12px 14px; border-radius: 12px; margin-bottom: 8px;
             display: flex; justify-content: space-between; align-items: center; border: 1px solid #efe0cc; font-size: 14px;
@@ -3883,7 +4083,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const when = m.last_sync ? new Date(m.last_sync).toLocaleString() : '从未';
       const err = m.last_error ? ' · 错: ' + m.last_error : '';
       const en = st.enabled ? '' : ' · 未启用';
-      return st.user + ' · ' + vaultRelPath() + ' · rev ' + m.local_revision + ' · 上次 ' + when + en + err;
+      const relPath = st.path + '/' + vaultName;
+      return st.user + ' · ' + relPath + ' · rev ' + m.local_revision + ' · 上次 ' + when + en + err;
     }
 
     async function davRequest(method, url, body, headers, timeout) {
@@ -4974,6 +5175,12 @@ function videoIdsMatch(a, b) {
 // 25-theme.js
 
 function getScoutThemeCss() {
+  return getScoutWorkbenchThemeCss()
+    + getScoutPageEnhancementThemeCss()
+    + getScoutSiteLayoutThemeCss();
+}
+
+function getScoutWorkbenchThemeCss() {
   return `
         /* 站点配色皮肤体系 (CSS 变量) */
         :root {
@@ -5086,115 +5293,6 @@ function getScoutThemeCss() {
         #scout-search-track-bar.scout-track-fab {
           z-index: 2147483001 !important;
         }
-        /*
-         * 工作台按钮/导航：必须 !important。
-         * cream 页主题用 html.scout-cream-site button:not(.jlc-wb-btn)… 暗色，
-         * 而「组合/词库/…」导航是裸 button（无 jlc-wb-btn），会被整排刷黑。
-         */
-        #jlc-wb .jlc-wb-nav button,
-        #jlc-wb .jlc-wb-settings-nav button {
-          appearance: none !important;
-          flex: 1 1 auto !important;
-          border: 0 !important;
-          background: var(--creamu-wb-surface-muted) !important;
-          background-color: var(--creamu-wb-surface-muted) !important;
-          color: var(--creamu-wb-text-subtle) !important;
-          padding: 10px 8px !important;
-          cursor: pointer !important;
-          font-size: 14px !important;
-          font-weight: 700 !important;
-          border-radius: 12px !important;
-          box-shadow: none !important;
-        }
-        #jlc-wb .jlc-wb-nav button.active,
-        #jlc-wb .jlc-wb-settings-nav button.active {
-          color: var(--creamu-wb-on-accent) !important;
-          background: var(--creamu-wb-accent) !important;
-          background-color: var(--creamu-wb-accent) !important;
-          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark) !important;
-        }
-        #jlc-wb .jlc-wb-btn {
-          appearance: none !important;
-          background: var(--creamu-wb-surface-soft) !important;
-          background-color: var(--creamu-wb-surface-soft) !important;
-          color: var(--creamu-wb-text-strong) !important;
-          border: 1px solid var(--creamu-wb-border-strong) !important;
-          box-shadow: 0 2px 0 var(--creamu-wb-border-strong) !important;
-        }
-        #jlc-wb .jlc-wb-btn.primary {
-          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
-          background-color: var(--creamu-wb-accent) !important;
-          border-color: transparent !important;
-          color: var(--creamu-wb-on-accent) !important;
-          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark) !important;
-        }
-        #jlc-wb .jlc-wb-btn.primary:hover {
-          filter: brightness(1.05);
-        }
-        #jlc-wb .jlc-wb-btn.ghost {
-          background: var(--creamu-wb-surface-soft) !important;
-          background-color: var(--creamu-wb-surface-soft) !important;
-          color: var(--creamu-wb-text-strong) !important;
-          border: 1px solid var(--creamu-wb-border-strong) !important;
-        }
-        #jlc-wb .jlc-wb-btn.ghost:hover {
-          color: var(--creamu-wb-accent) !important;
-          border-color: var(--creamu-wb-accent) !important;
-          background: var(--creamu-wb-surface-raised) !important;
-        }
-        #jlc-wb .jlc-wb-btn.danger {
-          background: #f3d5d0 !important;
-          background-color: #f3d5d0 !important;
-          border-color: #e8b8b0 !important;
-          color: #8a3a32 !important;
-          box-shadow: none !important;
-        }
-        #jlc-wb .jlc-wb-chip {
-          background: var(--creamu-wb-surface-raised) !important;
-          background-color: var(--creamu-wb-surface-raised) !important;
-          color: var(--creamu-wb-text-strong) !important;
-          border: 1px solid var(--creamu-wb-border-strong) !important;
-          box-shadow: 0 2px 0 var(--creamu-wb-control-shadow) !important;
-        }
-        #jlc-wb .jlc-wb-chip.is-on {
-          background: var(--creamu-wb-accent) !important;
-          background-color: var(--creamu-wb-accent) !important;
-          border-color: transparent !important;
-          color: var(--creamu-wb-on-accent) !important;
-          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark) !important;
-        }
-        #jlc-wb .jlc-wb-open-btn {
-          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
-          background-color: var(--creamu-wb-accent) !important;
-          color: var(--creamu-wb-on-accent) !important;
-          box-shadow: 0 3px 0 var(--creamu-wb-accent-dark) !important;
-          border: 0 !important;
-        }
-        #jlc-wb .jlc-wb-more-btn {
-          background: var(--creamu-wb-surface-soft) !important;
-          color: var(--creamu-wb-text-strong) !important;
-          border: 1px solid var(--creamu-wb-border-strong) !important;
-        }
-        #jlc-wb .jlc-wb-icon-btn {
-          background: var(--creamu-wb-surface-raised) !important;
-          color: var(--creamu-wb-text-strong) !important;
-          border: 1px solid var(--creamu-wb-border-strong) !important;
-          box-shadow: 0 2px 0 var(--creamu-wb-control-shadow) !important;
-        }
-        /* 组合底栏：搜索主色、收藏/清空 ghost */
-        #jlc-wb .scout-combo-dock-actions .jlc-wb-btn.primary,
-        #jlc-wb .scout-combo-dock-actions #scout-combo-search-btn {
-          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
-          background-color: var(--creamu-wb-accent) !important;
-          color: var(--creamu-wb-on-accent) !important;
-          border-color: transparent !important;
-        }
-        #jlc-wb .legacy-toggle input[type="checkbox"] {
-          accent-color: var(--creamu-wb-accent) !important;
-        }
-        #jlc-wb .jlc-wb-search:focus {
-          border-color: var(--creamu-wb-accent) !important;
-        }
 
         /*
          * Scout 页面布局：shared 的 [data-jlc-wb-page] > * 会把所有子节点
@@ -5268,6 +5366,23 @@ function getScoutThemeCss() {
         #jlc-wb .scout-combo-dock-sites .scout-combo-site {
           flex: 0 0 auto !important;
           box-sizing: border-box !important;
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          margin: 0;
+          padding: 2px 6px;
+          border: 1px solid #e4d4bc;
+          border-radius: 999px;
+          font-size: 11.5px;
+          letter-spacing: 0;
+          text-transform: none;
+          cursor: pointer;
+        }
+        #jlc-wb .scout-combo-dock-sites .scout-combo-site input {
+          width: 13px;
+          height: 13px;
+          margin: 0;
+          accent-color: var(--scout-theme-color);
         }
         #jlc-wb .scout-combo-dock-sites .scout-combo-site:has(input:checked) {
           border-color: var(--scout-theme-color) !important;
@@ -5329,40 +5444,128 @@ function getScoutThemeCss() {
           }
         }
 
-        /* Scout 页面块：不依赖 #jlc-wb-view-root */
-        #jlc-wb .jlc-wb-view-block {
-          background: #fffdf8;
-          border: 1px solid #efe0cc;
-          border-radius: 16px;
-          padding: 14px;
-          margin-bottom: 14px;
-          box-shadow: 0 3px 0 #ead7bb;
+        /* 组合页内容 */
+        #jlc-wb .jlc-wb-list-scroll.scout-combo-scroll {
+          padding-bottom: 12px;
         }
-        #jlc-wb .jlc-wb-view-title {
+        #jlc-wb .scout-combo-token {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+        #jlc-wb .scout-combo-token-remove {
+          opacity: 0.8;
+        }
+        #jlc-wb .scout-combo-empty {
+          color: #9a7d60;
           font-size: 12px;
-          color: var(--scout-theme-color);
-          font-weight: 750;
-          letter-spacing: .5px;
-          margin: 0 0 12px;
-          text-transform: uppercase;
         }
-        #jlc-wb .stat-box {
+        #jlc-wb .scout-combo-empty.is-selected {
+          font-size: 12.5px;
+        }
+        #jlc-wb .scout-combo-filter,
+        #jlc-wb .scout-combo-pick {
+          font-size: 12px;
+        }
+        #jlc-wb .jlc-wb-chip.scout-combo-video-tag {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          margin: 2px;
+          padding: 4px 8px;
+          font-size: 12px;
+        }
+        #jlc-wb .scout-combo-pick-tag,
+        #jlc-wb .scout-add-quick {
+          color: #2f6b3a;
+          cursor: pointer;
+        }
+        #jlc-wb .scout-block-quick {
+          color: #b42318;
+          cursor: pointer;
+        }
+        #jlc-wb .jlc-wb-view-block.scout-combo-video-tags {
+          margin-top: 14px;
+        }
+        #jlc-wb .scout-combo-video-tag-list {
           display: flex;
-          justify-content: space-around;
-          background: #fffdf8;
-          border: 1px solid #efe0cc;
-          border-radius: 14px;
-          padding: 14px;
-          margin-bottom: 4px;
+          flex-wrap: wrap;
+          max-height: 120px;
+          overflow: auto;
         }
-        #jlc-wb .stat-item { text-align: center; }
-        #jlc-wb .stat-item b {
-          display: block;
+        #jlc-wb .scout-combo-video-tag-hint {
+          margin-top: 4px;
+          color: #9a7d60;
+          font-size: 11px;
+        }
+        #jlc-wb .scout-combo-join {
+          display: inline-flex;
+          align-items: center;
+          margin-top: 0;
+          margin-right: 10px;
+          font-size: 12.5px;
+          letter-spacing: 0;
+          text-transform: none;
+          cursor: pointer;
+        }
+        #jlc-wb .scout-combo-join input {
+          width: 15px;
+          height: 15px;
+          margin-right: 4px;
+          accent-color: var(--scout-theme-color);
+        }
+        #jlc-wb .scout-combo-selected {
+          display: flex;
+          flex-wrap: wrap;
+          min-height: 32px;
+          margin-bottom: 8px;
+        }
+        #jlc-wb .scout-combo-join-row {
+          margin-bottom: 8px;
+        }
+        #jlc-wb .scout-combo-join-title {
+          margin-right: 6px;
+          color: #9a7d60;
+          font-size: 12px;
+        }
+        #jlc-wb .scout-combo-preview {
+          margin-bottom: 10px;
+          color: #9a7d60;
+          font-size: 12px;
+          word-break: break-word;
+        }
+        #jlc-wb .scout-combo-preview-value {
           color: var(--scout-theme-color);
-          font-size: 22px;
-          margin-bottom: 4px;
         }
-        #jlc-wb .stat-item span { font-size: 11px; color: #9a7d60; }
+        #jlc-wb .scout-combo-help {
+          margin-bottom: 10px;
+          color: #9a7d60;
+          font-size: 11.5px;
+          line-height: 1.4;
+        }
+        #jlc-wb .scout-combo-manual {
+          display: flex;
+          gap: 6px;
+        }
+        #jlc-wb .jlc-wb-search.scout-combo-manual-input {
+          flex: 1;
+          padding: 8px 12px;
+          font-size: 13.5px;
+        }
+        #jlc-wb #scout-combo-add-btn {
+          padding: 8px 14px;
+        }
+        #jlc-wb .scout-combo-filters {
+          display: flex;
+          flex-wrap: wrap;
+          margin-bottom: 8px;
+        }
+        #jlc-wb .scout-combo-pool {
+          display: flex;
+          flex-wrap: wrap;
+          max-height: 160px;
+          overflow: auto;
+        }
 
         /*
          * 工作台表单：强制奶油浅色，避免 cream 页主题全局 input 暗色
@@ -5412,35 +5615,468 @@ function getScoutThemeCss() {
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--scout-theme-color) 25%, transparent) !important;
         }
 
-        /* 设置页表单（settings 不在 .jlc-wb-settings 抽屉内） */
-        #jlc-wb [data-jlc-wb-page="settings"] label {
-          display: block;
-          font-size: 12px;
-          color: #9a7d60;
-          margin-top: 12px;
-          text-transform: uppercase;
-          letter-spacing: 1px;
+        /* 工作台页面组件 */
+        #jlc-wb .scout-wb-chip {
+          margin: 2px;
+          cursor: pointer;
         }
-        #jlc-wb [data-jlc-wb-page="settings"] input[type="text"],
-        #jlc-wb [data-jlc-wb-page="settings"] input[type="password"],
-        #jlc-wb [data-jlc-wb-page="settings"] textarea,
-        #jlc-wb [data-jlc-wb-page="settings"] select {
+        #jlc-wb .scout-wb-chip.is-retired {
+          background: #ffe5e5;
+          color: #b42318;
+        }
+        #jlc-wb .jlc-wb-list-scroll.scout-wb-list {
+          padding-top: 14px;
+        }
+        #jlc-wb .jlc-wb-list-scroll.scout-wb-list.is-compact {
+          padding-top: 12px;
+        }
+        #jlc-wb .legacy-note.scout-wb-page-note {
+          margin: 0 14px 10px;
+          line-height: 1.45;
+        }
+        #jlc-wb .scout-wb-add-form {
+          display: flex;
+          gap: 6px;
           width: 100%;
-          padding: 12px;
-          margin-top: 8px;
-          border-radius: 12px;
-          border: 1px solid #e4d4bc !important;
-          background: #fff !important;
-          color: #4a3728 !important;
-          font-size: 14px;
-          box-sizing: border-box;
         }
-        #jlc-wb [data-jlc-wb-page="settings"] input:focus,
-        #jlc-wb [data-jlc-wb-page="settings"] textarea:focus,
-        #jlc-wb [data-jlc-wb-page="settings"] select:focus {
-          border-color: var(--scout-theme-color) !important;
-          outline: none;
-          background: #fff !important;
+        #jlc-wb .scout-wb-add-form.is-wrap {
+          flex-wrap: wrap;
+        }
+        #jlc-wb .scout-wb-add-form .scout-wb-add-primary {
+          flex: 1.5;
+          padding: 8px;
+          font-size: 13px;
+        }
+        #jlc-wb .scout-wb-add-form .scout-wb-add-secondary {
+          flex: 1;
+        }
+        #jlc-wb .scout-wb-add-form input.scout-wb-add-secondary {
+          padding: 8px;
+          font-size: 13px;
+        }
+        #jlc-wb .scout-wb-add-form select.scout-wb-add-secondary {
+          padding: 4px 6px;
+        }
+        #jlc-wb .scout-wb-add-form .scout-wb-add-detail {
+          flex: 100%;
+          padding: 8px;
+          margin-top: 4px;
+          font-size: 13px;
+        }
+        #jlc-wb .scout-wb-add-form .scout-wb-add-submit {
+          padding: 8px 12px;
+        }
+        #jlc-wb .scout-wb-add-form .scout-wb-add-submit.is-grow {
+          flex: 1;
+          padding: 8px;
+          justify-content: center;
+        }
+
+        /* 词库 */
+        #jlc-wb .scout-lexicon-missing {
+          color: #b09070;
+          font-style: italic;
+        }
+        #jlc-wb .jlc-status-pill.scout-lexicon-confirmed {
+          padding: 1px 4px;
+          margin-left: 4px;
+          font-size: 10px;
+        }
+        #jlc-wb .scout-lexicon-loved {
+          color: #e54840;
+          margin-right: 4px;
+        }
+        #jlc-wb .jlc-wb-item-meta-line.scout-lexicon-meta {
+          color: #9a7d60;
+          font-size: 11.5px;
+        }
+        #jlc-wb .scout-lexicon-edit {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          width: 100%;
+          margin-top: 8px;
+          padding-top: 8px;
+          border-top: 1px dashed #efe0cc;
+        }
+        #jlc-wb .scout-lexicon-edit-row {
+          display: flex;
+          gap: 6px;
+          align-items: center;
+        }
+        #jlc-wb .scout-lexicon-edit-label {
+          width: 54px;
+          color: #7a5a3c;
+          font-size: 12px;
+        }
+        #jlc-wb .jlc-wb-item-edit input.scout-lexicon-edit-input {
+          flex: 1;
+          padding: 6px;
+          font-size: 13px;
+        }
+        #jlc-wb .scout-lexicon-edit-select {
+          flex: 1;
+          padding: 4px 6px;
+        }
+        #jlc-wb .scout-lexicon-loved-toggle {
+          display: inline-flex;
+          align-items: center;
+          margin-top: 0;
+          color: inherit;
+          font-size: 13px;
+          letter-spacing: 0;
+          text-transform: none;
+          cursor: pointer;
+        }
+        #jlc-wb .jlc-wb-item-edit input.scout-lexicon-loved-checkbox {
+          width: 16px;
+          height: 16px;
+          margin-right: 6px;
+          accent-color: var(--scout-theme-color);
+        }
+        #jlc-wb .scout-lexicon-edit-actions {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 4px;
+        }
+        #jlc-wb .scout-wb-button-group {
+          display: flex;
+          gap: 4px;
+        }
+        #jlc-wb .jlc-wb-btn.scout-wb-btn-compact {
+          padding: 4px 8px;
+          font-size: 12px;
+        }
+        #jlc-wb .jlc-wb-btn.scout-lexicon-good,
+        #jlc-wb .jlc-wb-btn.scout-lexicon-good:hover {
+          border: 0;
+          background: #2f6b3a;
+        }
+        #jlc-wb .jlc-wb-btn.scout-lexicon-bad,
+        #jlc-wb .jlc-wb-btn.scout-lexicon-bad:hover {
+          border-color: #e8b8b0;
+          color: #8a3a32;
+        }
+        #jlc-wb .jlc-wb-toolbar.scout-lexicon-toolbar {
+          padding-top: 12px;
+        }
+        #jlc-wb .jlc-wb-search.scout-lexicon-search {
+          padding: 8px 12px;
+          font-size: 13.5px;
+        }
+        #jlc-wb .scout-lexicon-types {
+          display: flex;
+          flex-wrap: wrap;
+          margin-top: 2px;
+        }
+        #jlc-wb .jlc-wb-footer.scout-lexicon-footer {
+          padding: 10px 14px;
+        }
+
+        /* 熟人与作品 */
+        #jlc-wb .scout-publisher-name.is-loved {
+          color: #2f6b3a;
+        }
+        #jlc-wb .scout-publisher-name.is-blocked {
+          color: #b42318;
+        }
+        #jlc-wb .jlc-status-pill.scout-publisher-status {
+          padding: 1px 6px;
+          margin-left: 4px;
+          font-size: 10.5px;
+        }
+        #jlc-wb .scout-publisher-site {
+          margin-left: 4px;
+          color: #9a7d60;
+          font-size: 11px;
+        }
+        #jlc-wb .scout-publisher-note {
+          margin-top: 2px;
+          color: #9a7d60;
+          font-size: 11px;
+        }
+        #jlc-wb .scout-publisher-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        #jlc-wb .person-item span.remove.scout-publisher-remove {
+          font-weight: bold;
+        }
+        #jlc-wb .jlc-wb-cover.scout-work-cover {
+          flex: 0 0 72px;
+          width: 72px;
+          height: 54px;
+          border-radius: 10px;
+          overflow: hidden;
+          background: #efe4d2;
+        }
+        #jlc-wb .jlc-wb-item-meta-line.scout-work-meta {
+          color: #9a7d60;
+          font-size: 11.5px;
+        }
+        #jlc-wb .jlc-wb-item-meta-line.scout-work-tags {
+          margin-top: 2px;
+          color: #a89078;
+          font-size: 11px;
+        }
+        #jlc-wb .scout-lex-flow-work {
+          margin-top: 6px;
+        }
+        #jlc-wb .jlc-wb-open-btn.scout-work-open {
+          min-width: 52px;
+          padding: 6px 10px;
+          font-size: 12px;
+        }
+        #jlc-wb .scout-work-origin,
+        #jlc-wb .scout-work-del {
+          padding: 4px 8px;
+          margin-top: 4px;
+          font-size: 11px;
+        }
+        #jlc-wb .scout-work-origin {
+          min-width: 52px;
+        }
+
+        /* 追更 */
+        #jlc-wb .scout-track-site-row .jlc-wb-btn {
+          padding: 3px 8px;
+          font-size: 11px;
+        }
+        #jlc-wb .jlc-wb-item-title.scout-track-title {
+          color: var(--scout-theme-color);
+        }
+        #jlc-wb .scout-track-site-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          margin-top: 4px;
+        }
+        #jlc-wb .jlc-wb-item-meta-line.scout-track-query {
+          margin-top: 4px;
+          font-size: 12px;
+        }
+        #jlc-wb .jlc-wb-item-meta-line.scout-track-updated {
+          color: #a89078;
+          font-size: 11px;
+        }
+        #jlc-wb .jlc-wb-open-btn.scout-track-open-btn {
+          min-width: 54px;
+          padding: 6px 12px;
+          font-size: 12px;
+        }
+        #jlc-wb .scout-track-expand-btn {
+          min-width: 54px;
+          padding: 4px 8px;
+          margin-top: 4px;
+          font-size: 11px;
+        }
+        #jlc-wb .scout-track-edit-actions {
+          display: flex;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+          gap: 8px;
+          width: 100%;
+          margin-top: 6px;
+          padding-top: 8px;
+          border-top: 1px dashed #efe0cc;
+        }
+        #jlc-wb .scout-track-edit-actions .jlc-wb-btn {
+          padding: 4px 10px;
+          font-size: 12px;
+        }
+
+        /* 屏蔽 */
+        #jlc-wb .scout-toggle-mode-btn,
+        #jlc-wb .scout-toggle-match-btn,
+        #jlc-wb .scout-toggle-scope-btn {
+          padding: 1px 6px;
+          font-size: 10px;
+          cursor: pointer;
+        }
+        #jlc-wb .scout-toggle-mode-btn.tone-yellow {
+          border-color: #f5c77a;
+          background: #ffe8c2;
+          color: #b54708;
+        }
+        #jlc-wb .scout-toggle-match-btn {
+          background: #efe4d2;
+          color: #6b4a2e;
+        }
+        #jlc-wb .scout-toggle-scope-btn {
+          background: #e7f1ff;
+          color: #175cd3;
+        }
+        #jlc-wb .person-item.scout-block-item {
+          align-items: flex-start;
+          gap: 8px;
+        }
+        #jlc-wb .scout-block-body {
+          flex: 1;
+          min-width: 0;
+        }
+        #jlc-wb .scout-block-heading {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+        #jlc-wb .scout-block-name {
+          color: #b42318;
+        }
+        #jlc-wb .scout-block-reason {
+          margin-top: 4px;
+          color: #9a7d60;
+          font-size: 11px;
+        }
+        #jlc-wb .person-item span.remove.scout-block-remove {
+          flex: 0 0 auto;
+          color: #b42318;
+          font-size: 16px;
+          font-weight: bold;
+        }
+        #jlc-wb .scout-block-options {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 10px;
+          width: 100%;
+          padding: 0 4px;
+        }
+        #jlc-wb .scout-block-options.is-first {
+          margin-top: 4px;
+        }
+        #jlc-wb .scout-block-option-title {
+          color: #7a5a3c;
+          font-size: 12px;
+          font-weight: bold;
+        }
+        #jlc-wb .scout-block-option-title.is-scope {
+          margin-left: 6px;
+        }
+        #jlc-wb .scout-block-option {
+          display: inline-flex;
+          align-items: center;
+          margin-top: 0;
+          font-size: 12.5px;
+          letter-spacing: 0;
+          text-transform: none;
+          cursor: pointer;
+        }
+        #jlc-wb .scout-block-option input {
+          width: 15px;
+          height: 15px;
+          margin-right: 4px;
+          accent-color: var(--scout-theme-color);
+        }
+        #jlc-wb #scout-add-block-btn {
+          flex: 1;
+          justify-content: center;
+          margin-top: 6px;
+          padding: 8px;
+        }
+
+        /* 设置抽屉 */
+        #jlc-wb .legacy-note.scout-settings-note.is-compact {
+          line-height: 1.5;
+        }
+        #jlc-wb .jlc-wb-settings h3.scout-settings-subheading {
+          margin-top: 16px;
+        }
+        #jlc-wb .legacy-row.scout-settings-spaced-row {
+          margin-top: 12px;
+        }
+        #jlc-wb .stat-box.scout-settings-secondary-stats {
+          margin-top: 10px;
+        }
+        #jlc-wb .stat-item.scout-settings-stat-summary {
+          flex: 2;
+          padding: 0 8px;
+          text-align: left;
+        }
+        #jlc-wb .stat-item span.scout-settings-stat-copy {
+          display: block;
+          color: #9a7d60;
+          font-size: 12px;
+          line-height: 1.45;
+          letter-spacing: 0;
+          text-transform: none;
+        }
+        #jlc-wb .jlc-wb-btn.scout-settings-wide-action {
+          width: 100%;
+        }
+        #jlc-wb .scout-settings-wide-action.is-first {
+          margin-top: 12px;
+        }
+        #jlc-wb .scout-settings-wide-action.is-next {
+          margin-top: 8px;
+        }
+        #jlc-wb .legacy-note.scout-settings-cleanup-note {
+          margin-top: 6px;
+        }
+        #jlc-wb .legacy-note.scout-settings-intro {
+          margin: 0 0 8px;
+          line-height: 1.45;
+        }
+        #jlc-wb .legacy-note.scout-settings-backup-note {
+          margin: 0 0 8px;
+        }
+        #jlc-wb .jlc-wb-settings textarea.scout-settings-textarea {
+          width: 100%;
+          padding: 8px;
+          border: 1px solid #e4d4bc;
+          border-radius: 12px;
+          font-family: monospace;
+          font-size: 11.5px;
+        }
+        #jlc-wb .scout-settings-textarea.is-ai {
+          height: 120px;
+        }
+        #jlc-wb .scout-settings-textarea.is-backup {
+          height: 72px;
+        }
+        #jlc-wb .scout-settings-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 6px;
+        }
+        #jlc-wb .scout-settings-action {
+          flex: 1;
+          min-width: 70px;
+        }
+        #jlc-wb .scout-settings-action.is-copy-all {
+          flex: 1.4;
+          min-width: 100px;
+        }
+        #jlc-wb .scout-settings-action.is-prompt {
+          min-width: 80px;
+        }
+        #jlc-wb .scout-settings-action.is-replace {
+          flex: 1.2;
+          min-width: 80px;
+        }
+        #jlc-wb .jlc-wb-btn.scout-settings-danger-action,
+        #jlc-wb .jlc-wb-btn.scout-settings-danger-action:hover {
+          color: #b54708;
+        }
+        #jlc-wb #scout-wd-form[hidden] {
+          display: none !important;
+        }
+        #jlc-wb .legacy-note.scout-settings-sync-status {
+          margin-top: 10px;
+          word-break: break-all;
+        }
+        #jlc-wb .scout-settings-sync-actions {
+          display: flex;
+          gap: 6px;
+          margin-top: 12px;
+        }
+        #jlc-wb .scout-settings-sync-actions .jlc-wb-btn {
+          flex: 1;
         }
 
         /* 采集弹层 */
@@ -5585,7 +6221,382 @@ function getScoutThemeCss() {
           font-weight: 750 !important;
           box-shadow: 0 2px 0 var(--scout-theme-dark) !important;
         }
+`;
+}
+// 26-site-theme.js
 
+/**
+ * 三站页面奶油主题（参考 EXH cream_site_theme）
+ * 需 html/body 带 .scout-cream-site；三站用 creamu-site-* 区分配色
+ */
+function applyScoutSiteTheme() {
+  const cfg = typeof getConfig === 'function' ? getConfig() : {};
+  const on = cfg.cream_site_theme !== false;
+  try {
+    document.documentElement.classList.toggle('scout-cream-site', on);
+    if (document.body) document.body.classList.toggle('scout-cream-site', on);
+  } catch (_) { /* ignore */ }
+
+  let el = document.getElementById('scout-site-theme-cream');
+  if (!on) {
+    if (el) el.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement('style');
+    el.id = 'scout-site-theme-cream';
+    (document.head || document.documentElement).appendChild(el);
+  }
+  el.textContent = getScoutSitePageThemeCss();
+}
+
+function getScoutSitePageThemeCss() {
+  return `
+/* ===== 三站统一暗色页主题：同结构，只换强调色（PC/手机同一套） ===== */
+html.scout-cream-site,
+html.scout-cream-site body {
+  /* 默认暗底 */
+  --scout-page-bg: #12141a;
+  --scout-page-panel: #1a1e28;
+  --scout-page-header: #161a24;
+  --scout-page-border: rgba(255,255,255,0.10);
+  --scout-card: #1e2430;
+  --scout-card-bg: #1e2430;
+  --scout-bg-clean: #12141a;
+  --scout-text-color: #e8eaef;
+  --scout-text-muted: #9aa3b5;
+  --scout-link: #8eb4f0;
+  --scout-link-hover: #b8d0ff;
+  --scout-accent: #5b8def;
+  --scout-accent-soft: rgba(91, 141, 239, 0.18);
+  background: var(--scout-page-bg) !important;
+  color: var(--scout-text-color) !important;
+  color-scheme: dark;
+}
+
+/* xvideos：暗红强调 */
+html.scout-cream-site body.creamu-site-xvideos {
+  --scout-accent: #e54840;
+  --scout-accent-soft: rgba(229, 72, 64, 0.20);
+  --scout-link: #f09088;
+  --scout-link-hover: #ffb8b0;
+  --scout-page-header: #1a1214;
+  --scout-card: #22181a;
+  --scout-card-bg: #22181a;
+  --scout-page-panel: #1e1618;
+}
+/* xnxx：冷蓝强调（仍暗底，不走白天粉蓝） */
+html.scout-cream-site body.creamu-site-xnxx {
+  --scout-accent: #4d8ef0;
+  --scout-accent-soft: rgba(77, 142, 240, 0.20);
+  --scout-link: #8eb4f0;
+  --scout-link-hover: #c0d8ff;
+  --scout-page-header: #121820;
+  --scout-card: #181e2a;
+  --scout-card-bg: #181e2a;
+  --scout-page-panel: #161c28;
+}
+/* eporner：叶绿强调 */
+html.scout-cream-site body.creamu-site-eporner {
+  --scout-accent: #3cb86a;
+  --scout-accent-soft: rgba(60, 184, 106, 0.20);
+  --scout-link: #7fd4a0;
+  --scout-link-hover: #b0ecc8;
+  --scout-page-header: #121a14;
+  --scout-card: #161e18;
+  --scout-card-bg: #161e18;
+  --scout-page-panel: #141c16;
+}
+
+/* 正文链接：轻量，列表卡内另有强制色 */
+html.scout-cream-site body a { color: var(--scout-link); }
+html.scout-cream-site body a:visited { color: var(--scout-link); opacity: 0.9; }
+html.scout-cream-site body a:hover { color: var(--scout-link-hover); }
+
+/* 订阅钮底色已在 getScoutThemeCss 中；此处仅保证 cream 下对比 */
+html.scout-cream-site #scout-search-track-bar.scout-track-fab,
+html.scout-cream-site #scout-search-track-bar.scout-track-banner {
+  background: rgba(18, 20, 28, 0.94) !important;
+  border-color: var(--scout-page-border, rgba(255,255,255,0.12)) !important;
+  color: var(--scout-text-color, #e8eaef) !important;
+}
+
+/* 顶栏/表单/分页/侧栏：仅 PC。手机保持站点原生控件，避免列表周边被改乱 */
+@media (min-width: 821px) {
+  html.scout-cream-site #header,
+  html.scout-cream-site .header,
+  html.scout-cream-site #main-nav,
+  html.scout-cream-site .main-nav,
+  html.scout-cream-site #nav,
+  html.scout-cream-site .top-menu,
+  html.scout-cream-site #top-menu,
+  html.scout-cream-site .head-container,
+  html.scout-cream-site #head {
+    background: var(--scout-page-header) !important;
+    border-color: var(--scout-page-border) !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
+    color: var(--scout-text-color) !important;
+  }
+  html.scout-cream-site #header a,
+  html.scout-cream-site .header a,
+  html.scout-cream-site #main-nav a,
+  html.scout-cream-site .main-nav a,
+  html.scout-cream-site #nav a {
+    color: var(--scout-text-color) !important;
+  }
+  html.scout-cream-site #header a:hover,
+  html.scout-cream-site .main-nav a:hover {
+    color: var(--scout-link-hover) !important;
+  }
+
+  html.scout-cream-site #content,
+  html.scout-cream-site #main,
+  html.scout-cream-site .main-content,
+  html.scout-cream-site #page,
+  html.scout-cream-site .page,
+  html.scout-cream-site #wrapper,
+  html.scout-cream-site .wrapper {
+    background: transparent !important;
+    color: var(--scout-text-color) !important;
+  }
+
+  /* 仅站点原生表单暗色；工作台 / 采集弹层由各自组件样式负责 */
+  html.scout-cream-site input[type="text"]:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)),
+  html.scout-cream-site input[type="search"]:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)),
+  html.scout-cream-site input[type="password"]:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)),
+  html.scout-cream-site input[type="email"]:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)),
+  html.scout-cream-site textarea:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)),
+  html.scout-cream-site select:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)) {
+    background: var(--scout-card) !important;
+    color: var(--scout-text-color) !important;
+    border: 1px solid var(--scout-page-border) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.04) !important;
+    color-scheme: dark;
+  }
+  /*
+   * 页级暗色按钮：只用 :where() 排除工作台，避免 :not(#id) 把特异性抬到
+   * 压过 #jlc-wb .jlc-wb-nav button（组合/词库那排裸 button 会被刷黑）。
+   */
+  html.scout-cream-site input[type="button"],
+  html.scout-cream-site input[type="submit"],
+  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)) {
+    background: var(--scout-page-panel) !important;
+    color: var(--scout-text-color) !important;
+    border: 1px solid var(--scout-page-border) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 0 var(--scout-page-border) !important;
+    cursor: pointer;
+  }
+  html.scout-cream-site input[type="button"]:hover,
+  html.scout-cream-site input[type="submit"]:hover,
+  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)):hover {
+    border-color: var(--scout-theme-color) !important;
+    color: var(--scout-theme-color) !important;
+  }
+
+
+  html.scout-cream-site #footer,
+  html.scout-cream-site .footer,
+  html.scout-cream-site .pagination,
+  html.scout-cream-site .page-list,
+  html.scout-cream-site .pages {
+    background: var(--scout-page-panel) !important;
+    color: var(--scout-text-color) !important;
+    border-color: var(--scout-page-border) !important;
+  }
+  html.scout-cream-site .pagination a,
+  html.scout-cream-site .page-list a {
+    background: var(--scout-card) !important;
+    border: 1px solid var(--scout-page-border) !important;
+    border-radius: 8px !important;
+    color: var(--scout-link) !important;
+  }
+  html.scout-cream-site .pagination a:hover,
+  html.scout-cream-site .pagination .active,
+  html.scout-cream-site .page-list .active {
+    background: var(--scout-theme-color) !important;
+    color: #fff !important;
+    border-color: transparent !important;
+  }
+
+  /* 侧栏（勿碰 .mobile-hide；xvideos 列表卡是 .frame-block.thumb-block） */
+  html.scout-cream-site .sidebar,
+  html.scout-cream-site #sidebar,
+  html.scout-cream-site .side-block,
+  html.scout-cream-site .frame-block:not(.thumb-block) {
+    background: var(--scout-page-panel) !important;
+    color: var(--scout-text-color) !important;
+    border-color: var(--scout-page-border) !important;
+    border-radius: 12px !important;
+  }
+}
+
+/* 视频标题色 */
+html.scout-cream-site .page-title,
+html.scout-cream-site h2.page-title,
+html.scout-cream-site .video-title {
+  color: var(--scout-text-color) !important;
+  white-space: normal !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/*
+ * 详情元信息 / 标签：PC 全展开；手机折叠由 .scout-tags-collapsed 控制。
+ */
+@media (min-width: 821px) {
+  html.scout-cream-site body.creamu-site-xvideos .video-metadata,
+  html.scout-cream-site body.creamu-site-xnxx .video-metadata,
+  html.scout-cream-site body.creamu-site-xvideos .video-metadata-list,
+  html.scout-cream-site body.creamu-site-xnxx .video-metadata-list,
+  html.scout-cream-site body.creamu-site-xvideos .metadata-row,
+  html.scout-cream-site body.creamu-site-xnxx .metadata-row {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    line-height: 1.45 !important;
+  }
+  html.scout-cream-site body.creamu-site-xvideos .video-tags,
+  html.scout-cream-site body.creamu-site-xnxx .video-tags,
+  html.scout-cream-site body.creamu-site-eporner #video-tags,
+  html.scout-cream-site body.creamu-site-eporner .tag-container {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 6px !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    white-space: normal !important;
+    background: var(--scout-page-panel) !important;
+    border: 1px solid var(--scout-page-border) !important;
+    border-radius: 12px !important;
+    padding: 8px 10px !important;
+    margin-top: 8px !important;
+  }
+}
+@media (max-width: 820px) {
+  html.scout-cream-site body.creamu-site-xvideos .video-metadata.scout-tags-collapsed,
+  html.scout-cream-site body.creamu-site-xnxx .video-metadata.scout-tags-collapsed,
+  html.scout-cream-site body.creamu-site-xnxx .metadata-row.video-tags.scout-tags-collapsed,
+  html.scout-cream-site body.creamu-site-xnxx .video-tags.scout-tags-collapsed {
+    max-height: 2.15em !important;
+    overflow: hidden !important;
+  }
+  html.scout-cream-site body.creamu-site-xvideos .video-metadata.scout-tags-expanded,
+  html.scout-cream-site body.creamu-site-xnxx .video-metadata.scout-tags-expanded,
+  html.scout-cream-site body.creamu-site-xnxx .metadata-row.video-tags.scout-tags-expanded,
+  html.scout-cream-site body.creamu-site-xnxx .video-tags.scout-tags-expanded {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  html.scout-cream-site .scout-desc-collapsed {
+    -webkit-line-clamp: 2 !important;
+    max-height: 3em !important;
+    overflow: hidden !important;
+  }
+}
+html.scout-cream-site body.creamu-site-xvideos .video-tags a,
+html.scout-cream-site body.creamu-site-xnxx .video-tags a,
+html.scout-cream-site body.creamu-site-xvideos .video-metadata .video-tags a,
+html.scout-cream-site body.creamu-site-xnxx .video-metadata .video-tags a,
+html.scout-cream-site body.creamu-site-eporner #video-tags a,
+html.scout-cream-site body.creamu-site-eporner .tag-container a {
+  display: inline-flex !important;
+  flex: 0 1 auto !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  white-space: nowrap !important;
+  background: var(--scout-card) !important;
+  border: 1px solid var(--scout-page-border) !important;
+  border-radius: 999px !important;
+  color: var(--scout-text-color) !important;
+  padding: 3px 8px !important;
+  margin: 0 !important;
+  max-width: 100% !important;
+}
+
+/*
+ * 列表/mozaique/标题：仅 PC。手机零改动，否则 xnxx 标题会从 float 卡散出。
+ */
+@media (min-width: 821px) {
+  html.scout-cream-site body.creamu-site-xvideos #content,
+  html.scout-cream-site body.creamu-site-xnxx #content,
+  html.scout-cream-site body.creamu-site-eporner body,
+  html.scout-cream-site body.creamu-site-eporner #content {
+    background: var(--scout-page-bg) !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  html.scout-cream-site body.creamu-site-xvideos .mozaique,
+  html.scout-cream-site body.creamu-site-xnxx .mozaique {
+    background: transparent !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block,
+  html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block {
+    visibility: visible !important;
+    background: var(--scout-card, var(--scout-card-bg)) !important;
+    border: 1px solid var(--scout-page-border) !important;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.08) !important;
+  }
+  html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block .thumb-inside,
+  html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .thumb-inside,
+  html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block .thumb,
+  html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .thumb {
+    background: transparent !important;
+  }
+  html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block p,
+  html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block p {
+    color: var(--scout-text-color) !important;
+  }
+  /* eporner 仅可见性，不改布局 */
+  html.scout-cream-site body.creamu-site-eporner #vidresults {
+    height: auto !important;
+    overflow: visible !important;
+    visibility: visible !important;
+  }
+}
+
+/* 开主题时播放器区保持深色 */
+html.scout-cream-site body.creamu-site-xvideos #video-player-bg,
+html.scout-cream-site body.creamu-site-xnxx #video-player-bg {
+  background: #121010 !important;
+}
+
+#scout-seek-hud {
+  position: fixed !important;
+  left: 50% !important;
+  top: 18% !important;
+  transform: translateX(-50%) !important;
+  z-index: 2147483646 !important;
+  padding: 10px 16px !important;
+  border-radius: 12px !important;
+  background: rgba(0, 0, 0, 0.72) !important;
+  color: #fff !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  pointer-events: none !important;
+  white-space: nowrap !important;
+  display: none !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
+}
+#scout-seek-hud.is-on {
+  display: block !important;
+}
+`;
+}
+// 27-page-enhancement-theme.js
+
+function getScoutPageEnhancementThemeCss() {
+  return `
         .scout-breakpoint-highlight {
           outline: 3px dashed var(--scout-theme-color) !important;
           outline-offset: 4px !important;
@@ -5621,6 +6632,15 @@ function getScoutThemeCss() {
             max-height: none !important;
             overflow: visible !important;
             height: auto !important;
+          }
+          .scout-desc-expanded,
+          .video-description.scout-desc-expanded,
+          #video-description.scout-desc-expanded,
+          [itemprop="description"].scout-desc-expanded {
+            display: block !important;
+            -webkit-line-clamp: unset !important;
+            max-height: none !important;
+            overflow: visible !important;
           }
         }
         /* 手机详情：标签默认一行；描述默认两行；点展开 */
@@ -5790,30 +6810,28 @@ function getScoutThemeCss() {
         .scout-lex-flow-overlay {
           display: flex !important;
           flex-wrap: wrap !important;
-          gap: 4px !important;
+          gap: 3px !important;
+          align-items: flex-start !important;
           position: absolute !important;
-          left: 0 !important;
-          right: 0 !important;
-          bottom: 0 !important;
+          left: 4px !important;
+          right: 4px !important;
+          bottom: 4px !important;
+          top: auto !important;
           z-index: 30 !important;
           margin: 0 !important;
-          padding: 18px 6px 6px !important;
+          padding: 4px !important;
           max-height: 54% !important;
           overflow: hidden !important;
           pointer-events: none !important;
-          background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,.15) 35%, rgba(0,0,0,.72) 100%) !important;
-          border-radius: 0 0 10px 10px !important;
+          background: linear-gradient(transparent, rgba(0,0,0,.78)) !important;
+          border-radius: 0 0 8px 8px !important;
           box-sizing: border-box !important;
         }
-        /*
-         * 仅在有词库叠层时改 position，避免全局 .thumb{relative}
-         * 打坏 xnxx/xvideos 手机站比例盒 → 列表「被挡没」
-         */
-        .thumb-inside:has(.scout-lex-flow-overlay),
-        .thumb:has(.scout-lex-flow-overlay),
-        .mbimg:has(.scout-lex-flow-overlay),
-        .mbcontent:has(.scout-lex-flow-overlay) {
+        .scout-lex-overlay-positioned {
           position: relative !important;
+        }
+        .scout-lex-overlay-clipped {
+          overflow: hidden !important;
         }
         /* ===== 详情页：收藏作品按钮（PC / 手机） ===== */
         .scout-work-fav-bar {
@@ -5968,6 +6986,12 @@ function getScoutThemeCss() {
         .mbimg.scout-preview-playing {
           position: relative !important;
         }
+        .scout-preview-positioned {
+          position: relative !important;
+        }
+        .scout-site-preview-disabled {
+          display: none !important;
+        }
         .scout-preview-playing::after {
           content: '预览中 · 再点进入';
           position: absolute;
@@ -5987,7 +7011,6 @@ function getScoutThemeCss() {
           white-space: nowrap;
         }
 
-        /* 无 :has 的老内核兜底：JS 会写 inline position:relative */
         .scout-lex-flow-overlay .scout-lex-flow-chips {
           display: flex !important;
           flex-wrap: wrap !important;
@@ -5999,22 +7022,55 @@ function getScoutThemeCss() {
           font-weight: 650 !important;
           padding: 2px 7px !important;
           border-radius: 999px !important;
+          line-height: 1.2 !important;
+          letter-spacing: 0.2px !important;
           color: #fff !important;
-          background: rgba(18, 20, 26, 0.72) !important;
-          border: 1px solid rgba(255,255,255,0.2) !important;
-          box-shadow: 0 1px 3px rgba(0,0,0,.25) !important;
-          backdrop-filter: blur(6px);
-          -webkit-backdrop-filter: blur(6px);
+          background: rgba(20, 22, 28, 0.72) !important;
+          border: 1px solid rgba(255,255,255,0.22) !important;
+          box-shadow: 0 1px 3px rgba(0,0,0,.28) !important;
+          backdrop-filter: blur(6px) !important;
+          -webkit-backdrop-filter: blur(6px) !important;
         }
         .scout-lex-flow-overlay .scout-lex-chip.is-loved {
           color: #fff !important;
           background: rgba(229, 72, 64, 0.92) !important;
-          border-color: rgba(255, 180, 160, 0.5) !important;
+          border-color: rgba(255, 180, 160, 0.55) !important;
         }
         .scout-lex-flow-overlay .scout-lex-chip.is-more {
-          background: rgba(255,255,255,0.16) !important;
+          background: rgba(255,255,255,0.18) !important;
+          border-color: rgba(255,255,255,0.28) !important;
           border-style: dashed !important;
           color: rgba(255,255,255,0.9) !important;
+        }
+        @media (max-width: 820px) {
+          .scout-lex-flow-overlay {
+            max-height: 36% !important;
+            padding: 3px !important;
+          }
+          .scout-lex-flow-overlay .scout-lex-chip {
+            font-size: 9px !important;
+          }
+        }
+
+        #scout-seek-hud {
+          position: fixed !important;
+          left: 50% !important;
+          top: 18% !important;
+          transform: translateX(-50%) !important;
+          z-index: 2147483646 !important;
+          display: none !important;
+          padding: 10px 16px !important;
+          border-radius: 12px !important;
+          color: #fff !important;
+          background: rgba(0,0,0,.72) !important;
+          box-shadow: 0 6px 20px rgba(0,0,0,.35) !important;
+          font-size: 16px !important;
+          font-weight: 700 !important;
+          white-space: nowrap !important;
+          pointer-events: none !important;
+        }
+        #scout-seek-hud.is-on {
+          display: block !important;
         }
         /* 详情页词库条 */
         .scout-lex-hit-bar .scout-lex-chip {
@@ -6126,6 +7182,37 @@ function getScoutThemeCss() {
           padding: 1px 3px !important;
           background: rgba(0,0,0,0.28) !important;
         }
+        .scout-tag-action {
+          cursor: pointer;
+        }
+        .scout-tag-add-action {
+          color: #8fd4a0;
+        }
+        .scout-tag-block-action {
+          color: #f09088;
+        }
+        .scout-pub-addon {
+          display: inline-flex;
+          gap: 4px;
+          margin-left: 8px;
+          max-width: 100%;
+          vertical-align: middle;
+          font-size: 12px;
+        }
+        .scout-pub-addon .scout-pub-action {
+          height: 24px;
+          margin: 0;
+          padding: 2px 8px;
+          border-radius: 6px;
+          font-size: 11.5px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .scout-pub-addon .scout-pub-love-action.is-loved {
+          border-color: #2f6b3a;
+          background: #e2f5e4;
+          color: #2f6b3a;
+        }
         /* 标签容器：可换行，暗色面板 */
         html.scout-cream-site .video-metadata,
         html.scout-cream-site .video-tags-list,
@@ -6151,7 +7238,7 @@ function getScoutThemeCss() {
           }
         }
 
-        /* 列表屏蔽：!important + 类名，避免主题强制 display/opacity 盖掉内联样式 */
+        /* 列表屏蔽：提高选择器优先级，避免站点布局规则覆盖过滤状态 */
         .thumb-block.scout-blocked-hide,
         .video-block.scout-blocked-hide,
         .mb.scout-blocked-hide,
@@ -6274,7 +7361,12 @@ function getScoutThemeCss() {
           z-index: 5;
           pointer-events: none;
         }
+`;
+}
+// 29-site-layout-theme.js
 
+function getScoutSiteLayoutThemeCss() {
+  return `
         /*
          * 列表「一卡一框」：统一暗卡 + 浅字，三站只差强调色（PC/手机同结构）
          */
@@ -6423,20 +7515,54 @@ function getScoutThemeCss() {
         }
         /* 断点条：全局压成单行矮胶囊 */
         #jlc-tracking-pagebar {
+          position: fixed !important;
+          top: 8px !important;
+          left: 50% !important;
+          transform: translateX(-50%) !important;
+          z-index: 999999 !important;
+          display: flex !important;
+          align-items: center !important;
+          width: min(420px, 94vw) !important;
           min-height: 0 !important;
           max-height: 36px !important;
           padding: 4px 8px !important;
           border-radius: 999px !important;
           gap: 6px !important;
+          box-sizing: border-box !important;
+          border: 1px solid rgba(255,255,255,.12) !important;
+          background: rgba(18,20,28,.92) !important;
+          box-shadow: 0 4px 14px rgba(0,0,0,.28) !important;
+          color: #e8eaef !important;
+          font-size: 12px !important;
         }
         #jlc-tracking-pagebar .jlc-tracking-pagebar-text {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          font-weight: 650 !important;
           font-size: 11.5px !important;
           line-height: 1.2 !important;
         }
-        #jlc-tracking-pagebar button {
+        #jlc-tracking-pagebar .scout-tracking-pagebar-action {
+          flex: 0 0 auto !important;
           min-height: 22px !important;
           padding: 2px 8px !important;
+          border-radius: 999px !important;
           font-size: 11px !important;
+          cursor: pointer !important;
+        }
+        #jlc-tracking-pagebar .jlc-bp-continue {
+          border: 0 !important;
+          background: var(--scout-accent, #5b8def) !important;
+          color: #fff !important;
+          font-weight: 650 !important;
+        }
+        #jlc-tracking-pagebar .scout-bp-dismiss {
+          border: 1px solid rgba(255,255,255,.2) !important;
+          background: transparent !important;
+          color: #c8cdd8 !important;
         }
         /* 手机：订阅小圆钮 —— 固定视口右下，在工作台钮上方 */
         #scout-search-track-bar.scout-track-fab {
@@ -6734,20 +7860,6 @@ function getScoutThemeCss() {
           #jlc-wb { height: 70vh !important; }
 
           /*
-           * 窄屏：完全不碰 .mozaique / .thumb-block / 标题 p。
-           * 任何 height/overflow/padding 都会让 xnxx 标题从 float 卡里散出来。
-           * 仅收缩词库叠层，少挡画面。
-           */
-          .scout-lex-flow-overlay {
-            max-height: 36% !important;
-            padding: 8px 4px 4px !important;
-          }
-          .scout-lex-flow-overlay .scout-lex-chip {
-            font-size: 9px !important;
-            padding: 1px 5px !important;
-          }
-
-          /*
            * eporner 手机：尽量单列，但不用 absolute 图（易高度塌成 0 挡没）
            * 只清 float + 宽度 100%，图片保持站点自然高度
            */
@@ -6805,463 +7917,8 @@ function getScoutThemeCss() {
         }
   `;
 }
-
-/**
- * 三站页面奶油主题（参考 EXH cream_site_theme）
- * 需 html/body 带 .scout-cream-site；三站用 creamu-site-* 区分配色
- */
-function applyScoutSiteTheme() {
-  const cfg = typeof getConfig === 'function' ? getConfig() : {};
-  const on = cfg.cream_site_theme !== false;
-  try {
-    document.documentElement.classList.toggle('scout-cream-site', on);
-    if (document.body) document.body.classList.toggle('scout-cream-site', on);
-  } catch (_) { /* ignore */ }
-
-  let el = document.getElementById('scout-site-theme-cream');
-  if (!on) {
-    if (el) el.remove();
-    return;
-  }
-  if (!el) {
-    el = document.createElement('style');
-    el.id = 'scout-site-theme-cream';
-    (document.head || document.documentElement).appendChild(el);
-  }
-  el.textContent = getScoutSitePageThemeCss();
-}
-
-function getScoutSitePageThemeCss() {
-  return `
-/* ===== 三站统一暗色页主题：同结构，只换强调色（PC/手机同一套） ===== */
-html.scout-cream-site,
-html.scout-cream-site body {
-  /* 默认暗底 */
-  --scout-page-bg: #12141a;
-  --scout-page-panel: #1a1e28;
-  --scout-page-header: #161a24;
-  --scout-page-border: rgba(255,255,255,0.10);
-  --scout-card: #1e2430;
-  --scout-card-bg: #1e2430;
-  --scout-bg-clean: #12141a;
-  --scout-text-color: #e8eaef;
-  --scout-text-muted: #9aa3b5;
-  --scout-link: #8eb4f0;
-  --scout-link-hover: #b8d0ff;
-  --scout-accent: #5b8def;
-  --scout-accent-soft: rgba(91, 141, 239, 0.18);
-  background: var(--scout-page-bg) !important;
-  color: var(--scout-text-color) !important;
-  color-scheme: dark;
-}
-
-/* xvideos：暗红强调 */
-html.scout-cream-site body.creamu-site-xvideos {
-  --scout-accent: #e54840;
-  --scout-accent-soft: rgba(229, 72, 64, 0.20);
-  --scout-link: #f09088;
-  --scout-link-hover: #ffb8b0;
-  --scout-page-header: #1a1214;
-  --scout-card: #22181a;
-  --scout-card-bg: #22181a;
-  --scout-page-panel: #1e1618;
-}
-/* xnxx：冷蓝强调（仍暗底，不走白天粉蓝） */
-html.scout-cream-site body.creamu-site-xnxx {
-  --scout-accent: #4d8ef0;
-  --scout-accent-soft: rgba(77, 142, 240, 0.20);
-  --scout-link: #8eb4f0;
-  --scout-link-hover: #c0d8ff;
-  --scout-page-header: #121820;
-  --scout-card: #181e2a;
-  --scout-card-bg: #181e2a;
-  --scout-page-panel: #161c28;
-}
-/* eporner：叶绿强调 */
-html.scout-cream-site body.creamu-site-eporner {
-  --scout-accent: #3cb86a;
-  --scout-accent-soft: rgba(60, 184, 106, 0.20);
-  --scout-link: #7fd4a0;
-  --scout-link-hover: #b0ecc8;
-  --scout-page-header: #121a14;
-  --scout-card: #161e18;
-  --scout-card-bg: #161e18;
-  --scout-page-panel: #141c16;
-}
-
-/* 正文链接：轻量，列表卡内另有强制色 */
-html.scout-cream-site body a { color: var(--scout-link); }
-html.scout-cream-site body a:visited { color: var(--scout-link); opacity: 0.9; }
-html.scout-cream-site body a:hover { color: var(--scout-link-hover); }
-
-/* 订阅钮底色已在 getScoutThemeCss 中；此处仅保证 cream 下对比 */
-html.scout-cream-site #scout-search-track-bar.scout-track-fab,
-html.scout-cream-site #scout-search-track-bar.scout-track-banner {
-  background: rgba(18, 20, 28, 0.94) !important;
-  border-color: var(--scout-page-border, rgba(255,255,255,0.12)) !important;
-  color: var(--scout-text-color, #e8eaef) !important;
-}
-
-/* 顶栏/表单/分页/侧栏：仅 PC。手机保持站点原生控件，避免列表周边被改乱 */
-@media (min-width: 821px) {
-  html.scout-cream-site #header,
-  html.scout-cream-site .header,
-  html.scout-cream-site #main-nav,
-  html.scout-cream-site .main-nav,
-  html.scout-cream-site #nav,
-  html.scout-cream-site .top-menu,
-  html.scout-cream-site #top-menu,
-  html.scout-cream-site .head-container,
-  html.scout-cream-site #head {
-    background: var(--scout-page-header) !important;
-    border-color: var(--scout-page-border) !important;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
-    color: var(--scout-text-color) !important;
-  }
-  html.scout-cream-site #header a,
-  html.scout-cream-site .header a,
-  html.scout-cream-site #main-nav a,
-  html.scout-cream-site .main-nav a,
-  html.scout-cream-site #nav a {
-    color: var(--scout-text-color) !important;
-  }
-  html.scout-cream-site #header a:hover,
-  html.scout-cream-site .main-nav a:hover {
-    color: var(--scout-link-hover) !important;
-  }
-
-  html.scout-cream-site #content,
-  html.scout-cream-site #main,
-  html.scout-cream-site .main-content,
-  html.scout-cream-site #page,
-  html.scout-cream-site .page,
-  html.scout-cream-site #wrapper,
-  html.scout-cream-site .wrapper {
-    background: transparent !important;
-    color: var(--scout-text-color) !important;
-  }
-
-  /* 仅站点原生表单暗色；工作台 / 采集弹层保持奶油浅色（下方再强制覆盖） */
-  html.scout-cream-site input[type="text"],
-  html.scout-cream-site input[type="search"],
-  html.scout-cream-site input[type="password"],
-  html.scout-cream-site input[type="email"],
-  html.scout-cream-site textarea,
-  html.scout-cream-site select {
-    background: var(--scout-card) !important;
-    color: var(--scout-text-color) !important;
-    border: 1px solid var(--scout-page-border) !important;
-    border-radius: 10px !important;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.04) !important;
-    color-scheme: dark;
-  }
-  html.scout-cream-site #jlc-wb input[type="text"],
-  html.scout-cream-site #jlc-wb input[type="search"],
-  html.scout-cream-site #jlc-wb input[type="password"],
-  html.scout-cream-site #jlc-wb input[type="email"],
-  html.scout-cream-site #jlc-wb input[type="number"],
-  html.scout-cream-site #jlc-wb input[type="url"],
-  html.scout-cream-site #jlc-wb input:not([type]),
-  html.scout-cream-site #jlc-wb textarea,
-  html.scout-cream-site #jlc-wb select,
-  html.scout-cream-site #jlc-wb .jlc-wb-search,
-  html.scout-cream-site #scout-collect-dialog input[type="text"],
-  html.scout-cream-site #scout-collect-dialog select,
-  html.scout-cream-site #scout-collect-dialog textarea {
-    background: #fffaf3 !important;
-    color: #4a3728 !important;
-    border: 1px solid #e4d4bc !important;
-    box-shadow: 0 1px 0 #efe0cc !important;
-    color-scheme: light !important;
-    caret-color: var(--scout-theme-dark, #b56e28) !important;
-  }
-  html.scout-cream-site #jlc-wb input::placeholder,
-  html.scout-cream-site #jlc-wb textarea::placeholder,
-  html.scout-cream-site #jlc-wb .jlc-wb-search::placeholder {
-    color: #a89078 !important;
-    opacity: 1 !important;
-  }
-  html.scout-cream-site #jlc-wb input:focus,
-  html.scout-cream-site #jlc-wb textarea:focus,
-  html.scout-cream-site #jlc-wb select:focus,
-  html.scout-cream-site #scout-collect-dialog input:focus,
-  html.scout-cream-site #scout-collect-dialog select:focus {
-    border-color: var(--scout-theme-color) !important;
-    background: #fff !important;
-    outline: none !important;
-  }
-  /*
-   * 页级暗色按钮：只用 :where() 排除工作台，避免 :not(#id) 把特异性抬到
-   * 压过 #jlc-wb .jlc-wb-nav button（组合/词库那排裸 button 会被刷黑）。
-   */
-  html.scout-cream-site input[type="button"],
-  html.scout-cream-site input[type="submit"],
-  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)) {
-    background: var(--scout-page-panel) !important;
-    color: var(--scout-text-color) !important;
-    border: 1px solid var(--scout-page-border) !important;
-    border-radius: 10px !important;
-    box-shadow: 0 2px 0 var(--scout-page-border) !important;
-    cursor: pointer;
-  }
-  html.scout-cream-site input[type="button"]:hover,
-  html.scout-cream-site input[type="submit"]:hover,
-  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)):hover {
-    border-color: var(--scout-theme-color) !important;
-    color: var(--scout-theme-color) !important;
-  }
-
-  /* 工作台导航/主按钮：覆盖站内全局 button 样式 */
-  html.scout-cream-site #jlc-wb .jlc-wb-nav button,
-  html.scout-cream-site #jlc-wb .jlc-wb-settings-nav button {
-    background: #efe4d2 !important;
-    background-color: #efe4d2 !important;
-    color: #8a6f55 !important;
-    border: 0 !important;
-    box-shadow: none !important;
-  }
-  html.scout-cream-site #jlc-wb .jlc-wb-nav button.active,
-  html.scout-cream-site #jlc-wb .jlc-wb-settings-nav button.active {
-    background: var(--scout-theme-color) !important;
-    background-color: var(--scout-theme-color) !important;
-    color: #fff !important;
-    box-shadow: 0 2px 0 var(--scout-theme-dark) !important;
-  }
-  html.scout-cream-site #jlc-wb .jlc-wb-btn {
-    background: #fffaf2 !important;
-    color: #5a4030 !important;
-    border: 1px solid #e0cdae !important;
-  }
-  html.scout-cream-site #jlc-wb .jlc-wb-btn.primary {
-    background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-    background-color: var(--scout-theme-color) !important;
-    color: #fff !important;
-    border-color: transparent !important;
-    box-shadow: 0 2px 0 var(--scout-theme-dark) !important;
-  }
-  html.scout-cream-site #jlc-wb .jlc-wb-btn.ghost {
-    background: #fffaf2 !important;
-    color: #5a4030 !important;
-  }
-  html.scout-cream-site #jlc-wb .jlc-wb-btn.danger {
-    background: #f3d5d0 !important;
-    color: #8a3a32 !important;
-    border-color: #e8b8b0 !important;
-  }
-  html.scout-cream-site #jlc-wb .jlc-wb-chip {
-    background: #fff !important;
-    color: #5a4030 !important;
-    border: 1px solid #e0cdae !important;
-  }
-  html.scout-cream-site #jlc-wb .jlc-wb-chip.is-on {
-    background: var(--scout-theme-color) !important;
-    color: #fff !important;
-    border-color: transparent !important;
-  }
-  html.scout-cream-site #jlc-wb .jlc-wb-open-btn {
-    background: linear-gradient(var(--scout-theme-color), var(--scout-theme-dark)) !important;
-    color: #fff !important;
-    border: 0 !important;
-  }
-
-  html.scout-cream-site #footer,
-  html.scout-cream-site .footer,
-  html.scout-cream-site .pagination,
-  html.scout-cream-site .page-list,
-  html.scout-cream-site .pages {
-    background: var(--scout-page-panel) !important;
-    color: var(--scout-text-color) !important;
-    border-color: var(--scout-page-border) !important;
-  }
-  html.scout-cream-site .pagination a,
-  html.scout-cream-site .page-list a {
-    background: var(--scout-card) !important;
-    border: 1px solid var(--scout-page-border) !important;
-    border-radius: 8px !important;
-    color: var(--scout-link) !important;
-  }
-  html.scout-cream-site .pagination a:hover,
-  html.scout-cream-site .pagination .active,
-  html.scout-cream-site .page-list .active {
-    background: var(--scout-theme-color) !important;
-    color: #fff !important;
-    border-color: transparent !important;
-  }
-
-  /* 侧栏（勿碰 .mobile-hide；xvideos 列表卡是 .frame-block.thumb-block） */
-  html.scout-cream-site .sidebar,
-  html.scout-cream-site #sidebar,
-  html.scout-cream-site .side-block,
-  html.scout-cream-site .frame-block:not(.thumb-block) {
-    background: var(--scout-page-panel) !important;
-    color: var(--scout-text-color) !important;
-    border-color: var(--scout-page-border) !important;
-    border-radius: 12px !important;
-  }
-}
-
-/* 视频标题色 */
-html.scout-cream-site .page-title,
-html.scout-cream-site h2.page-title,
-html.scout-cream-site .video-title {
-  color: var(--scout-text-color) !important;
-  white-space: normal !important;
-  height: auto !important;
-  max-height: none !important;
-  overflow: visible !important;
-}
-
-/*
- * 详情元信息 / 标签：PC 全展开；手机折叠由 .scout-tags-collapsed 控制。
- */
-@media (min-width: 821px) {
-  html.scout-cream-site body.creamu-site-xvideos .video-metadata,
-  html.scout-cream-site body.creamu-site-xnxx .video-metadata,
-  html.scout-cream-site body.creamu-site-xvideos .video-metadata-list,
-  html.scout-cream-site body.creamu-site-xnxx .video-metadata-list,
-  html.scout-cream-site body.creamu-site-xvideos .metadata-row,
-  html.scout-cream-site body.creamu-site-xnxx .metadata-row {
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    white-space: normal !important;
-    line-height: 1.45 !important;
-  }
-  html.scout-cream-site body.creamu-site-xvideos .video-tags,
-  html.scout-cream-site body.creamu-site-xnxx .video-tags,
-  html.scout-cream-site body.creamu-site-eporner #video-tags,
-  html.scout-cream-site body.creamu-site-eporner .tag-container {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    align-items: center !important;
-    gap: 6px !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-    white-space: normal !important;
-    background: var(--scout-page-panel) !important;
-    border: 1px solid var(--scout-page-border) !important;
-    border-radius: 12px !important;
-    padding: 8px 10px !important;
-    margin-top: 8px !important;
-  }
-}
-@media (max-width: 820px) {
-  html.scout-cream-site body.creamu-site-xvideos .video-metadata.scout-tags-collapsed,
-  html.scout-cream-site body.creamu-site-xnxx .video-metadata.scout-tags-collapsed,
-  html.scout-cream-site body.creamu-site-xnxx .metadata-row.video-tags.scout-tags-collapsed,
-  html.scout-cream-site body.creamu-site-xnxx .video-tags.scout-tags-collapsed {
-    max-height: 2.15em !important;
-    overflow: hidden !important;
-  }
-  html.scout-cream-site body.creamu-site-xvideos .video-metadata.scout-tags-expanded,
-  html.scout-cream-site body.creamu-site-xnxx .video-metadata.scout-tags-expanded,
-  html.scout-cream-site body.creamu-site-xnxx .metadata-row.video-tags.scout-tags-expanded,
-  html.scout-cream-site body.creamu-site-xnxx .video-tags.scout-tags-expanded {
-    max-height: none !important;
-    overflow: visible !important;
-  }
-  html.scout-cream-site .scout-desc-collapsed {
-    -webkit-line-clamp: 2 !important;
-    max-height: 3em !important;
-    overflow: hidden !important;
-  }
-}
-html.scout-cream-site body.creamu-site-xvideos .video-tags a,
-html.scout-cream-site body.creamu-site-xnxx .video-tags a,
-html.scout-cream-site body.creamu-site-xvideos .video-metadata .video-tags a,
-html.scout-cream-site body.creamu-site-xnxx .video-metadata .video-tags a,
-html.scout-cream-site body.creamu-site-eporner #video-tags a,
-html.scout-cream-site body.creamu-site-eporner .tag-container a {
-  display: inline-flex !important;
-  flex: 0 1 auto !important;
-  align-items: center !important;
-  flex-wrap: nowrap !important;
-  white-space: nowrap !important;
-  background: var(--scout-card) !important;
-  border: 1px solid var(--scout-page-border) !important;
-  border-radius: 999px !important;
-  color: var(--scout-text-color) !important;
-  padding: 3px 8px !important;
-  margin: 0 !important;
-  max-width: 100% !important;
-}
-
-/*
- * 列表/mozaique/标题：仅 PC。手机零改动，否则 xnxx 标题会从 float 卡散出。
- */
-@media (min-width: 821px) {
-  html.scout-cream-site body.creamu-site-xvideos #content,
-  html.scout-cream-site body.creamu-site-xnxx #content,
-  html.scout-cream-site body.creamu-site-eporner body,
-  html.scout-cream-site body.creamu-site-eporner #content {
-    background: var(--scout-page-bg) !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-  }
-  html.scout-cream-site body.creamu-site-xvideos .mozaique,
-  html.scout-cream-site body.creamu-site-xnxx .mozaique {
-    background: transparent !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-  }
-  html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block,
-  html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block {
-    visibility: visible !important;
-    background: var(--scout-card, var(--scout-card-bg)) !important;
-    border: 1px solid var(--scout-page-border) !important;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.08) !important;
-  }
-  html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block .thumb-inside,
-  html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .thumb-inside,
-  html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block .thumb,
-  html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .thumb {
-    background: transparent !important;
-  }
-  html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block p,
-  html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block p {
-    color: var(--scout-text-color) !important;
-  }
-  /* eporner 仅可见性，不改布局 */
-  html.scout-cream-site body.creamu-site-eporner #vidresults {
-    height: auto !important;
-    overflow: visible !important;
-    visibility: visible !important;
-  }
-}
-
-/* 开主题时播放器区保持深色 */
-html.scout-cream-site body.creamu-site-xvideos #video-player-bg,
-html.scout-cream-site body.creamu-site-xnxx #video-player-bg {
-  background: #121010 !important;
-}
-
-#scout-seek-hud {
-  position: fixed !important;
-  left: 50% !important;
-  top: 18% !important;
-  transform: translateX(-50%) !important;
-  z-index: 2147483646 !important;
-  padding: 10px 16px !important;
-  border-radius: 12px !important;
-  background: rgba(0, 0, 0, 0.72) !important;
-  color: #fff !important;
-  font-size: 16px !important;
-  font-weight: 700 !important;
-  letter-spacing: 0.02em !important;
-  pointer-events: none !important;
-  white-space: nowrap !important;
-  display: none !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
-}
-#scout-seek-hud.is-on {
-  display: block !important;
-}
-`;
-}
 // @@creamu-part:page-enhancements
+// Shared page helpers
 
 /** 将工作台放到视口内；无有效记忆位置时用默认几何 */
 function applyScoutWorkbenchGeometry(wb, patch = {}) {
@@ -7404,247 +8061,6 @@ function makeResizable(wbEl) {
   });
 }
 
-/** 清除列表卡屏蔽呈现（类名 + 内联，避免被主题 !important 盖掉） */
-function clearListBlockPresentation(el) {
-  if (!el) return;
-  el.classList.remove('scout-blocked-hide', 'scout-blocked-dim');
-  try {
-    el.style.removeProperty('display');
-    el.style.removeProperty('opacity');
-    el.style.removeProperty('pointer-events');
-  } catch (_) {
-    el.style.display = '';
-    el.style.opacity = '';
-    el.style.pointerEvents = '';
-  }
-  el.removeAttribute('title');
-}
-
-function applyListBlockHide(el) {
-  if (!el) return;
-  el.classList.remove('scout-blocked-dim');
-  el.classList.add('scout-blocked-hide');
-  try {
-    el.style.setProperty('display', 'none', 'important');
-    el.style.removeProperty('opacity');
-    el.style.removeProperty('pointer-events');
-  } catch (_) {
-    el.style.display = 'none';
-  }
-}
-
-function applyListBlockDim(el, titleText) {
-  if (!el) return;
-  el.classList.remove('scout-blocked-hide');
-  el.classList.add('scout-blocked-dim');
-  try {
-    el.style.removeProperty('display');
-    el.style.setProperty('opacity', '0.08', 'important');
-    el.style.setProperty('pointer-events', 'none', 'important');
-  } catch (_) {
-    el.style.display = '';
-    el.style.opacity = '0.08';
-    el.style.pointerEvents = 'none';
-  }
-  if (titleText) el.title = titleText;
-}
-
-function applyListBlocks() {
-  const blocks = getBlockList();
-  const pubs = getPublishers();
-  const els = getVideoElements();
-  let blockedCount = 0;
-
-  els.forEach(el => {
-    const meta = parseVideoElement(el);
-    if (!meta) return;
-
-    let hitBlock = null;
-
-    // 1. 匹配熟人关注与拉黑
-    let pubLoved = false;
-    if (meta.uploader) {
-      const uploaderLower = meta.uploader.toLowerCase().trim();
-      const matchedPub = pubs.find(p => p.name.toLowerCase().trim() === uploaderLower);
-      if (matchedPub) {
-        if (matchedPub.status === 'blocked') {
-          applyListBlockHide(el);
-          blockedCount++;
-          return;
-        } else if (matchedPub.status === 'loved') {
-          pubLoved = true;
-        }
-      }
-    }
-
-    // 2. 匹配屏蔽词（整词/子串 + 标题/上传者；hide 优先）
-    for (const b of blocks) {
-      if (!blockMatchesVideo(meta, b)) continue;
-      if (!hitBlock || b.mode === 'hide') {
-        hitBlock = b;
-        if (b.mode === 'hide') break;
-      }
-    }
-
-    // 3. 执行过滤视觉呈现
-    if (hitBlock) {
-      blockedCount++;
-      if (hitBlock.mode === 'hide') {
-        applyListBlockHide(el);
-      } else {
-        const matchLabel = normalizeBlockMatch(hitBlock.match) === 'sub' ? '子串' : '整词';
-        const scopeLabel = normalizeBlockScope(hitBlock.scope) === 'both'
-          ? '标题+上传者'
-          : normalizeBlockScope(hitBlock.scope) === 'uploader' ? '上传者' : '标题';
-        applyListBlockDim(
-          el,
-          `已被弱屏蔽词 "${hitBlock.text}" 过滤 [${matchLabel}/${scopeLabel}] (原因: ${hitBlock.reason || '无'})`
-        );
-      }
-    } else {
-      clearListBlockPresentation(el);
-
-      if (pubLoved) {
-        el.classList.add('scout-pub-loved-card');
-        if (!el.querySelector('.scout-pub-badge')) {
-          const badge = document.createElement('div');
-          badge.className = 'scout-pub-badge';
-          badge.textContent = `★ ${meta.uploader}`;
-          el.style.position = 'relative';
-          el.appendChild(badge);
-        }
-      } else {
-        el.classList.remove('scout-pub-loved-card');
-        el.querySelector('.scout-pub-badge')?.remove();
-      }
-    }
-  });
-
-  const badge = document.querySelector('#jlc-wb-fab .jlc-wb-fab-badge');
-  if (badge) {
-    if (blockedCount > 0) {
-      badge.textContent = blockedCount;
-      badge.style.display = 'inline-flex';
-    } else {
-      badge.style.display = 'none';
-    }
-  }
-
-  // 屏蔽之后再刷已点样式、点击绑定、词库命中流
-  applyClickedEnhancements();
-  enhanceListLexiconHitFlows();
-}
-
-/**
- * 列表影片链接：是否新标签打开（设置项 open_videos_new_tab）
- */
-function applyVideoOpenMode() {
-  const newTab = typeof isOpenVideosNewTab === 'function' ? isOpenVideosNewTab() : true;
-  const els = getVideoElements();
-  els.forEach(el => {
-    if (!el || el.nodeType !== 1) return;
-    el.querySelectorAll('a[href]').forEach(a => {
-      const href = a.getAttribute('href') || '';
-      if (!href || href === '#' || href.startsWith('javascript:')) return;
-      // 只处理看起来像视频的链接
-      if (
-        !/\/video|\/video-|\/videos\//i.test(href) &&
-        !a.closest('.thumb-block, .post, .video-block, [id^="video_"], .mb, .mb[data-id], #vidresults .mb')
-      ) {
-        return;
-      }
-      if (newTab) {
-        a.setAttribute('target', '_blank');
-        a.setAttribute('rel', 'noopener noreferrer');
-        if (a.dataset.scoutNewTabBound === '1') return;
-        a.dataset.scoutNewTabBound = '1';
-        a.addEventListener('click', (e) => {
-          if (!isOpenVideosNewTab()) return;
-          // 左键：强制新标签（部分站点忽略 target）
-          if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-          e.preventDefault();
-          e.stopPropagation();
-          openScoutUrl(a.href, { newTab: true });
-        }, true);
-      } else {
-        a.removeAttribute('target');
-      }
-    });
-  });
-}
-
-/**
- * 已点片库：列表灰显 + 点击即记（与 tracks 断点无关）
- */
-function applyClickedEnhancements() {
-  const site = detectSite();
-  if (!site) return;
-  const kind = detectPageKind();
-  if (kind !== 'search' && kind !== 'other') return;
-
-  const els = getVideoElements();
-  els.forEach(el => {
-    if (!el || el.nodeType !== 1) return;
-    const meta = parseVideoElement(el);
-    if (!meta || !meta.url) return;
-    const videoId = videoIdFromUrl(meta.url);
-    if (!videoId) return;
-
-    if (isVideoClicked(site, videoId)) {
-      el.classList.add('scout-visited-item');
-    }
-
-    if (el.dataset.scoutClickBound === '1') return;
-    el.dataset.scoutClickBound = '1';
-
-    const mark = () => {
-      markVideoClicked({
-        site,
-        videoId,
-        title: meta.title,
-        url: meta.url,
-        thumb: meta.thumb,
-        uploader: meta.uploader
-      });
-      el.classList.add('scout-visited-item');
-    };
-
-    // 卡片内链接（含中键）；整卡 pointerdown 兜底
-    el.querySelectorAll('a[href]').forEach(a => {
-      a.addEventListener('pointerdown', mark, { passive: true });
-      a.addEventListener('click', mark, { passive: true });
-      a.addEventListener('auxclick', mark, { passive: true });
-    });
-    el.addEventListener('pointerdown', (e) => {
-      // 避免与屏蔽控件等冲突：仅卡片主体
-      if (e.target.closest('.scout-tag-addon, .scout-pub-addon, button, input')) return;
-      mark();
-    }, { passive: true });
-  });
-
-  applyVideoOpenMode();
-}
-
-/** 进入视频详情页时记为已点 */
-function markCurrentVideoPageClicked() {
-  if (detectPageKind() !== 'video') return;
-  const site = detectSite();
-  if (!site) return;
-  const meta = scrapeVideoMeta();
-  const url = (meta && meta.url) || location.href;
-  const videoId = videoIdFromUrl(url);
-  if (!videoId) return;
-  markVideoClicked({
-    site,
-    videoId,
-    title: meta && meta.title,
-    url,
-    thumb: meta && meta.thumb,
-    uploader: meta && meta.uploader
-  });
-}
-
-// 
 function showScoutCollectDialog({ text, sources, onSaved }) {
   const existing = document.getElementById('scout-collect-dialog');
   if (existing) existing.remove();
@@ -7710,7 +8126,6 @@ function showScoutCollectDialog({ text, sources, onSaved }) {
   }, 30);
 }
 
-// 
 function buildLexiconHitFlowHtml(matchResult, options) {
   const opts = options || {};
   const max = opts.max != null ? opts.max : 12;
@@ -7739,179 +8154,310 @@ function buildLexiconHitFlowHtml(matchResult, options) {
     : '';
   return `${head}<span class="scout-lex-flow-chips">${chips}${more}</span>`;
 }
+// @@creamu-part:list-enhancements
+
+function clearListBlockInlinePresentation(el) {
+  if (!el || !el.style) return;
+  el.style.removeProperty('display');
+  el.style.removeProperty('opacity');
+  el.style.removeProperty('pointer-events');
+}
+
+/** 清除列表卡屏蔽呈现 */
+function clearListBlockPresentation(el) {
+  if (!el) return;
+  el.classList.remove('scout-blocked-hide', 'scout-blocked-dim');
+  clearListBlockInlinePresentation(el);
+  el.removeAttribute('title');
+}
+
+function applyListBlockHide(el) {
+  if (!el) return;
+  el.classList.remove('scout-blocked-dim');
+  el.classList.add('scout-blocked-hide');
+  clearListBlockInlinePresentation(el);
+}
+
+function applyListBlockDim(el, titleText) {
+  if (!el) return;
+  el.classList.remove('scout-blocked-hide');
+  el.classList.add('scout-blocked-dim');
+  clearListBlockInlinePresentation(el);
+  if (titleText) el.title = titleText;
+}
+
+function collectListVideoEntries(elements) {
+  const nodes = elements == null ? getVideoElements() : elements;
+  return Array.from(nodes || []).map((element) => ({
+    element,
+    meta: element && element.nodeType === 1 ? parseVideoElement(element) : null
+  }));
+}
+
+function applyListBlocks(listEntries) {
+  const blocks = getBlockList();
+  const pubs = getPublishers();
+  const preparedBlocks = prepareBlockMatchers(blocks);
+  const publisherIndex = buildPublisherIndex(pubs);
+  const entries = listEntries || collectListVideoEntries();
+  let blockedCount = 0;
+
+  entries.forEach(({ element: el, meta }) => {
+    if (!meta) return;
+    const preparedMeta = {
+      title: normalizeBlockText(meta.title),
+      uploader: normalizeBlockText(meta.uploader || '')
+    };
+
+    let hitBlock = null;
+
+    // 1. 匹配熟人关注与拉黑
+    let pubLoved = false;
+    if (meta.uploader) {
+      const matchedPub = publisherIndex.get(publisherIdentityKey(meta.uploader));
+      if (matchedPub) {
+        if (matchedPub.status === 'blocked') {
+          applyListBlockHide(el);
+          blockedCount++;
+          return;
+        } else if (matchedPub.status === 'loved') {
+          pubLoved = true;
+        }
+      }
+    }
+
+    // 2. 匹配屏蔽词（整词/子串 + 标题/上传者；hide 优先）
+    for (const matcher of preparedBlocks) {
+      if (!preparedBlockMatchesVideo(preparedMeta, matcher)) continue;
+      const b = matcher.block;
+      if (!hitBlock || b.mode === 'hide') {
+        hitBlock = b;
+        if (b.mode === 'hide') break;
+      }
+    }
+
+    // 3. 执行过滤视觉呈现
+    if (hitBlock) {
+      blockedCount++;
+      if (hitBlock.mode === 'hide') {
+        applyListBlockHide(el);
+      } else {
+        const matchLabel = normalizeBlockMatch(hitBlock.match) === 'sub' ? '子串' : '整词';
+        const scopeLabel = normalizeBlockScope(hitBlock.scope) === 'both'
+          ? '标题+上传者'
+          : normalizeBlockScope(hitBlock.scope) === 'uploader' ? '上传者' : '标题';
+        applyListBlockDim(
+          el,
+          `已被弱屏蔽词 "${hitBlock.text}" 过滤 [${matchLabel}/${scopeLabel}] (原因: ${hitBlock.reason || '无'})`
+        );
+      }
+    } else {
+      clearListBlockPresentation(el);
+
+      if (pubLoved) {
+        el.classList.add('scout-pub-loved-card');
+        if (!el.querySelector('.scout-pub-badge')) {
+          const badge = document.createElement('div');
+          badge.className = 'scout-pub-badge';
+          badge.textContent = `★ ${meta.uploader}`;
+          el.appendChild(badge);
+        }
+      } else {
+        el.classList.remove('scout-pub-loved-card');
+        el.querySelector('.scout-pub-badge')?.remove();
+      }
+    }
+  });
+
+  const fab = document.querySelector('#jlc-wb-fab');
+  const badge = fab && fab.querySelector('.jlc-wb-fab-badge');
+  if (badge) {
+    if (blockedCount > 0) {
+      badge.textContent = blockedCount;
+    } else {
+      badge.textContent = '0';
+    }
+  }
+  if (fab) fab.classList.toggle('has-updates', blockedCount > 0);
+
+  // 屏蔽之后再刷已点样式、点击绑定、词库命中流
+  applyClickedEnhancements(entries);
+  enhanceListLexiconHitFlows(entries);
+}
 
 /**
- * 详情页：词库样式融进原生标签；
- * 手机：标签默认一行、描述默认两行，点按钮展开。
+ * 列表影片链接：是否新标签打开（设置项 open_videos_new_tab）
  */
-function enhancePageLexiconHitFlow() {
-  if (detectPageKind() !== 'video') return;
-  const legacy = document.getElementById('scout-lex-hit-bar');
-  if (legacy) legacy.remove();
-
-  let isNarrow = false;
-  try {
-    isNarrow = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
-  } catch (_) {
-    isNarrow = window.innerWidth <= 820;
-  }
-
-  // 标签容器：xvideos 用 video-metadata.video-tags-list；xnxx 用 metadata-row.video-tags
-  const tagBoxes = document.querySelectorAll(
-    [
-      '.video-metadata.video-tags-list',
-      '.video-metadata.ordered-label-list',
-      '.metadata-row.video-tags',
-      '.video-tags-list',
-      '.ordered-label-list',
-      '.video-tags'
-    ].join(',')
-  );
-
-  // 描述容器（有则折叠；xnxx/xvideos 常见选择器）
-  const descBoxes = document.querySelectorAll(
-    [
-      '.video-description',
-      '#video-description',
-      '[itemprop="description"]',
-      '.metadata-row.video-description',
-      'p.video-description',
-      '.video-desc',
-      '#video-desc',
-      // xnxx 偶发长文案块
-      '.clear-infobar .description',
-      '#video-content-metadata .description'
-    ].join(',')
-  );
-
-  if (!isNarrow) {
-    tagBoxes.forEach((el) => {
-      el.classList.remove('cropped', 'scout-tags-collapsed');
-      el.classList.add('scout-tags-expanded');
-      el.style.maxHeight = 'none';
-      el.style.overflow = 'visible';
-      el.style.height = 'auto';
+function applyVideoOpenMode(listEntries) {
+  const newTab = typeof isOpenVideosNewTab === 'function' ? isOpenVideosNewTab() : true;
+  const els = listEntries
+    ? listEntries.map((entry) => entry && entry.element).filter(Boolean)
+    : Array.from(getVideoElements() || []);
+  els.forEach(el => {
+    if (!el || el.nodeType !== 1) return;
+    el.querySelectorAll('a[href]').forEach(a => {
+      const href = a.getAttribute('href') || '';
+      if (!href || href === '#' || href.startsWith('javascript:')) return;
+      // 只处理看起来像视频的链接
+      if (
+        !/\/video|\/video-|\/videos\//i.test(href) &&
+        !a.closest('.thumb-block, .post, .video-block, [id^="video_"], .mb, .mb[data-id], #vidresults .mb')
+      ) {
+        return;
+      }
+      if (newTab) {
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+        if (a.dataset.scoutNewTabBound === '1') return;
+        a.dataset.scoutNewTabBound = '1';
+        a.addEventListener('click', (e) => {
+          if (!isOpenVideosNewTab()) return;
+          // 左键：强制新标签（部分站点忽略 target）
+          if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          e.stopPropagation();
+          openScoutUrl(a.href, { newTab: true });
+        }, true);
+      } else {
+        a.removeAttribute('target');
+      }
     });
-    descBoxes.forEach((el) => {
-      el.classList.remove('scout-desc-collapsed');
-      el.classList.add('scout-desc-expanded');
-      el.style.maxHeight = '';
-      el.style.overflow = '';
-      el.style.webkitLineClamp = '';
-    });
-    document.getElementById('scout-tags-toggle')?.remove();
-    document.getElementById('scout-desc-toggle')?.remove();
-    return;
-  }
-
-  setupMobileDetailTagsCollapse(tagBoxes);
-  setupMobileDetailDescCollapse(descBoxes);
+  });
 }
 
-function setupMobileDetailTagsCollapse(boxes) {
-  const list = Array.from(boxes || []).filter(Boolean);
-  // 不要把投票行 metadata-row.video-metadata 当成标签
-  const tagsOnly = list.filter((el) => {
-    const c = el.className || '';
-    if (/video-tags|tags-list|ordered-label|is-keyword/i.test(c)) return true;
-    if (/video-metadata/i.test(c) && !/video-tags/i.test(c) && el.querySelector('a.is-keyword')) {
-      return true;
+/**
+ * 已点片库：列表灰显 + 点击即记（与 tracks 断点无关）
+ */
+function applyClickedEnhancements(listEntries) {
+  const site = detectSite();
+  if (!site) return;
+  const kind = detectPageKind();
+  if (kind !== 'search' && kind !== 'other') return;
+
+  const entries = listEntries || collectListVideoEntries();
+  const clickedIndex = buildClickedVideoIdIndex(site);
+  entries.forEach(({ element: el, meta }) => {
+    if (!el || el.nodeType !== 1) return;
+    if (!meta || !meta.url) return;
+    const videoId = videoIdFromUrl(meta.url);
+    if (!videoId) return;
+
+    if (isVideoClickedInIndex(clickedIndex, videoId)) {
+      el.classList.add('scout-visited-item');
     }
-    return !!el.querySelector('a.is-keyword, a[href^="/tags/"], a[href^="/tag/"]');
-  });
-  if (!tagsOnly.length) return;
 
-  const box = tagsOnly[0];
-  tagsOnly.forEach((el) => {
-    el.classList.add('scout-tags-collapsed');
-    el.classList.remove('scout-tags-expanded');
-    el.style.maxHeight = '';
-    el.style.overflow = '';
-    el.style.height = '';
-  });
+    if (el.dataset.scoutClickBound === '1') return;
+    el.dataset.scoutClickBound = '1';
 
-  let toggle = document.getElementById('scout-tags-toggle');
-  if (!toggle) {
-    toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.id = 'scout-tags-toggle';
-    toggle.className = 'scout-tags-toggle';
-    toggle.setAttribute('data-scout-ui', '1');
-    if (box.parentNode) box.parentNode.insertBefore(toggle, box.nextSibling);
-    else box.appendChild(toggle);
-    toggle.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const open = box.classList.contains('scout-tags-expanded');
-      tagsOnly.forEach((el) => {
-        el.classList.toggle('scout-tags-collapsed', open);
-        el.classList.toggle('scout-tags-expanded', !open);
+    const mark = () => {
+      markVideoClicked({
+        site,
+        videoId,
+        title: meta.title,
+        url: meta.url,
+        thumb: meta.thumb,
+        uploader: meta.uploader
       });
-      toggle.textContent = open ? '展开全部标签 ▾' : '收起标签 ▴';
-      toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+      el.classList.add('scout-visited-item');
+    };
+
+    // 卡片内链接（含中键）；整卡 pointerdown 兜底
+    el.querySelectorAll('a[href]').forEach(a => {
+      a.addEventListener('pointerdown', mark, { passive: true });
+      a.addEventListener('click', mark, { passive: true });
+      a.addEventListener('auxclick', mark, { passive: true });
     });
-  }
-  const open = box.classList.contains('scout-tags-expanded');
-  toggle.textContent = open ? '收起标签 ▴' : '展开全部标签 ▾';
-  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    el.addEventListener('pointerdown', (e) => {
+      // 避免与屏蔽控件等冲突：仅卡片主体
+      if (e.target.closest('.scout-tag-addon, .scout-pub-addon, button, input')) return;
+      mark();
+    }, { passive: true });
+  });
+
+  applyVideoOpenMode(entries);
 }
 
-function setupMobileDetailDescCollapse(boxes) {
-  const list = Array.from(boxes || []).filter((el) => {
-    if (!el) return false;
-    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
-    // 太短不折叠
-    return text.length >= 60;
+/** 进入视频详情页时记为已点 */
+function markCurrentVideoPageClicked() {
+  if (detectPageKind() !== 'video') return;
+  const site = detectSite();
+  if (!site) return;
+  const meta = scrapeVideoMeta();
+  const url = (meta && meta.url) || location.href;
+  const videoId = videoIdFromUrl(url);
+  if (!videoId) return;
+  markVideoClicked({
+    site,
+    videoId,
+    title: meta && meta.title,
+    url,
+    thumb: meta && meta.thumb,
+    uploader: meta && meta.uploader
   });
-  if (!list.length) {
-    document.getElementById('scout-desc-toggle')?.remove();
-    return;
-  }
-
-  const box = list[0];
-  list.forEach((el) => {
-    el.classList.add('scout-desc-collapsed');
-    el.classList.remove('scout-desc-expanded');
-  });
-
-  let toggle = document.getElementById('scout-desc-toggle');
-  if (!toggle) {
-    toggle = document.createElement('button');
-    toggle.type = 'button';
-    toggle.id = 'scout-desc-toggle';
-    toggle.className = 'scout-tags-toggle scout-desc-toggle';
-    toggle.setAttribute('data-scout-ui', '1');
-    if (box.parentNode) box.parentNode.insertBefore(toggle, box.nextSibling);
-    else box.appendChild(toggle);
-    toggle.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const open = box.classList.contains('scout-desc-expanded');
-      list.forEach((el) => {
-        el.classList.toggle('scout-desc-collapsed', open);
-        el.classList.toggle('scout-desc-expanded', !open);
-      });
-      toggle.textContent = open ? '展开描述 ▾' : '收起描述 ▴';
-      toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
-    });
-  }
-  const open = box.classList.contains('scout-desc-expanded');
-  toggle.textContent = open ? '收起描述 ▴' : '展开描述 ▾';
-  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
+
+//
 
 /**
  * 列表卡片：词库命中标签流
  * 列表词库命中流：叠在缩略图上（站点常裁切 .thumb-under）
  */
-function enhanceListLexiconHitFlows() {
-  try {
-    if (detectPageKind() === 'video') return;
-    const terms = getLexiconTerms().filter((t) => t && t.status !== 'retired');
-    if (!terms.length) return;
+function clearListLexiconOverlays(root) {
+  const scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll('.scout-lex-flow-overlay').forEach((flow) => {
+    releaseListLexiconOverlayHost(flow);
+    flow.remove();
+  });
+}
 
-    const els = getVideoElements();
-    if (!els || !els.length) return;
+function releaseListLexiconOverlayHost(flow) {
+  const host = flow && (flow.parentElement || flow.parentNode);
+  if (!host || !host.classList) return;
+  host.classList.remove(
+    'scout-lex-overlay-host',
+    'scout-lex-overlay-positioned',
+    'scout-lex-overlay-clipped'
+  );
+  if (host.dataset) delete host.dataset.scoutLexOverlayMode;
+}
+
+function prepareListLexiconOverlayHost(host, isNarrow) {
+  if (!host || !host.classList) return;
+  const mode = isNarrow ? 'narrow' : 'wide';
+  if (
+    host.dataset &&
+    host.dataset.scoutLexOverlayMode === mode &&
+    host.classList.contains('scout-lex-overlay-host')
+  ) {
+    return;
+  }
+  host.classList.remove('scout-lex-overlay-positioned', 'scout-lex-overlay-clipped');
+  host.classList.add('scout-lex-overlay-host');
+  try {
+    const cs = window.getComputedStyle(host);
+    if (cs.position === 'static') host.classList.add('scout-lex-overlay-positioned');
+    if (cs.overflow === 'visible') host.classList.add('scout-lex-overlay-clipped');
+  } catch (_) {
+    host.classList.add('scout-lex-overlay-positioned');
+  }
+  if (host.dataset) host.dataset.scoutLexOverlayMode = mode;
+}
+
+function enhanceListLexiconHitFlows(listEntries) {
+  try {
+    if (detectPageKind() === 'video') {
+      clearListLexiconOverlays(document);
+      return;
+    }
+    const terms = getLexiconTerms().filter((t) => t && t.status !== 'retired');
+    if (!terms.length) {
+      clearListLexiconOverlays(document);
+      return;
+    }
+    const preparedTerms = prepareLexiconMatcher(terms);
+
+    const entries = listEntries || collectListVideoEntries();
+    if (!entries.length) return;
 
     // 手机也要标签流；只允许把 relative 写在图容器上，绝不写到 .thumb-block 本身
     let isNarrow = false;
@@ -7919,35 +8465,21 @@ function enhanceListLexiconHitFlows() {
       isNarrow = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
     } catch (_) { /* ignore */ }
 
-    Array.from(els).forEach((el) => {
+    entries.forEach(({ element: el, meta }) => {
       if (!el || el.nodeType !== 1) return;
       if (el.closest && el.closest('#jlc-wb, #scout-lex-hit-bar')) return;
 
-      const meta = parseVideoElement(el);
       // 标题可空：matchLexiconHits 仍会从 url slug 补伪标签；二者皆空才跳过
       if (!meta || (!compactText(meta.title) && !compactText(meta.url))) return;
-
-      const slugTags = [];
-      try {
-        const path = new URL(meta.url, location.origin).pathname || '';
-        const slug = path.split('/').filter(Boolean).pop() || '';
-        // 整段 slug + 下划线/连字符分词
-        const spaced = slug.replace(/[-_~.]+/g, ' ').replace(/\s+/g, ' ').trim();
-        if (spaced) slugTags.push(spaced);
-        spaced.split(/\s+/).forEach((w) => {
-          const t = compactText(w);
-          if (t.length >= 2) slugTags.push(t);
-        });
-      } catch (_) { /* ignore */ }
 
       const match = matchLexiconHits(
         {
           title: meta.title || '',
-          tags: [].concat(meta.tags || [], slugTags),
+          tags: [].concat(meta.tags || []),
           uploader: meta.uploader || '',
           url: meta.url || ''
         },
-        { terms }
+        { preparedTerms }
       );
 
       // 旧位置（thumb-under）里的节点清掉，避免重复
@@ -7957,7 +8489,10 @@ function enhanceListLexiconHitFlows() {
 
       let flow = el.querySelector('.scout-lex-flow-overlay');
       if (!match.total) {
-        if (flow) flow.remove();
+        if (flow) {
+          releaseListLexiconOverlayHost(flow);
+          flow.remove();
+        }
         return;
       }
 
@@ -7975,16 +8510,11 @@ function enhanceListLexiconHitFlows() {
         thumbHost = (imgA && imgA.parentElement) || null;
       }
       if (!thumbHost || thumbHost === el) {
-        if (flow) flow.remove();
+        if (flow) {
+          releaseListLexiconOverlayHost(flow);
+          flow.remove();
+        }
         return;
-      }
-      try {
-        const cs = window.getComputedStyle(thumbHost);
-        if (cs.position === 'static') thumbHost.style.position = 'relative';
-        // 图容器需可裁剪叠层，但不改 height/width（交给站点）
-        if (cs.overflow === 'visible') thumbHost.style.overflow = 'hidden';
-      } catch (_) {
-        thumbHost.style.position = 'relative';
       }
 
       if (!flow) {
@@ -7992,600 +8522,36 @@ function enhanceListLexiconHitFlows() {
         flow.className = 'scout-lex-flow-card scout-lex-flow scout-lex-flow-overlay';
         thumbHost.appendChild(flow);
       } else if (flow.parentNode !== thumbHost) {
+        releaseListLexiconOverlayHost(flow);
         thumbHost.appendChild(flow);
       }
+      prepareListLexiconOverlayHost(thumbHost, isNarrow);
 
-      // 强制可见：半透明底 + 白字芯片，盖在图上
-      const maxH = isNarrow ? '36%' : '46%';
-      const pad = isNarrow ? '3px' : '4px';
-      const chipFs = isNarrow ? '9px' : '10px';
-      flow.style.cssText = [
-        'display:flex',
-        'flex-wrap:wrap',
-        'gap:3px',
-        'align-items:flex-start',
-        'position:absolute',
-        'left:4px',
-        'right:4px',
-        'bottom:4px',
-        'top:auto',
-        'z-index:30',
-        'margin:0',
-        `padding:${pad}`,
-        `max-height:${maxH}`,
-        'overflow:hidden',
-        'pointer-events:none',
-        'background:linear-gradient(transparent,rgba(0,0,0,.78))',
-        'border-radius:0 0 8px 8px',
-        'box-sizing:border-box'
-      ].join('!important;') + '!important;';
+      const flowSignature = JSON.stringify([
+        isNarrow ? 1 : 0,
+        match.total || 0,
+        match.lovedCount || 0,
+        (match.hits || []).map((hit) => [
+          hit.text || '',
+          hit.zh || '',
+          hit.type || '',
+          !!hit.loved,
+          hit.via || '',
+          hit.label || ''
+        ])
+      ]);
+      if (flow.dataset.scoutFlowSignature === flowSignature) return;
 
       flow.innerHTML = buildLexiconHitFlowHtml(match, {
         max: isNarrow ? 5 : 8,
         showCount: false
       });
-
-      // 列表叠加：毛玻璃小胶囊（可两行，避免只看见 1 个）
-      flow.style.maxHeight = isNarrow ? '38%' : '52%';
-      flow.style.overflow = 'hidden';
-      flow.querySelectorAll('.scout-lex-chip').forEach((chip) => {
-        const base =
-          'display:inline-flex!important;align-items:center!important;' +
-          `padding:2px 7px!important;border-radius:999px!important;` +
-          `font-size:${chipFs}!important;font-weight:650!important;line-height:1.2!important;` +
-          'letter-spacing:.2px!important;backdrop-filter:blur(6px)!important;' +
-          '-webkit-backdrop-filter:blur(6px)!important;' +
-          'box-shadow:0 1px 3px rgba(0,0,0,.28)!important;';
-        if (chip.classList.contains('is-more')) {
-          chip.style.cssText =
-            base +
-            'color:rgba(255,255,255,.9)!important;background:rgba(255,255,255,.18)!important;' +
-            'border:1px solid rgba(255,255,255,.28)!important;';
-          return;
-        }
-        if (chip.classList.contains('is-loved')) {
-          chip.style.cssText =
-            base +
-            'color:#fff!important;background:rgba(229,72,64,.92)!important;' +
-            'border:1px solid rgba(255,180,160,.55)!important;';
-        } else {
-          chip.style.cssText =
-            base +
-            'color:#fff!important;background:rgba(20,22,28,.72)!important;' +
-            'border:1px solid rgba(255,255,255,.22)!important;';
-        }
-      });
+      flow.dataset.scoutFlowSignature = flowSignature;
     });
   } catch (err) {
     console.warn('[Creamu Scout] list lexicon flow failed', err);
   }
 }
-
-// 
-function applyTagVisualState(a, txt, terms, blocks) {
-  const txtKey =
-    typeof lexiconIdentityKey === 'function' ? lexiconIdentityKey(txt) : String(txt || '').toLowerCase().trim();
-  let matchedTerm = terms.find(
-    (t) =>
-      t &&
-      t.status !== 'retired' &&
-      (typeof lexiconIdentityKey === 'function'
-        ? lexiconIdentityKey(t.text)
-        : String(t.text || '').toLowerCase().trim()) === txtKey
-  );
-  // 站内标签：用词库匹配补中文样式
-  if (!matchedTerm && typeof matchLexiconHits === 'function') {
-    try {
-      const hit = matchLexiconHits({ title: '', tags: [txt], uploader: '' }, { terms });
-      const h0 = hit && hit.hits && hit.hits[0];
-      if (h0) {
-        matchedTerm = terms.find(
-          (t) => t && String(t.text || '').toLowerCase() === String(h0.text || '').toLowerCase()
-        );
-      }
-    } catch (_) { /* ignore */ }
-  }
-  const matchedBlock = blocks.find((b) => textMatchesBlock(txt, b));
-  const oldHeart = a.querySelector('.scout-tag-heart');
-  let zhEl = a.querySelector('.scout-tag-zh');
-
-  a.classList.remove(
-    'scout-tag-explored',
-    'scout-tag-loved',
-    'scout-tag-blocked',
-    'scout-tag-in',
-    'scout-tag-out'
-  );
-  a.classList.add('scout-site-tag');
-
-  if (matchedBlock) {
-    if (oldHeart) oldHeart.remove();
-    if (zhEl) zhEl.remove();
-    a.classList.add('scout-tag-blocked');
-    a.title = `已被屏蔽 (理由: ${matchedBlock.reason || '无'}, 模式: ${matchedBlock.mode === 'hide' ? '强隐藏' : '弱淡化'})`;
-    return;
-  }
-
-  if (matchedTerm && matchedTerm.status !== 'retired') {
-    a.classList.add('scout-tag-in', 'scout-tag-explored');
-    if (matchedTerm.loved) a.classList.add('scout-tag-loved');
-    const zh = compactText(matchedTerm.zh);
-    a.title = zh
-      ? `${matchedTerm.text} · ${zh} [${matchedTerm.type || ''}]`
-      : `${matchedTerm.text} [${matchedTerm.type || ''}]`;
-    if (zh) {
-      if (!zhEl) {
-        zhEl = document.createElement('span');
-        zhEl.className = 'scout-tag-zh';
-        a.appendChild(zhEl);
-      }
-      if (zhEl.textContent !== zh) zhEl.textContent = zh;
-    } else if (zhEl) {
-      zhEl.remove();
-    }
-    if (matchedTerm.loved) {
-      if (!oldHeart) {
-        const heartSpan = document.createElement('span');
-        heartSpan.className = 'scout-tag-heart';
-        heartSpan.textContent = '♥';
-        heartSpan.setAttribute('aria-hidden', '1');
-        a.insertBefore(heartSpan, a.firstChild);
-      }
-    } else if (oldHeart) {
-      oldHeart.remove();
-    }
-    return;
-  }
-
-  if (oldHeart) oldHeart.remove();
-  if (zhEl) zhEl.remove();
-  a.classList.add('scout-tag-out');
-  a.title = txt + '（未入库 · 点 ＋ 采集）';
-}
-
-function enhancePageTags() {
-  const currentSite = detectSite();
-  if (!currentSite) return;
-  if (detectPageKind() !== 'video') return;
-
-  window.__scoutUiMutating = true;
-  try {
-    // 词库命中流（中文标签流 + 心动）
-    enhancePageLexiconHitFlow();
-
-    let selector = '';
-    if (currentSite === 'xvideos' || currentSite === 'xnxx') {
-      selector =
-        '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
-        '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a';
-    } else if (currentSite === 'eporner') {
-      selector =
-        'a[href^="/tag/"], a[href^="/cat/"], .vit-pornstar a, .vit-category a, ' +
-        '#video-tags a, .tag-container a, a.is-keyword, a.tag';
-    }
-    if (!selector) return;
-
-    const meta = scrapeVideoMeta();
-    const terms = getLexiconTerms();
-    const blocks = getBlockList();
-
-    document.querySelectorAll(selector).forEach(a => {
-      if (a.querySelector('.scout-tag-addon')) {
-        const txt = a.getAttribute('data-scout-tag') || '';
-        if (txt) applyTagVisualState(a, txt, terms, blocks);
-        return;
-      }
-
-      let txt =
-        typeof tagTextFromAnchor === 'function'
-          ? tagTextFromAnchor(a)
-          : a.textContent
-              .replace(/[♥❤️]/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim();
-      // 去掉我们嵌的中文 span / 操作钮文本
-      const zhNode = a.querySelector('.scout-tag-zh');
-      if (zhNode && zhNode.textContent && txt.endsWith(zhNode.textContent)) {
-        txt = txt.slice(0, -zhNode.textContent.length).trim();
-      }
-      txt = txt.replace(/[＋✕+]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (typeof sanitizeLexiconText === 'function') txt = sanitizeLexiconText(txt);
-      if (!txt || txt.startsWith('+') || /[＋✕]/.test(txt)) return;
-
-      a.setAttribute('data-scout-tag', txt);
-
-      applyTagVisualState(a, txt, terms, blocks);
-
-      const wrapper = document.createElement('span');
-      wrapper.className = 'scout-tag-addon';
-
-      const addBtn = document.createElement('span');
-      addBtn.textContent = '＋';
-      addBtn.title = '采集入库（选分类/翻译）';
-      addBtn.style.cssText = 'cursor:pointer;color:#8fd4a0;';
-      addBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showScoutCollectDialog({
-          text: txt,
-          sources: [{ site: currentSite, url: location.href, title: meta.title, at: new Date().toISOString() }],
-          onSaved() {
-            const activeBtn = document.querySelector('.jlc-wb-nav button.active');
-            if (activeBtn && activeBtn.getAttribute('data-tab') === 'lexicon') renderLexiconPage();
-            else if (activeBtn && activeBtn.getAttribute('data-tab') === 'combo') renderComboPage();
-            // 清签名以允许词库条更新
-            const bar = document.getElementById('scout-lex-hit-bar');
-            if (bar) delete bar.dataset.hitSig;
-            enhancePageTags();
-          }
-        });
-      });
-
-      const blockBtn = document.createElement('span');
-      blockBtn.textContent = '✕';
-      blockBtn.title = '弱屏蔽(点击) | 强隐藏(Shift+点击)';
-      blockBtn.style.cssText = 'cursor:pointer;color:#f09088;';
-      blockBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const isShift = e.shiftKey;
-        const targetMode = isShift ? 'hide' : 'dim';
-        addBlockWord({
-          text: txt,
-          mode: targetMode,
-          match: 'word',
-          scope: 'title',
-          reason: `自视频标签快捷添加 (${isShift ? '强隐藏' : '弱淡化'})`
-        });
-        showToast(`已加入屏蔽库: ${txt} (${isShift ? '彻底蒸发' : '弱淡化'})`, true);
-        applyListBlocks();
-        const activeBtn = document.querySelector('.jlc-wb-nav button.active');
-        if (activeBtn && activeBtn.getAttribute('data-tab') === 'blocks') renderBlocksPage();
-        else if (activeBtn && activeBtn.getAttribute('data-tab') === 'combo') renderComboPage();
-        const bar = document.getElementById('scout-lex-hit-bar');
-        if (bar) delete bar.dataset.hitSig;
-        enhancePageTags();
-      });
-
-      wrapper.appendChild(addBtn);
-      wrapper.appendChild(blockBtn);
-      a.appendChild(wrapper);
-    });
-  } finally {
-    // 延后清除，避免自身 DOM 更新再次触发 observer
-    setTimeout(() => {
-      window.__scoutUiMutating = false;
-    }, 50);
-  }
-}
-
-/**
- * 搜索页订阅追更入口
- * - PC：顶部细条
- * - 手机：FAB 旁小圆钮（不再铺底大横条）
- */
-function enhanceSearchTrackSubscribe() {
-  const site = typeof detectSite === 'function' ? detectSite() : null;
-  if (!site || typeof detectPageKind !== 'function' || detectPageKind() !== 'search') {
-    document.getElementById('scout-search-track-bar')?.remove();
-    return;
-  }
-
-  const ctx = typeof parseSearchContext === 'function' ? parseSearchContext() : { query: '', url: location.href };
-  const query = compactText(ctx && ctx.query);
-  if (!query) {
-    document.getElementById('scout-search-track-bar')?.remove();
-    return;
-  }
-
-  let isNarrow = false;
-  try {
-    isNarrow = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
-  } catch (_) { /* ignore */ }
-
-  const existing =
-    typeof findTrackBySiteQuery === 'function' ? findTrackBySiteQuery(site, query) : null;
-  const on = !!existing;
-  const qShort = query.length > 28 ? query.slice(0, 26) + '…' : query;
-
-  let bar = document.getElementById('scout-search-track-bar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'scout-search-track-bar';
-    bar.setAttribute('data-scout-ui', '1');
-    (document.body || document.documentElement).appendChild(bar);
-  }
-  bar.className = isNarrow ? 'scout-track-fab' : 'scout-track-banner';
-  bar.classList.toggle('is-on', on);
-
-  const doToggle = () => {
-    if (on) {
-      if (!confirm(`取消订阅「${query}」？断点会一并删除。`)) return;
-      deleteTrack(existing.id);
-      showToast('已取消搜索追更');
-    } else {
-      addTrack({
-        site,
-        query,
-        label: query,
-        url: (ctx && ctx.url) || location.href
-      });
-      if (typeof setupSearchClickTracking === 'function') setupSearchClickTracking();
-      showToast('已订阅：' + qShort);
-    }
-    enhanceSearchTrackSubscribe();
-    const active = document.querySelector('.jlc-wb-nav button.active');
-    if (active && active.getAttribute('data-tab') === 'tracks' && typeof renderTracksPage === 'function') {
-      renderTracksPage();
-    }
-    if (active && active.getAttribute('data-tab') === 'combo' && typeof renderComboPage === 'function') {
-      renderComboPage();
-    }
-  };
-
-  if (isNarrow) {
-    // 手机：小圆钮，一点即订/取消；叠在工作台钮上方
-    bar.innerHTML = '';
-    bar.title = on ? `已订阅：${query}（点按取消）` : `订阅追更：${query}`;
-    bar.setAttribute('role', 'button');
-    bar.setAttribute('aria-label', on ? '取消搜索追更' : '订阅搜索追更');
-    bar.innerHTML = `<span class="scout-track-fab-ico">${on ? '⭐' : '☆'}</span>`;
-    bar.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      doToggle();
-    };
-    if (typeof dockMobileFabStack === 'function') dockMobileFabStack();
-    return;
-  }
-
-  // PC：顶部细条
-  bar.onclick = null;
-  bar.removeAttribute('role');
-  bar.innerHTML = `
-    <span class="scout-track-banner-text" title="${escapeHtml(query)}">
-      ${on ? '⭐ 已订阅' : '☆ 追更'} · <b>${escapeHtml(qShort)}</b>
-    </span>
-    <button type="button" id="scout-search-track-toggle" class="scout-track-banner-btn">
-      ${on ? '取消' : '订阅'}
-    </button>
-  `;
-  bar.querySelector('#scout-search-track-toggle')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    doToggle();
-  });
-}
-
-/**
- * 详情页：收藏作品 → 作品列表 + 可选采集标签进词库
- * 醒目双行按钮（PC 贴标题下；手机加宽触控）
- */
-function enhancePageWorkFavorite() {
-  const currentSite = detectSite();
-  if (!currentSite || detectPageKind() !== 'video') return;
-
-  const meta = scrapeVideoMeta();
-  const url = (meta && meta.url) || location.href;
-  const videoId = videoIdFromUrl(url);
-  if (!videoId) return;
-
-  const host =
-    document.querySelector('h2.page-title') ||
-    document.querySelector('.page-title') ||
-    document.querySelector('h1') ||
-    document.querySelector('.video-metadata') ||
-    document.querySelector('#video-info, .video-info, .title-container');
-  if (!host) return;
-
-  let wrap = document.getElementById('scout-work-fav-bar');
-  let btn = document.getElementById('scout-work-fav-btn');
-
-  const syncBtn = () => {
-    const b = document.getElementById('scout-work-fav-btn');
-    if (!b) return;
-    const saved = isWorkSaved(currentSite, videoId);
-    b.classList.toggle('is-saved', saved);
-    b.setAttribute('aria-pressed', saved ? 'true' : 'false');
-    const ico = b.querySelector('.scout-work-fav-ico');
-    const label = b.querySelector('.scout-work-fav-label');
-    const sub = b.querySelector('.scout-work-fav-sub');
-    if (ico) ico.textContent = saved ? '★' : '☆';
-    if (label) label.textContent = saved ? '已收藏' : '收藏作品';
-    if (sub) sub.textContent = saved ? '点按更新 · 补采标签' : '入库作品 · 采集标签';
-    b.title = saved
-      ? '已在作品列表。再次点击可更新信息并补采标签'
-      : '收藏到「作品」列表，并采集本页标签进词库';
-  };
-
-  if (wrap && btn) {
-    syncBtn();
-    return;
-  }
-
-  wrap = document.createElement('div');
-  wrap.id = 'scout-work-fav-bar';
-  wrap.className = 'scout-work-fav-bar';
-  wrap.setAttribute('data-scout-ui', '1');
-
-  btn = document.createElement('button');
-  btn.type = 'button';
-  btn.id = 'scout-work-fav-btn';
-  btn.className = 'scout-work-fav-btn';
-  btn.innerHTML =
-    '<span class="scout-work-fav-ico" aria-hidden="true">☆</span>' +
-    '<span class="scout-work-fav-text">' +
-    '<span class="scout-work-fav-label">收藏作品</span>' +
-    '<span class="scout-work-fav-sub">入库作品 · 采集标签</span>' +
-    '</span>';
-
-  syncBtn();
-
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const saved = isWorkSaved(currentSite, videoId);
-    if (saved && !confirm('已在作品列表中。更新信息并再次采集标签？')) return;
-    // 点击时重采（创建按钮时 poster/og 可能还没就绪 → thumb 空）
-    const live = typeof scrapeVideoMeta === 'function' ? scrapeVideoMeta() : meta;
-    const liveUrl = (live && live.url) || url;
-    const liveId =
-      (typeof videoIdFromUrl === 'function' ? videoIdFromUrl(liveUrl) : '') || videoId;
-    const liveThumb =
-      (live && live.thumb) ||
-      (typeof pickDetailThumbUrl === 'function' ? pickDetailThumbUrl() : '') ||
-      (meta && meta.thumb) ||
-      '';
-    const res = addWork(
-      {
-        site: currentSite,
-        videoId: liveId,
-        title: (live && live.title) || meta.title,
-        url: liveUrl,
-        thumb: liveThumb,
-        thumbUrl: liveThumb,
-        uploader: (live && live.uploader) || meta.uploader,
-        tags: (live && live.tags) || meta.tags || []
-      },
-      { autoCollectTags: true }
-    );
-    syncBtn();
-    if (res.work) {
-      showToast(
-        (res.added ? '已收藏作品' : '已更新作品') +
-          (res.tagsCollected ? `，采集标签 ${res.tagsCollected} 个` : '') +
-          (liveThumb ? '' : '（暂无封面，稍后再更）')
-      );
-      markVideoClicked({
-        site: currentSite,
-        videoId: liveId,
-        title: (live && live.title) || meta.title,
-        url: liveUrl,
-        thumb: liveThumb,
-        uploader: (live && live.uploader) || meta.uploader
-      });
-      // 异步把远程封面缓存成 dataURL（列表离线可显，防防盗链）
-      if (
-        liveThumb &&
-        !/^data:image\//i.test(liveThumb) &&
-        typeof cacheThumbToDataUrl === 'function' &&
-        typeof updateWorkThumb === 'function'
-      ) {
-        const wid = res.work.id;
-        cacheThumbToDataUrl(liveThumb).then((dataUrl) => {
-          if (!dataUrl) return;
-          if (updateWorkThumb(wid, dataUrl, liveThumb)) {
-            const active = document.querySelector('.jlc-wb-nav button.active');
-            if (active && active.getAttribute('data-tab') === 'works') {
-              renderWorksPage();
-            }
-          }
-        });
-      }
-      const active = document.querySelector('.jlc-wb-nav button.active');
-      if (active && active.getAttribute('data-tab') === 'works') renderWorksPage();
-      if (active && active.getAttribute('data-tab') === 'lexicon') renderLexiconPage();
-      enhancePageTags();
-    } else {
-      showToast('收藏失败：无法识别作品 ID', true);
-    }
-  });
-
-  wrap.appendChild(btn);
-  if (host.parentNode) {
-    host.parentNode.insertBefore(wrap, host.nextSibling);
-  } else {
-    host.appendChild(wrap);
-  }
-}
-
-function enhancePagePublisher() {
-  const currentSite = detectSite();
-  if (!currentSite) return;
-  const pageKind = detectPageKind();
-  if (pageKind !== 'video') return;
-
-  enhancePageWorkFavorite();
-  
-  const meta = scrapeVideoMeta();
-  const pubName = meta.uploader;
-  if (!pubName) return;
-  
-  let anchorEl = null;
-  if (currentSite === 'xvideos' || currentSite === 'xnxx') {
-    anchorEl = document.querySelector('.video-metadata .uploader a, a.uploader-tag, .video-metadata-uploader a');
-  } else if (currentSite === 'eporner') {
-    anchorEl = document.querySelector(
-      'a[href*="/profile/"][title="Uploader"], a[href*="/profile/"], ' +
-        '.publisher-name, .publisher a, a[href*="/channel/"], .post-channel a'
-    );
-  }
-  
-  if (!anchorEl) return;
-  if (anchorEl.parentNode.querySelector('.scout-pub-addon')) return;
-  
-  const wrapper = document.createElement('span');
-  wrapper.className = 'scout-pub-addon';
-  wrapper.style.cssText = 'display:inline-flex;gap:4px;margin-left:8px;vertical-align:middle;font-size:12px;';
-  
-  const pubs = getPublishers();
-  const matched = pubs.find(p => p.name.toLowerCase() === pubName.toLowerCase());
-  
-  const loveBtn = document.createElement('button');
-  loveBtn.className = 'jlc-wb-btn ghost';
-  loveBtn.style.cssText = 'padding:2px 8px;font-size:11.5px;height:24px;line-height:1;border-radius:6px;margin:0;cursor:pointer;';
-  if (matched && matched.status === 'loved') {
-    loveBtn.textContent = '❤️ 已关注熟人';
-    loveBtn.style.background = '#e2f5e4';
-    loveBtn.style.color = '#2f6b3a';
-    loveBtn.style.borderColor = '#2f6b3a';
-  } else {
-    loveBtn.textContent = '❤️ 关注熟人';
-  }
-  
-  loveBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (matched && matched.status === 'loved') {
-      deletePublisher(matched.id);
-      showToast('已取消关注熟人');
-    } else {
-      addPublisher({ name: pubName, site: currentSite, status: 'loved' });
-      showToast(`已关注熟人: ${pubName}`);
-    }
-    wrapper.remove();
-    enhancePagePublisher();
-  });
-  
-  const blockBtn = document.createElement('button');
-  blockBtn.className = 'jlc-wb-btn danger';
-  blockBtn.style.cssText = 'padding:2px 8px;font-size:11.5px;height:24px;line-height:1;border-radius:6px;margin:0;cursor:pointer;';
-  if (matched && matched.status === 'blocked') {
-    blockBtn.textContent = '🚫 已拉黑';
-  } else {
-    blockBtn.textContent = '✕ 拉黑';
-  }
-  
-  blockBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (matched && matched.status === 'blocked') {
-      deletePublisher(matched.id);
-      showToast('已解除拉黑');
-    } else {
-      addPublisher({ name: pubName, site: currentSite, status: 'blocked' });
-      showToast(`已拉黑该频道: ${pubName}`, true);
-    }
-    wrapper.remove();
-    enhancePagePublisher();
-  });
-  
-  wrapper.appendChild(loveBtn);
-  wrapper.appendChild(blockBtn);
-  anchorEl.parentNode.insertBefore(wrapper, anchorEl.nextSibling);
-}
-
-// 
 // @@creamu-part:32-combo-page
 function getComboTokens() {
   const v = GM_getValue('scout_combo_tokens', null);
@@ -8594,15 +8560,25 @@ function getComboTokens() {
 }
 function saveComboTokens(list) {
   GM_setValue('scout_combo_tokens', list || []);
+  markScoutStorageChanged('scout_combo_tokens');
+}
+function addComboTokens(values) {
+  const list = getComboTokens();
+  const seen = new Set(list.map((item) => item.toLowerCase()));
+  let changed = false;
+  (Array.isArray(values) ? values : [values]).forEach((value) => {
+    const text = compactText(value);
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) return;
+    seen.add(key);
+    list.push(text);
+    changed = true;
+  });
+  if (changed) saveComboTokens(list);
+  return list;
 }
 function addComboToken(text) {
-  const t = compactText(text);
-  if (!t) return getComboTokens();
-  const list = getComboTokens();
-  if (list.some(x => x.toLowerCase() === t.toLowerCase())) return list;
-  list.push(t);
-  saveComboTokens(list);
-  return list;
+  return addComboTokens([text]);
 }
 function removeComboToken(text) {
   const t = compactText(text).toLowerCase();
@@ -8627,16 +8603,16 @@ function renderComboPage() {
   // 已选 chips
   let selectedHtml = tokens.length
     ? tokens.map(t => `
-        <span class="jlc-wb-chip is-on" data-combo-token="${escapeHtml(t)}" style="margin:2px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;" title="点击移除">
-          ${escapeHtml(t)} <b style="opacity:.8;">×</b>
+        <span class="jlc-wb-chip is-on scout-wb-chip scout-combo-token" data-combo-token="${escapeHtml(t)}" title="点击移除">
+          ${escapeHtml(t)} <b class="scout-combo-token-remove">×</b>
         </span>`).join('')
-    : '<span style="font-size:12.5px;color:#9a7d60;">点下方词库添加，或手动输入多个词组合搜索</span>';
+    : '<span class="scout-combo-empty is-selected">点下方词库添加，或手动输入多个词组合搜索</span>';
 
   // 分类筛选
   const typeFilters = ['全部', ...types];
   let filterHtml = typeFilters.map(ty => {
     const on = filterType === ty ? 'is-on' : '';
-    return `<span class="jlc-wb-chip ${on}" data-combo-filter="${escapeHtml(ty)}" style="margin:2px;cursor:pointer;font-size:12px;">${escapeHtml(ty)}</span>`;
+    return `<span class="jlc-wb-chip scout-wb-chip scout-combo-filter ${on}" data-combo-filter="${escapeHtml(ty)}">${escapeHtml(ty)}</span>`;
   }).join('');
 
   // 词库快捷（未选中的）
@@ -8653,27 +8629,27 @@ function renderComboPage() {
     ? pool.map(t => {
         const zh = t.zh ? ` · ${t.zh}` : '';
         const heart = t.loved ? '❤️' : '';
-        return `<span class="jlc-wb-chip" data-combo-pick="${escapeHtml(t.text)}" style="margin:2px;cursor:pointer;font-size:12px;" title="${escapeHtml(t.type)}">
+        return `<span class="jlc-wb-chip scout-wb-chip scout-combo-pick" data-combo-pick="${escapeHtml(t.text)}" title="${escapeHtml(t.type)}">
           ${heart}${escapeHtml(t.text)}${escapeHtml(zh)}
         </span>`;
       }).join('')
-    : '<span style="font-size:12px;color:#9a7d60;">该分类暂无更多词，可手动输入</span>';
+    : '<span class="scout-combo-empty">该分类暂无更多词，可手动输入</span>';
 
   // 当前视频标签
   let currentVideoTagsHtml = '';
   if (meta && meta.tags && meta.tags.length > 0) {
     const tagPills = meta.tags.map(tag => `
-      <span class="jlc-wb-chip" style="margin:2px;display:inline-flex;align-items:center;gap:4px;padding:4px 8px;font-size:12px;" data-tag="${escapeHtml(tag)}">
+      <span class="jlc-wb-chip scout-combo-video-tag" data-tag="${escapeHtml(tag)}">
         ${escapeHtml(tag)}
-        <b class="scout-combo-pick-tag" style="color:#2f6b3a;cursor:pointer;" title="加入组合">＋</b>
-        <b class="scout-add-quick" style="color:#2f6b3a;cursor:pointer;">库</b>
-        <b class="scout-block-quick" style="color:#b42318;cursor:pointer;">✕</b>
+        <b class="scout-combo-pick-tag" title="加入组合">＋</b>
+        <b class="scout-add-quick">库</b>
+        <b class="scout-block-quick">✕</b>
       </span>`).join('');
     currentVideoTagsHtml = `
-      <div class="jlc-wb-view-block" style="margin-top:14px;">
+      <div class="jlc-wb-view-block scout-combo-video-tags">
         <div class="jlc-wb-view-title">当前视频标签</div>
-        <div style="display:flex;flex-wrap:wrap;max-height:120px;overflow:auto;">${tagPills}</div>
-        <div style="font-size:11px;color:#9a7d60;margin-top:4px;">＋加入组合 · 库入库 · ✕屏蔽</div>
+        <div class="scout-combo-video-tag-list">${tagPills}</div>
+        <div class="scout-combo-video-tag-hint">＋加入组合 · 库入库 · ✕屏蔽</div>
       </div>`;
   }
 
@@ -8683,8 +8659,8 @@ function renderComboPage() {
     { key: 'eporner', name: 'EP', full: 'EPorner' }
   ];
   const siteRadioHtml = sites.map(s => `
-    <label class="scout-combo-site" title="${escapeHtml(s.full)}" style="display:inline-flex;align-items:center;gap:3px;margin:0;padding:2px 6px;border-radius:999px;border:1px solid #e4d4bc;font-size:11.5px;cursor:pointer;text-transform:none;letter-spacing:0;">
-      <input type="radio" name="scout-search-site" value="${s.key}" ${s.key === activeSite ? 'checked' : ''} style="width:13px;height:13px;margin:0;accent-color:var(--scout-theme-color);">
+    <label class="scout-combo-site" title="${escapeHtml(s.full)}">
+      <input type="radio" name="scout-search-site" value="${s.key}" ${s.key === activeSite ? 'checked' : ''}>
       ${s.name}
     </label>`).join('');
 
@@ -8705,34 +8681,34 @@ function renderComboPage() {
     { key: 'or', label: 'OR', tip: 'word1 or word2' }
   ];
   const joinHtml = joinOpts.map(o => `
-    <label style="display:inline-flex;align-items:center;margin-right:10px;font-size:12.5px;cursor:pointer;text-transform:none;letter-spacing:0;margin-top:0;" title="${escapeHtml(o.tip)}">
-      <input type="radio" name="scout-combo-join" value="${o.key}" ${joinMode === o.key ? 'checked' : ''} style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);">
+    <label class="scout-combo-join" title="${escapeHtml(o.tip)}">
+      <input type="radio" name="scout-combo-join" value="${o.key}" ${joinMode === o.key ? 'checked' : ''}>
       ${o.label}
     </label>`).join('');
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-bottom:12px;">
+    <div class="jlc-wb-list-scroll scout-combo-scroll">
       <div class="jlc-wb-view-block">
         <div class="jlc-wb-view-title">已选词（可多个，顺序=搜索顺序）</div>
-        <div id="scout-combo-selected" style="display:flex;flex-wrap:wrap;min-height:32px;margin-bottom:8px;">${selectedHtml}</div>
-        <div style="margin-bottom:8px;">
-          <span style="font-size:12px;color:#9a7d60;margin-right:6px;">连接方式</span>
+        <div id="scout-combo-selected" class="scout-combo-selected">${selectedHtml}</div>
+        <div class="scout-combo-join-row">
+          <span class="scout-combo-join-title">连接方式</span>
           ${joinHtml}
         </div>
-        <div style="font-size:12px;color:#9a7d60;margin-bottom:10px;word-break:break-word;">预览：<b style="color:var(--scout-theme-color);">${escapeHtml(preview)}</b></div>
-        <div style="font-size:11.5px;color:#9a7d60;margin-bottom:10px;line-height:1.4;">
+        <div class="scout-combo-preview">预览：<b class="scout-combo-preview-value">${escapeHtml(preview)}</b></div>
+        <div class="scout-combo-help">
           提示：多站用空格拼词常无结果，用 <b>AND</b> 更稳。多词短语请整段添加为一个 token。
         </div>
-        <div style="display:flex;gap:6px;">
-          <input type="text" class="jlc-wb-search" id="scout-combo-free-input" placeholder="手动加词，回车或点添加" style="flex:1;padding:8px 12px;font-size:13.5px;">
-          <button class="jlc-wb-btn primary" id="scout-combo-add-btn" style="padding:8px 14px;">添加</button>
+        <div class="scout-combo-manual">
+          <input type="text" class="jlc-wb-search scout-combo-manual-input" id="scout-combo-free-input" placeholder="手动加词，回车或点添加">
+          <button class="jlc-wb-btn primary" id="scout-combo-add-btn">添加</button>
         </div>
       </div>
 
       <div class="jlc-wb-view-block">
         <div class="jlc-wb-view-title">从词库点选</div>
-        <div style="display:flex;flex-wrap:wrap;margin-bottom:8px;">${filterHtml}</div>
-        <div id="scout-combo-pool" style="display:flex;flex-wrap:wrap;max-height:160px;overflow:auto;">${poolHtml}</div>
+        <div class="scout-combo-filters">${filterHtml}</div>
+        <div id="scout-combo-pool" class="scout-combo-pool">${poolHtml}</div>
       </div>
 
       ${currentVideoTagsHtml}
@@ -8781,13 +8757,7 @@ function renderComboPage() {
     const v = freeInp.value.trim();
     if (!v) return;
     // 逗号批量；否则整段算一个 token（可含空格短语）
-    if (/[,，;；]/.test(v)) {
-      v.split(/[,，;；]+/).forEach(part => {
-        if (part.trim()) addComboToken(part.trim());
-      });
-    } else {
-      addComboToken(v);
-    }
+    addComboTokens(/[,，;；]/.test(v) ? v.split(/[,，;；]+/) : [v]);
     freeInp.value = '';
     refresh();
   };
@@ -8811,6 +8781,7 @@ function renderComboPage() {
 
   container.querySelector('#scout-combo-auto-track')?.addEventListener('change', (e) => {
     GM_setValue('scout_combo_auto_track', !!e.currentTarget.checked);
+    markScoutStorageChanged('scout_combo_auto_track');
   });
 
   container.querySelector('#scout-combo-search-btn')?.addEventListener('click', (e) => {
@@ -8911,9 +8882,796 @@ function renderComboPage() {
       refresh();
     });
   });
+  markScoutWorkbenchPageRendered('combo');
+}
+// @@creamu-part:detail-enhancements
+
+const SCOUT_DETAIL_TAG_BOX_SELECTOR = [
+  '.video-metadata.video-tags-list',
+  '.video-metadata.ordered-label-list',
+  '.metadata-row.video-tags',
+  '.video-tags-list',
+  '.ordered-label-list',
+  '.video-tags'
+].join(',');
+
+const SCOUT_DETAIL_DESCRIPTION_SELECTOR = [
+  '.video-description',
+  '#video-description',
+  '[itemprop="description"]',
+  '.metadata-row.video-description',
+  'p.video-description',
+  '.video-desc',
+  '#video-desc',
+  '.clear-infobar .description',
+  '#video-content-metadata .description'
+].join(',');
+
+function getScoutDetailTagBoxes() {
+  return Array.from(document.querySelectorAll(SCOUT_DETAIL_TAG_BOX_SELECTOR));
 }
 
-// 
+function getScoutDetailDescriptionBoxes() {
+  return Array.from(document.querySelectorAll(SCOUT_DETAIL_DESCRIPTION_SELECTOR));
+}
+
+/**
+ * 详情页：词库样式融进原生标签；
+ * 手机：标签默认一行、描述默认两行，点按钮展开。
+ */
+function enhancePageLexiconHitFlow() {
+  if (detectPageKind() !== 'video') return;
+  const legacy = document.getElementById('scout-lex-hit-bar');
+  if (legacy) legacy.remove();
+
+  let isNarrow = false;
+  try {
+    isNarrow = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
+  } catch (_) {
+    isNarrow = window.innerWidth <= 820;
+  }
+
+  // 标签容器：xvideos 用 video-metadata.video-tags-list；xnxx 用 metadata-row.video-tags
+  const tagBoxes = getScoutDetailTagBoxes();
+
+  // 描述容器（有则折叠；xnxx/xvideos 常见选择器）
+  const descBoxes = getScoutDetailDescriptionBoxes();
+
+  if (!isNarrow) {
+    tagBoxes.forEach((el) => {
+      el.classList.remove('cropped', 'scout-tags-collapsed');
+      el.classList.add('scout-tags-expanded');
+    });
+    descBoxes.forEach((el) => {
+      el.classList.remove('scout-desc-collapsed');
+      el.classList.add('scout-desc-expanded');
+    });
+    document.getElementById('scout-tags-toggle')?.remove();
+    document.getElementById('scout-desc-toggle')?.remove();
+    return;
+  }
+
+  setupMobileDetailTagsCollapse(tagBoxes);
+  setupMobileDetailDescCollapse(descBoxes);
+}
+
+function setupMobileDetailTagsCollapse(boxes) {
+  const list = Array.from(boxes || []).filter(Boolean);
+  // 不要把投票行 metadata-row.video-metadata 当成标签
+  const tagsOnly = list.filter((el) => {
+    const c = el.className || '';
+    if (/video-tags|tags-list|ordered-label|is-keyword/i.test(c)) return true;
+    if (/video-metadata/i.test(c) && !/video-tags/i.test(c) && el.querySelector('a.is-keyword')) {
+      return true;
+    }
+    return !!el.querySelector('a.is-keyword, a[href^="/tags/"], a[href^="/tag/"]');
+  });
+  if (!tagsOnly.length) return;
+
+  const box = tagsOnly[0];
+  tagsOnly.forEach((el) => {
+    el.classList.add('scout-tags-collapsed');
+    el.classList.remove('scout-tags-expanded');
+  });
+
+  let toggle = document.getElementById('scout-tags-toggle');
+  if (!toggle) {
+    toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.id = 'scout-tags-toggle';
+    toggle.className = 'scout-tags-toggle';
+    toggle.setAttribute('data-scout-ui', '1');
+    if (box.parentNode) box.parentNode.insertBefore(toggle, box.nextSibling);
+    else box.appendChild(toggle);
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const open = box.classList.contains('scout-tags-expanded');
+      tagsOnly.forEach((el) => {
+        el.classList.toggle('scout-tags-collapsed', open);
+        el.classList.toggle('scout-tags-expanded', !open);
+      });
+      toggle.textContent = open ? '展开全部标签 ▾' : '收起标签 ▴';
+      toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+    });
+  }
+  const open = box.classList.contains('scout-tags-expanded');
+  toggle.textContent = open ? '收起标签 ▴' : '展开全部标签 ▾';
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function setupMobileDetailDescCollapse(boxes) {
+  const list = Array.from(boxes || []).filter((el) => {
+    if (!el) return false;
+    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    // 太短不折叠
+    return text.length >= 60;
+  });
+  if (!list.length) {
+    document.getElementById('scout-desc-toggle')?.remove();
+    return;
+  }
+
+  const box = list[0];
+  list.forEach((el) => {
+    el.classList.add('scout-desc-collapsed');
+    el.classList.remove('scout-desc-expanded');
+  });
+
+  let toggle = document.getElementById('scout-desc-toggle');
+  if (!toggle) {
+    toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.id = 'scout-desc-toggle';
+    toggle.className = 'scout-tags-toggle scout-desc-toggle';
+    toggle.setAttribute('data-scout-ui', '1');
+    if (box.parentNode) box.parentNode.insertBefore(toggle, box.nextSibling);
+    else box.appendChild(toggle);
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const open = box.classList.contains('scout-desc-expanded');
+      list.forEach((el) => {
+        el.classList.toggle('scout-desc-collapsed', open);
+        el.classList.toggle('scout-desc-expanded', !open);
+      });
+      toggle.textContent = open ? '展开描述 ▾' : '收起描述 ▴';
+      toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+    });
+  }
+  const open = box.classList.contains('scout-desc-expanded');
+  toggle.textContent = open ? '收起描述 ▴' : '展开描述 ▾';
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+let __scoutPageTagSignature = '';
+let __scoutNextTagNodeId = 1;
+const __scoutTagNodeIds = new WeakMap();
+
+function getScoutTagNodeId(node) {
+  if (!node || (typeof node !== 'object' && typeof node !== 'function')) return '';
+  let id = __scoutTagNodeIds.get(node);
+  if (!id) {
+    id = __scoutNextTagNodeId++;
+    __scoutTagNodeIds.set(node, id);
+  }
+  return id;
+}
+
+function getScoutEnhanceTagText(a) {
+  let txt =
+    typeof tagTextFromAnchor === 'function'
+      ? tagTextFromAnchor(a)
+      : (a.textContent || '')
+          .replace(/[♥❤️]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+  const zhNode = a.querySelector('.scout-tag-zh');
+  if (zhNode && zhNode.textContent && txt.endsWith(zhNode.textContent)) {
+    txt = txt.slice(0, -zhNode.textContent.length).trim();
+  }
+  txt = txt.replace(/[＋✕+]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (typeof sanitizeLexiconText === 'function') txt = sanitizeLexiconText(txt);
+  return txt;
+}
+
+function buildScoutPageTagSignature(site, anchors, terms, blocks, isNarrow) {
+  const termState = (Array.isArray(terms) ? terms : []).map((term) => [
+    term && term.id,
+    term && term.text,
+    term && term.zh,
+    term && term.type,
+    term && term.status,
+    !!(term && term.loved),
+    term && term.heat,
+    term && term.use,
+    term && term.good,
+    term && term.bad,
+    term && term.updated_at
+  ]);
+  const blockState = (Array.isArray(blocks) ? blocks : []).map((block) => [
+    block && block.id,
+    block && block.text,
+    block && block.reason,
+    block && block.mode,
+    block && block.match,
+    block && block.scope
+  ]);
+  const tagState = (Array.isArray(anchors) ? anchors : []).map((anchor) => [
+    getScoutTagNodeId(anchor),
+    getScoutEnhanceTagText(anchor),
+    anchor.getAttribute('href') || '',
+    anchor.querySelector('.scout-tag-addon') ? 1 : 0
+  ]);
+  return JSON.stringify([
+    site || '',
+    location.href,
+    isNarrow ? 1 : 0,
+    tagState,
+    termState,
+    blockState
+  ]);
+}
+
+function getScoutPageTagSelector(site) {
+  if (site === 'xvideos' || site === 'xnxx') {
+    return (
+      '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
+      '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a'
+    );
+  }
+  if (site === 'eporner') {
+    return (
+      'a[href^="/tag/"], a[href^="/cat/"], .vit-pornstar a, .vit-category a, ' +
+      '#video-tags a, .tag-container a, a.is-keyword, a.tag'
+    );
+  }
+  return '';
+}
+
+function getScoutPageTagAnchors(site) {
+  const selector = getScoutPageTagSelector(site);
+  return selector ? Array.from(document.querySelectorAll(selector)) : [];
+}
+
+function findPreparedTagBlock(txt, preparedBlocks) {
+  const normalized = normalizeBlockText(txt);
+  if (!normalized) return null;
+  for (const matcher of preparedBlocks || []) {
+    if (preparedBlockTextMatches(normalized, matcher)) return matcher.block;
+  }
+  return null;
+}
+
+function applyTagVisualState(a, txt, termIndex, preparedBlocks, preparedTerms) {
+  const txtKey =
+    typeof lexiconIdentityKey === 'function' ? lexiconIdentityKey(txt) : String(txt || '').toLowerCase().trim();
+  let matchedTerm = termIndex && typeof termIndex.get === 'function'
+    ? termIndex.get(txtKey)
+    : null;
+  // 站内标签：用词库匹配补中文样式
+  if (!matchedTerm && typeof matchLexiconHits === 'function' && Array.isArray(preparedTerms)) {
+    try {
+      const hit = matchLexiconHits(
+        { title: '', tags: [txt], uploader: '' },
+        { preparedTerms }
+      );
+      const h0 = hit && hit.hits && hit.hits[0];
+      if (h0) {
+        matchedTerm = termIndex && typeof termIndex.get === 'function'
+          ? termIndex.get(
+              typeof lexiconIdentityKey === 'function'
+                ? lexiconIdentityKey(h0.text)
+                : String(h0.text || '').toLowerCase()
+            )
+          : null;
+      }
+    } catch (_) { /* ignore */ }
+  }
+  const matchedBlock = findPreparedTagBlock(txt, preparedBlocks);
+  const oldHeart = a.querySelector('.scout-tag-heart');
+  let zhEl = a.querySelector('.scout-tag-zh');
+
+  a.classList.remove(
+    'scout-tag-explored',
+    'scout-tag-loved',
+    'scout-tag-blocked',
+    'scout-tag-in',
+    'scout-tag-out'
+  );
+  a.classList.add('scout-site-tag');
+
+  if (matchedBlock) {
+    if (oldHeart) oldHeart.remove();
+    if (zhEl) zhEl.remove();
+    a.classList.add('scout-tag-blocked');
+    a.title = `已被屏蔽 (理由: ${matchedBlock.reason || '无'}, 模式: ${matchedBlock.mode === 'hide' ? '强隐藏' : '弱淡化'})`;
+    return;
+  }
+
+  if (matchedTerm && matchedTerm.status !== 'retired') {
+    a.classList.add('scout-tag-in', 'scout-tag-explored');
+    if (matchedTerm.loved) a.classList.add('scout-tag-loved');
+    const zh = compactText(matchedTerm.zh);
+    a.title = zh
+      ? `${matchedTerm.text} · ${zh} [${matchedTerm.type || ''}]`
+      : `${matchedTerm.text} [${matchedTerm.type || ''}]`;
+    if (zh) {
+      if (!zhEl) {
+        zhEl = document.createElement('span');
+        zhEl.className = 'scout-tag-zh';
+        a.appendChild(zhEl);
+      }
+      if (zhEl.textContent !== zh) zhEl.textContent = zh;
+    } else if (zhEl) {
+      zhEl.remove();
+    }
+    if (matchedTerm.loved) {
+      if (!oldHeart) {
+        const heartSpan = document.createElement('span');
+        heartSpan.className = 'scout-tag-heart';
+        heartSpan.textContent = '♥';
+        heartSpan.setAttribute('aria-hidden', '1');
+        a.insertBefore(heartSpan, a.firstChild);
+      }
+    } else if (oldHeart) {
+      oldHeart.remove();
+    }
+    return;
+  }
+
+  if (oldHeart) oldHeart.remove();
+  if (zhEl) zhEl.remove();
+  a.classList.add('scout-tag-out');
+  a.title = txt + '（未入库 · 点 ＋ 采集）';
+}
+
+function enhancePageTags() {
+  const currentSite = detectSite();
+  if (!currentSite) return;
+  if (detectPageKind() !== 'video') return;
+
+  if (!getScoutPageTagSelector(currentSite)) return;
+
+  // 词库命中流（中文标签流 + 心动）
+  enhancePageLexiconHitFlow();
+
+  const anchors = getScoutPageTagAnchors(currentSite);
+  const terms = getLexiconTerms();
+  const blocks = getBlockList();
+  let isNarrow = false;
+  try {
+    isNarrow = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
+  } catch (_) {
+    isNarrow = window.innerWidth <= 820;
+  }
+
+  const nextSignature = buildScoutPageTagSignature(
+    currentSite,
+    anchors,
+    terms,
+    blocks,
+    isNarrow
+  );
+  if (__scoutPageTagSignature === nextSignature) return;
+
+  const preparedTerms = prepareLexiconMatcher(terms);
+  const termIndex = buildLexiconTermIndex(preparedTerms);
+  const preparedBlocks = prepareBlockMatchers(blocks);
+  const meta = scrapeVideoMeta();
+
+  window.__scoutUiMutating = true;
+  try {
+    anchors.forEach(a => {
+      let txt = '';
+      if (a.querySelector('.scout-tag-addon')) {
+        const txt = a.getAttribute('data-scout-tag') || '';
+        if (txt) applyTagVisualState(a, txt, termIndex, preparedBlocks, preparedTerms);
+        return;
+      }
+
+      txt = getScoutEnhanceTagText(a);
+      if (!txt || txt.startsWith('+') || /[＋✕]/.test(txt)) return;
+
+      a.setAttribute('data-scout-tag', txt);
+
+      applyTagVisualState(a, txt, termIndex, preparedBlocks, preparedTerms);
+
+      const wrapper = document.createElement('span');
+      wrapper.className = 'scout-tag-addon';
+
+      const addBtn = document.createElement('span');
+      addBtn.className = 'scout-tag-action scout-tag-add-action';
+      addBtn.textContent = '＋';
+      addBtn.title = '采集入库（选分类/翻译）';
+      addBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showScoutCollectDialog({
+          text: txt,
+          sources: [{ site: currentSite, url: location.href, title: meta.title, at: new Date().toISOString() }],
+          onSaved() {
+            refreshScoutWorkbenchPageIfActive('lexicon');
+            refreshScoutWorkbenchPageIfActive('combo');
+            // 清签名以允许词库条更新
+            const bar = document.getElementById('scout-lex-hit-bar');
+            if (bar) delete bar.dataset.hitSig;
+            enhancePageTags();
+          }
+        });
+      });
+
+      const blockBtn = document.createElement('span');
+      blockBtn.className = 'scout-tag-action scout-tag-block-action';
+      blockBtn.textContent = '✕';
+      blockBtn.title = '弱屏蔽(点击) | 强隐藏(Shift+点击)';
+      blockBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const isShift = e.shiftKey;
+        const targetMode = isShift ? 'hide' : 'dim';
+        addBlockWord({
+          text: txt,
+          mode: targetMode,
+          match: 'word',
+          scope: 'title',
+          reason: `自视频标签快捷添加 (${isShift ? '强隐藏' : '弱淡化'})`
+        });
+        showToast(`已加入屏蔽库: ${txt} (${isShift ? '彻底蒸发' : '弱淡化'})`, true);
+        applyListBlocks();
+        refreshScoutWorkbenchPageIfActive('blocks');
+        refreshScoutWorkbenchPageIfActive('combo');
+        const bar = document.getElementById('scout-lex-hit-bar');
+        if (bar) delete bar.dataset.hitSig;
+        enhancePageTags();
+      });
+
+      wrapper.appendChild(addBtn);
+      wrapper.appendChild(blockBtn);
+      a.appendChild(wrapper);
+    });
+    __scoutPageTagSignature = buildScoutPageTagSignature(
+      currentSite,
+      anchors,
+      terms,
+      blocks,
+      isNarrow
+    );
+  } finally {
+    // 延后清除，避免自身 DOM 更新再次触发 observer
+    setTimeout(() => {
+      window.__scoutUiMutating = false;
+    }, 50);
+  }
+}
+
+/**
+ * 详情页：收藏作品 → 作品列表 + 可选采集标签进词库
+ * 醒目双行按钮（PC 贴标题下；手机加宽触控）
+ */
+function findScoutWorkFavoriteHost() {
+  return (
+    document.querySelector('h2.page-title') ||
+    document.querySelector('.page-title') ||
+    document.querySelector('h1') ||
+    document.querySelector('.video-metadata') ||
+    document.querySelector('#video-info, .video-info, .title-container')
+  );
+}
+
+function syncScoutWorkFavoriteButton(site, videoId, targetButton) {
+  const button = targetButton || document.getElementById('scout-work-fav-btn');
+  if (!button || !videoId) return;
+  const saved = isWorkSaved(site, videoId);
+  button.classList.toggle('is-saved', saved);
+  button.setAttribute('aria-pressed', saved ? 'true' : 'false');
+  const ico = button.querySelector('.scout-work-fav-ico');
+  const label = button.querySelector('.scout-work-fav-label');
+  const sub = button.querySelector('.scout-work-fav-sub');
+  if (ico) ico.textContent = saved ? '★' : '☆';
+  if (label) label.textContent = saved ? '已收藏' : '收藏作品';
+  if (sub) sub.textContent = saved ? '点按更新 · 补采标签' : '入库作品 · 采集标签';
+  button.title = saved
+    ? '已在作品列表。再次点击可更新信息并补采标签'
+    : '收藏到「作品」列表，并采集本页标签进词库';
+}
+
+function enhancePageWorkFavorite() {
+  const currentSite = detectSite();
+  if (!currentSite || detectPageKind() !== 'video') return;
+
+  let wrap = document.getElementById('scout-work-fav-bar');
+  let btn = document.getElementById('scout-work-fav-btn');
+  const locationVideoId = videoIdFromUrl(location.href);
+  if (
+    wrap &&
+    btn &&
+    btn.dataset.scoutSite === currentSite &&
+    (!locationVideoId || btn.dataset.scoutVideoId === locationVideoId)
+  ) {
+    syncScoutWorkFavoriteButton(currentSite, btn.dataset.scoutVideoId || locationVideoId);
+    return;
+  }
+  if (btn) btn.remove();
+  if (wrap) wrap.remove();
+
+  const meta = scrapeVideoMeta();
+  const url = (meta && meta.url) || location.href;
+  const videoId = videoIdFromUrl(url);
+  if (!videoId) return;
+
+  const host = findScoutWorkFavoriteHost();
+  if (!host) return;
+
+  wrap = document.createElement('div');
+  wrap.id = 'scout-work-fav-bar';
+  wrap.className = 'scout-work-fav-bar';
+  wrap.setAttribute('data-scout-ui', '1');
+
+  btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = 'scout-work-fav-btn';
+  btn.className = 'scout-work-fav-btn';
+  btn.dataset.scoutSite = currentSite;
+  btn.dataset.scoutVideoId = videoId;
+  btn.innerHTML =
+    '<span class="scout-work-fav-ico" aria-hidden="true">☆</span>' +
+    '<span class="scout-work-fav-text">' +
+    '<span class="scout-work-fav-label">收藏作品</span>' +
+    '<span class="scout-work-fav-sub">入库作品 · 采集标签</span>' +
+    '</span>';
+
+  syncScoutWorkFavoriteButton(currentSite, videoId, btn);
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const saved = isWorkSaved(currentSite, videoId);
+    if (saved && !confirm('已在作品列表中。更新信息并再次采集标签？')) return;
+    // 点击时重采（创建按钮时 poster/og 可能还没就绪 → thumb 空）
+    const live = typeof scrapeVideoMeta === 'function' ? scrapeVideoMeta() : meta;
+    const liveUrl = (live && live.url) || url;
+    const liveId =
+      (typeof videoIdFromUrl === 'function' ? videoIdFromUrl(liveUrl) : '') || videoId;
+    const liveThumb =
+      (live && live.thumb) ||
+      (typeof pickDetailThumbUrl === 'function' ? pickDetailThumbUrl() : '') ||
+      (meta && meta.thumb) ||
+      '';
+    const res = addWork(
+      {
+        site: currentSite,
+        videoId: liveId,
+        title: (live && live.title) || meta.title,
+        url: liveUrl,
+        thumb: liveThumb,
+        thumbUrl: liveThumb,
+        uploader: (live && live.uploader) || meta.uploader,
+        tags: (live && live.tags) || meta.tags || []
+      },
+      { autoCollectTags: true }
+    );
+    syncScoutWorkFavoriteButton(currentSite, videoId);
+    if (res.work) {
+      showToast(
+        (res.added ? '已收藏作品' : '已更新作品') +
+          (res.tagsCollected ? `，采集标签 ${res.tagsCollected} 个` : '') +
+          (liveThumb ? '' : '（暂无封面，稍后再更）')
+      );
+      markVideoClicked({
+        site: currentSite,
+        videoId: liveId,
+        title: (live && live.title) || meta.title,
+        url: liveUrl,
+        thumb: liveThumb,
+        uploader: (live && live.uploader) || meta.uploader
+      });
+      // 异步把远程封面缓存成 dataURL（列表离线可显，防防盗链）
+      if (
+        liveThumb &&
+        !/^data:image\//i.test(liveThumb) &&
+        typeof cacheThumbToDataUrl === 'function' &&
+        typeof updateWorkThumb === 'function'
+      ) {
+        const wid = res.work.id;
+        cacheThumbToDataUrl(liveThumb).then((dataUrl) => {
+          if (!dataUrl) return;
+          if (updateWorkThumb(wid, dataUrl, liveThumb)) {
+            refreshScoutWorkbenchPageIfActive('works');
+          }
+        });
+      }
+      refreshScoutWorkbenchPageIfActive('works');
+      refreshScoutWorkbenchPageIfActive('lexicon');
+      enhancePageTags();
+    } else {
+      showToast('收藏失败：无法识别作品 ID', true);
+    }
+  });
+
+  wrap.appendChild(btn);
+  if (host.parentNode) {
+    host.parentNode.insertBefore(wrap, host.nextSibling);
+  } else {
+    host.appendChild(wrap);
+  }
+}
+
+function findScoutPublisherAnchor(site) {
+  if (site === 'xvideos' || site === 'xnxx') {
+    return document.querySelector(
+      '.video-metadata .uploader a, a.uploader-tag, .video-metadata-uploader a'
+    );
+  }
+  if (site === 'eporner') {
+    return document.querySelector(
+      'a[href*="/profile/"][title="Uploader"], a[href*="/profile/"], ' +
+        '.publisher-name, .publisher a, a[href*="/channel/"], .post-channel a'
+    );
+  }
+  return null;
+}
+
+function enhancePagePublisher() {
+  const currentSite = detectSite();
+  if (!currentSite) return;
+  const pageKind = detectPageKind();
+  if (pageKind !== 'video') return;
+
+  enhancePageWorkFavorite();
+
+  const anchorEl = findScoutPublisherAnchor(currentSite);
+  if (!anchorEl) return;
+  const revision = typeof getScoutLibraryRevision === 'function'
+    ? getScoutLibraryRevision()
+    : 0;
+  const existing = anchorEl.parentNode.querySelector('.scout-pub-addon');
+  if (existing && existing.dataset.scoutLibraryRevision === String(revision)) return;
+  if (existing) existing.remove();
+
+  const meta = scrapeVideoMeta();
+  const pubName = meta.uploader;
+  if (!pubName) return;
+
+  const wrapper = document.createElement('span');
+  wrapper.className = 'scout-pub-addon';
+  wrapper.dataset.scoutLibraryRevision = String(revision);
+
+  const pubs = getPublishers();
+  const matched = pubs.find(p => p.name.toLowerCase() === pubName.toLowerCase());
+
+  const loveBtn = document.createElement('button');
+  loveBtn.className = 'scout-pub-action scout-pub-love-action';
+  if (matched && matched.status === 'loved') {
+    loveBtn.textContent = '❤️ 已关注熟人';
+    loveBtn.classList.add('is-loved');
+  } else {
+    loveBtn.textContent = '❤️ 关注熟人';
+  }
+
+  loveBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (matched && matched.status === 'loved') {
+      deletePublisher(matched.id);
+      showToast('已取消关注熟人');
+    } else {
+      addPublisher({ name: pubName, site: currentSite, status: 'loved' });
+      showToast(`已关注熟人: ${pubName}`);
+    }
+    wrapper.remove();
+    enhancePagePublisher();
+  });
+
+  const blockBtn = document.createElement('button');
+  blockBtn.className = 'scout-pub-action scout-pub-block-action';
+  if (matched && matched.status === 'blocked') {
+    blockBtn.textContent = '🚫 已拉黑';
+    blockBtn.classList.add('is-blocked');
+  } else {
+    blockBtn.textContent = '✕ 拉黑';
+  }
+
+  blockBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (matched && matched.status === 'blocked') {
+      deletePublisher(matched.id);
+      showToast('已解除拉黑');
+    } else {
+      addPublisher({ name: pubName, site: currentSite, status: 'blocked' });
+      showToast(`已拉黑该频道: ${pubName}`, true);
+    }
+    wrapper.remove();
+    enhancePagePublisher();
+  });
+
+  wrapper.appendChild(loveBtn);
+  wrapper.appendChild(blockBtn);
+  anchorEl.parentNode.insertBefore(wrapper, anchorEl.nextSibling);
+}
+
+let __scoutNextDetailNodeId = 1;
+const __scoutDetailNodeIds = new WeakMap();
+
+function getScoutDetailNodeId(node) {
+  if (!node || (typeof node !== 'object' && typeof node !== 'function')) return '';
+  let id = __scoutDetailNodeIds.get(node);
+  if (!id) {
+    id = __scoutNextDetailNodeId++;
+    __scoutDetailNodeIds.set(node, id);
+  }
+  return id;
+}
+
+function getScoutDetailTextFingerprint(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return text.length + ':' + (hash >>> 0).toString(36);
+}
+
+function getScoutDetailContentSignature() {
+  const site = detectSite();
+  if (!site || detectPageKind() !== 'video') return '';
+
+  let isNarrow = false;
+  try {
+    isNarrow = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
+  } catch (_) {
+    isNarrow = window.innerWidth <= 820;
+  }
+
+  const anchors = getScoutPageTagAnchors(site);
+  const tagState = anchors.map((anchor) => [
+    getScoutDetailNodeId(anchor),
+    getScoutEnhanceTagText(anchor),
+    anchor.getAttribute('href') || '',
+    anchor.querySelector('.scout-tag-addon') ? 1 : 0
+  ]);
+  const tagBoxState = getScoutDetailTagBoxes().map((box) => getScoutDetailNodeId(box));
+  const descriptionState = getScoutDetailDescriptionBoxes().map((box) => [
+    getScoutDetailNodeId(box),
+    getScoutDetailTextFingerprint(box.textContent)
+  ]);
+  const favoriteHost = findScoutWorkFavoriteHost();
+  const favoriteButton = document.getElementById('scout-work-fav-btn');
+  const publisherAnchor = findScoutPublisherAnchor(site);
+  const publisherAddon = publisherAnchor && publisherAnchor.parentNode
+    ? publisherAnchor.parentNode.querySelector('.scout-pub-addon')
+    : null;
+  const revision = typeof getScoutLibraryRevision === 'function'
+    ? getScoutLibraryRevision()
+    : 0;
+
+  return JSON.stringify([
+    site,
+    location.href,
+    isNarrow ? 1 : 0,
+    revision,
+    tagState,
+    tagBoxState,
+    descriptionState,
+    [
+      getScoutDetailNodeId(favoriteHost),
+      favoriteButton ? 1 : 0,
+      favoriteButton && favoriteButton.dataset.scoutSite,
+      favoriteButton && favoriteButton.dataset.scoutVideoId
+    ],
+    [
+      getScoutDetailNodeId(publisherAnchor),
+      publisherAnchor && getScoutDetailTextFingerprint(publisherAnchor.textContent),
+      publisherAnchor && publisherAnchor.getAttribute('href'),
+      publisherAddon ? 1 : 0,
+      publisherAddon && publisherAddon.dataset.scoutLibraryRevision
+    ],
+    document.getElementById('scout-tags-toggle') ? 1 : 0,
+    document.getElementById('scout-desc-toggle') ? 1 : 0
+  ]);
+}
 // @@creamu-part:34-library-pages
 function renderLexiconPage() {
   const container = document.querySelector('[data-jlc-wb-page="lexicon"]');
@@ -8925,13 +9683,13 @@ function renderLexiconPage() {
   let curType = container.getAttribute('data-selected-type') || '全部';
   let searchQuery = (container.querySelector('#scout-lexicon-search') ? container.querySelector('#scout-lexicon-search').value : '') || '';
 
-  let typeChipsHtml = `<span class="jlc-wb-chip ${curType === '全部' ? 'is-on' : ''}" data-type="全部" style="margin:2px;cursor:pointer;">全部 (${terms.filter(t => t.status !== 'retired').length})</span>`;
+  let typeChipsHtml = `<span class="jlc-wb-chip scout-wb-chip ${curType === '全部' ? 'is-on' : ''}" data-type="全部">全部 (${terms.filter(t => t.status !== 'retired').length})</span>`;
   types.forEach(t => {
     const count = terms.filter(item => item.type === t && item.status !== 'retired').length;
-    typeChipsHtml += `<span class="jlc-wb-chip ${curType === t ? 'is-on' : ''}" data-type="${escapeHtml(t)}" style="margin:2px;cursor:pointer;">${escapeHtml(t)} (${count})</span>`;
+    typeChipsHtml += `<span class="jlc-wb-chip scout-wb-chip ${curType === t ? 'is-on' : ''}" data-type="${escapeHtml(t)}">${escapeHtml(t)} (${count})</span>`;
   });
   const retiredCount = terms.filter(t => t.status === 'retired').length;
-  typeChipsHtml += `<span class="jlc-wb-chip ${curType === '已废弃' ? 'is-on' : ''}" data-type="已废弃" style="margin:2px;cursor:pointer;background:#ffe5e5;color:#b42318;">已废弃 (${retiredCount})</span>`;
+  typeChipsHtml += `<span class="jlc-wb-chip scout-wb-chip is-retired ${curType === '已废弃' ? 'is-on' : ''}" data-type="已废弃">已废弃 (${retiredCount})</span>`;
 
   let filtered = terms;
   if (curType === '全部') {
@@ -8958,9 +9716,9 @@ function renderLexiconPage() {
     itemsHtml = '<div class="jlc-wb-empty">该分类下没有词，快去采集或者在下方新增一个吧～</div>';
   } else {
     filtered.forEach(t => {
-      const zhText = t.zh ? ` · ${t.zh}` : ' · <span style="color:#b09070;font-style:italic;">暂无翻译</span>';
-      const statusPill = t.status === 'confirmed' ? '<span class="jlc-status-pill tone-green" style="font-size:10px;padding:1px 4px;margin-left:4px;">已确认</span>' : '';
-      const loveHeart = t.loved ? '<span style="color:#e54840;margin-right:4px;" title="心动标签">❤️</span>' : '';
+      const zhText = t.zh ? ` · ${t.zh}` : ' · <span class="scout-lexicon-missing">暂无翻译</span>';
+      const statusPill = t.status === 'confirmed' ? '<span class="jlc-status-pill tone-green scout-lexicon-confirmed">已确认</span>' : '';
+      const loveHeart = t.loved ? '<span class="scout-lexicon-loved" title="心动标签">❤️</span>' : '';
       
       let typeOpts = '';
       types.forEach(ty => {
@@ -8975,7 +9733,7 @@ function renderLexiconPage() {
                 <span class="jlc-wb-item-title">${loveHeart}${escapeHtml(t.text)}${zhText}${statusPill}</span>
                 <span class="jlc-wb-leaf tone-yellow" title="原始热度: ${t.heat}">🔥 ${getEffectiveHeat(t).toFixed(1)}</span>
               </div>
-              <div class="jlc-wb-item-meta-line" style="font-size:11.5px;color:#9a7d60;">
+              <div class="jlc-wb-item-meta-line scout-lexicon-meta">
                 分类: ${escapeHtml(t.type)} | 使用: ${t.use} | 赞/踩: ${t.good}/${t.bad}
               </div>
             </div>
@@ -8985,36 +9743,36 @@ function renderLexiconPage() {
           </div>
 
           <div class="jlc-wb-item-edit" id="edit-${t.id}">
-            <div style="display:flex;flex-direction:column;gap:8px;width:100%;margin-top:8px;border-top:1px dashed #efe0cc;padding-top:8px;">
-              <div style="display:flex;gap:6px;align-items:center;">
-                <span style="font-size:12px;color:#7a5a3c;width:54px;">翻译:</span>
-                <input type="text" value="${escapeHtml(t.zh || '')}" placeholder="中文含义" class="scout-edit-zh" style="flex:1;padding:6px;font-size:13px;">
+            <div class="scout-lexicon-edit">
+              <div class="scout-lexicon-edit-row">
+                <span class="scout-lexicon-edit-label">翻译:</span>
+                <input type="text" value="${escapeHtml(t.zh || '')}" placeholder="中文含义" class="scout-edit-zh scout-lexicon-edit-input">
               </div>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <span style="font-size:12px;color:#7a5a3c;width:54px;">类型:</span>
-                <select class="jlc-wb-select scout-edit-type" style="flex:1;padding:4px 6px;">
+              <div class="scout-lexicon-edit-row">
+                <span class="scout-lexicon-edit-label">类型:</span>
+                <select class="jlc-wb-select scout-edit-type scout-lexicon-edit-select">
                   ${typeOpts}
                 </select>
               </div>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <span style="font-size:12px;color:#7a5a3c;width:54px;">心动:</span>
-                <label style="display:inline-flex;align-items:center;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;font-size:13px;">
-                  <input type="checkbox" class="scout-edit-loved" ${t.loved ? 'checked' : ''} style="width:16px;height:16px;margin-right:6px;accent-color:var(--scout-theme-color);"> 标记为心动标签
+              <div class="scout-lexicon-edit-row">
+                <span class="scout-lexicon-edit-label">心动:</span>
+                <label class="scout-lexicon-loved-toggle">
+                  <input type="checkbox" class="scout-edit-loved scout-lexicon-loved-checkbox" ${t.loved ? 'checked' : ''}> 标记为心动标签
                 </label>
               </div>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <span style="font-size:12px;color:#7a5a3c;width:54px;">备注:</span>
-                <input type="text" value="${escapeHtml(t.note || '')}" placeholder="来源/其他备注" class="scout-edit-note" style="flex:1;padding:6px;font-size:13px;">
+              <div class="scout-lexicon-edit-row">
+                <span class="scout-lexicon-edit-label">备注:</span>
+                <input type="text" value="${escapeHtml(t.note || '')}" placeholder="来源/其他备注" class="scout-edit-note scout-lexicon-edit-input">
               </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;flex-wrap:wrap;gap:6px;">
-                <div style="display:flex;gap:4px;">
-                  <button class="jlc-wb-btn primary scout-save-btn" style="padding:4px 8px;font-size:12px;">保存</button>
-                  <button class="jlc-wb-btn ghost scout-cancel-btn" style="padding:4px 8px;font-size:12px;">取消</button>
+              <div class="scout-lexicon-edit-actions">
+                <div class="scout-wb-button-group">
+                  <button class="jlc-wb-btn primary scout-save-btn scout-wb-btn-compact">保存</button>
+                  <button class="jlc-wb-btn ghost scout-cancel-btn scout-wb-btn-compact">取消</button>
                 </div>
-                <div style="display:flex;gap:4px;">
-                  <button class="jlc-wb-btn primary scout-good-btn" title="很好用，热度+3" style="padding:4px 8px;font-size:12px;background:#2f6b3a;border:0;">👍 赞</button>
-                  <button class="jlc-wb-btn ghost scout-bad-btn" title="不好用，热度-2" style="padding:4px 8px;font-size:12px;color:#8a3a32;border-color:#e8b8b0;">👎 踩</button>
-                  <button class="jlc-wb-btn danger scout-retire-btn" style="padding:4px 8px;font-size:12px;">🗑️ 废弃</button>
+                <div class="scout-wb-button-group">
+                  <button class="jlc-wb-btn primary scout-good-btn scout-wb-btn-compact scout-lexicon-good" title="很好用，热度+3">👍 赞</button>
+                  <button class="jlc-wb-btn ghost scout-bad-btn scout-wb-btn-compact scout-lexicon-bad" title="不好用，热度-2">👎 踩</button>
+                  <button class="jlc-wb-btn danger scout-retire-btn scout-wb-btn-compact">🗑️ 废弃</button>
                 </div>
               </div>
             </div>
@@ -9025,11 +9783,11 @@ function renderLexiconPage() {
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-toolbar" style="padding-top:12px;">
+    <div class="jlc-wb-toolbar scout-lexicon-toolbar">
       <div class="jlc-wb-toolbar-row">
-        <input type="text" class="jlc-wb-search" id="scout-lexicon-search" placeholder="在词库中搜索..." value="${escapeHtml(searchQuery)}" style="padding:8px 12px;font-size:13.5px;">
+        <input type="text" class="jlc-wb-search scout-lexicon-search" id="scout-lexicon-search" placeholder="在词库中搜索..." value="${escapeHtml(searchQuery)}">
       </div>
-      <div style="display:flex;flex-wrap:wrap;margin-top:2px;">
+      <div class="scout-lexicon-types">
         ${typeChipsHtml}
       </div>
     </div>
@@ -9038,11 +9796,11 @@ function renderLexiconPage() {
       ${itemsHtml}
     </div>
 
-    <div class="jlc-wb-footer" style="padding:10px 14px;">
-      <div style="display:flex;gap:6px;width:100%;">
-        <input type="text" class="jlc-wb-search" id="scout-add-term-text" placeholder="英文词..." style="flex:1.5;padding:8px;font-size:13px;">
-        <input type="text" class="jlc-wb-search" id="scout-add-term-zh" placeholder="中文翻译..." style="flex:1;padding:8px;font-size:13px;">
-        <button class="jlc-wb-btn primary" id="scout-add-term-btn" style="padding:8px 12px;">添加</button>
+    <div class="jlc-wb-footer scout-lexicon-footer">
+      <div class="scout-wb-add-form">
+        <input type="text" class="jlc-wb-search scout-wb-add-primary" id="scout-add-term-text" placeholder="英文词...">
+        <input type="text" class="jlc-wb-search scout-wb-add-secondary" id="scout-add-term-zh" placeholder="中文翻译...">
+        <button class="jlc-wb-btn primary scout-wb-add-submit" id="scout-add-term-btn">添加</button>
       </div>
     </div>
   `;
@@ -9132,6 +9890,7 @@ function renderLexiconPage() {
       renderLexiconPage();
     });
   });
+  markScoutWorkbenchPageRendered('lexicon');
 }
 
 // 
@@ -9157,15 +9916,15 @@ function renderPublishersPage() {
       const notePart = p.note ? ` [备注: ${p.note}]` : '';
       
       listHtml += `
-        <div class="person-item" style="border-radius:12px;margin-bottom:8px;">
+        <div class="person-item scout-publisher-item">
           <div>
-            <b style="color:${isLoved ? '#2f6b3a' : '#b42318'};">${escapeHtml(p.name)}</b> 
-            <span class="jlc-status-pill ${statusClass}" style="font-size:10.5px;padding:1px 6px;margin-left:4px;">${statusText}</span>
-            <span style="font-size:11px;color:#9a7d60;margin-left:4px;">(${p.site || '未知'})</span>
-            <div style="font-size:11px;color:#9a7d60;margin-top:2px;">${escapeHtml(notePart)}</div>
+            <b class="scout-publisher-name ${isLoved ? 'is-loved' : 'is-blocked'}">${escapeHtml(p.name)}</b>
+            <span class="jlc-status-pill ${statusClass} scout-publisher-status">${statusText}</span>
+            <span class="scout-publisher-site">(${p.site || '未知'})</span>
+            <div class="scout-publisher-note">${escapeHtml(notePart)}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span class="remove" data-id="${p.id}" title="取消熟人状态" style="cursor:pointer;font-weight:bold;">✕</span>
+          <div class="scout-publisher-actions">
+            <span class="remove scout-publisher-remove" data-id="${p.id}" title="取消熟人状态">✕</span>
           </div>
         </div>
       `;
@@ -9173,17 +9932,17 @@ function renderPublishersPage() {
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-top:14px;">
+    <div class="jlc-wb-list-scroll scout-wb-list">
       ${listHtml}
     </div>
     <div class="jlc-wb-footer">
-      <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;">
-        <input type="text" class="jlc-wb-search" id="scout-add-pub-name" placeholder="频道/制片名称..." style="flex:1.5;padding:8px;font-size:13px;">
-        <select class="jlc-wb-select" id="scout-add-pub-status" style="flex:1;padding:4px 6px;">
+      <div class="scout-wb-add-form is-wrap">
+        <input type="text" class="jlc-wb-search scout-wb-add-primary" id="scout-add-pub-name" placeholder="频道/制片名称...">
+        <select class="jlc-wb-select scout-wb-add-secondary" id="scout-add-pub-status">
           <option value="loved">❤️ 关注熟人</option>
           <option value="blocked">✕ 拉黑频道</option>
         </select>
-        <button class="jlc-wb-btn primary" id="scout-add-pub-btn" style="flex:1;padding:8px;justify-content:center;">手动添加</button>
+        <button class="jlc-wb-btn primary scout-wb-add-submit is-grow" id="scout-add-pub-btn">手动添加</button>
       </div>
     </div>
   `;
@@ -9213,6 +9972,7 @@ function renderPublishersPage() {
       renderPublishersPage();
     }
   });
+  markScoutWorkbenchPageRendered('publishers');
 }
 
 // Render Tab: Works（作品收藏）
@@ -9268,32 +10028,32 @@ function renderWorksPage() {
       listHtml += `
         <div class="jlc-wb-item" data-work-id="${escapeHtml(w.id)}">
           <div class="jlc-wb-item-row">
-            <div class="jlc-wb-cover is-poster" style="flex:0 0 72px;width:72px;height:54px;border-radius:10px;overflow:hidden;background:#efe4d2;">
+            <div class="jlc-wb-cover is-poster scout-work-cover">
               ${w.thumb
-                ? `<img class="scout-work-thumb" src="${escapeHtml(w.thumb)}" alt="" referrerpolicy="no-referrer" loading="lazy" style="width:100%;height:100%;object-fit:cover;"><span class="jlc-wb-cover-fallback" hidden>▶</span>`
+                ? `<img class="scout-work-thumb" src="${escapeHtml(w.thumb)}" alt="" referrerpolicy="no-referrer" loading="lazy"><span class="jlc-wb-cover-fallback" hidden>▶</span>`
                 : '<span class="jlc-wb-cover-fallback">▶</span>'}
             </div>
-            <div class="jlc-wb-item-body" style="min-width:0;">
+            <div class="jlc-wb-item-body">
               <div class="jlc-wb-item-title-row">
                 <span class="jlc-wb-item-title">${escapeHtml(w.title || w.videoId || '未命名')}</span>
                 <span class="jlc-site-pill">${escapeHtml(typeof scoutSiteShortLabel === 'function' ? scoutSiteShortLabel(workSite) : workSite.toUpperCase())}</span>
               </div>
-              <div class="jlc-wb-item-meta-line" style="font-size:11.5px;color:#9a7d60;">
+              <div class="jlc-wb-item-meta-line scout-work-meta">
                 ${w.uploader ? escapeHtml(w.uploader) + ' · ' : ''}${timeStr}
               </div>
-              ${tags ? `<div class="jlc-wb-item-meta-line" style="font-size:11px;color:#a89078;margin-top:2px;">站标: ${tags}${more}</div>` : ''}
+              ${tags ? `<div class="jlc-wb-item-meta-line scout-work-tags">站标: ${tags}${more}</div>` : ''}
               <div class="scout-work-site-chips">${chips}</div>
-              <div class="scout-lex-flow scout-lex-flow-work" style="margin-top:6px;">${(() => {
+              <div class="scout-lex-flow scout-lex-flow-work">${(() => {
                 const m = matchLexiconHits({ title: w.title, tags: w.tags || [], uploader: w.uploader });
                 return buildLexiconHitFlowHtml(m, { max: 8, showCount: false, emptyHtml: '<span class="scout-lex-flow-empty">暂无词库标签</span>' });
               })()}</div>
             </div>
             <div class="jlc-wb-item-side">
-              <button type="button" class="jlc-wb-open-btn scout-work-open" style="min-width:52px;padding:6px 10px;font-size:12px;" title="${escapeHtml(primaryTitle)}">${primaryLabel}</button>
+              <button type="button" class="jlc-wb-open-btn scout-work-open" title="${escapeHtml(primaryTitle)}">${primaryLabel}</button>
               ${!onCurrent && currentSite && workSite
-                ? '<button type="button" class="jlc-wb-btn ghost scout-work-origin" style="min-width:52px;padding:4px 8px;font-size:11px;margin-top:4px;" title="打开收藏时的原站链接">原站</button>'
+                ? '<button type="button" class="jlc-wb-btn ghost scout-work-origin" title="打开收藏时的原站链接">原站</button>'
                 : ''}
-              <button type="button" class="jlc-wb-btn danger scout-work-del" style="padding:4px 8px;font-size:11px;margin-top:4px;">删除</button>
+              <button type="button" class="jlc-wb-btn danger scout-work-del">删除</button>
             </div>
           </div>
         </div>`;
@@ -9301,8 +10061,8 @@ function renderWorksPage() {
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-top:12px;">
-      <div class="legacy-note" style="margin:0 14px 10px;line-height:1.45;">
+    <div class="jlc-wb-list-scroll scout-wb-list is-compact">
+      <div class="legacy-note scout-wb-page-note">
         详情收藏 → 本列表 → 采标签库。主按钮<b>优先当前站</b>（本站片=打开；跨站=本站搜标题）。
         芯片 XV/XN/EP：★=原站打开，其余=按标题搜。共 <b>${works.length}</b> 部。
       </div>
@@ -9389,12 +10149,107 @@ function renderWorksPage() {
       renderWorksPage();
     });
   });
+  markScoutWorkbenchPageRendered('works');
 }
 
 // Render Tab 4: Tracks (Saved Searches)
 // 同 query 折叠为一卡；组级「续看」优先当前站
 
 /** 打开某站断点页；无 track 时按 query 搜第 1 页 */
+// @@creamu-part:search-enhancements
+
+/**
+ * 搜索页订阅追更入口
+ * - PC：顶部细条
+ * - 手机：FAB 旁小圆钮（不再铺底大横条）
+ */
+function enhanceSearchTrackSubscribe() {
+  const site = typeof detectSite === 'function' ? detectSite() : null;
+  if (!site || typeof detectPageKind !== 'function' || detectPageKind() !== 'search') {
+    document.getElementById('scout-search-track-bar')?.remove();
+    return;
+  }
+
+  const ctx = typeof parseSearchContext === 'function' ? parseSearchContext() : { query: '', url: location.href };
+  const query = compactText(ctx && ctx.query);
+  if (!query) {
+    document.getElementById('scout-search-track-bar')?.remove();
+    return;
+  }
+
+  let isNarrow = false;
+  try {
+    isNarrow = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
+  } catch (_) { /* ignore */ }
+
+  const existing =
+    typeof findTrackBySiteQuery === 'function' ? findTrackBySiteQuery(site, query) : null;
+  const on = !!existing;
+  const qShort = query.length > 28 ? query.slice(0, 26) + '…' : query;
+
+  let bar = document.getElementById('scout-search-track-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'scout-search-track-bar';
+    bar.setAttribute('data-scout-ui', '1');
+    (document.body || document.documentElement).appendChild(bar);
+  }
+  bar.className = isNarrow ? 'scout-track-fab' : 'scout-track-banner';
+  bar.classList.toggle('is-on', on);
+
+  const doToggle = () => {
+    if (on) {
+      if (!confirm(`取消订阅「${query}」？断点会一并删除。`)) return;
+      deleteTrack(existing.id);
+      showToast('已取消搜索追更');
+    } else {
+      addTrack({
+        site,
+        query,
+        label: query,
+        url: (ctx && ctx.url) || location.href
+      });
+      if (typeof setupSearchClickTracking === 'function') setupSearchClickTracking();
+      showToast('已订阅：' + qShort);
+    }
+    enhanceSearchTrackSubscribe();
+    refreshScoutWorkbenchPageIfActive('tracks');
+    refreshScoutWorkbenchPageIfActive('combo');
+  };
+
+  if (isNarrow) {
+    // 手机：小圆钮，一点即订/取消；叠在工作台钮上方
+    bar.innerHTML = '';
+    bar.title = on ? `已订阅：${query}（点按取消）` : `订阅追更：${query}`;
+    bar.setAttribute('role', 'button');
+    bar.setAttribute('aria-label', on ? '取消搜索追更' : '订阅搜索追更');
+    bar.innerHTML = `<span class="scout-track-fab-ico">${on ? '⭐' : '☆'}</span>`;
+    bar.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      doToggle();
+    };
+    if (typeof dockMobileFabStack === 'function') dockMobileFabStack();
+    return;
+  }
+
+  // PC：顶部细条
+  bar.onclick = null;
+  bar.removeAttribute('role');
+  bar.innerHTML = `
+    <span class="scout-track-banner-text" title="${escapeHtml(query)}">
+      ${on ? '⭐ 已订阅' : '☆ 追更'} · <b>${escapeHtml(qShort)}</b>
+    </span>
+    <button type="button" id="scout-search-track-toggle" class="scout-track-banner-btn">
+      ${on ? '取消' : '订阅'}
+    </button>
+  `;
+  bar.querySelector('#scout-search-track-toggle')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    doToggle();
+  });
+}
 // @@creamu-part:36-tracking-page
 function openTrackAtBreakpoint(track, site, query) {
   const siteNorm = String(site || (track && track.site) || '') || (typeof detectSite === 'function' ? detectSite() : '');
@@ -9483,15 +10338,15 @@ function renderTracksPage() {
               <div class="scout-track-site-row${isCur ? ' is-current' : ''}" data-site="${escapeHtml(sid)}" data-track-id="${escapeHtml(t.id)}">
                 <span class="jlc-site-pill${isCur ? ' is-current' : ''}">${escapeHtml(short)}${isCur ? ' ·本站' : ''}</span>
                 <span class="scout-track-site-meta">p${t.last_seen_page || 1}${t.last_seen_item ? ' · 已记片' : ''}</span>
-                <button type="button" class="jlc-wb-btn ghost scout-track-site-open" style="padding:3px 8px;font-size:11px;">续看</button>
-                <button type="button" class="jlc-wb-btn danger scout-track-site-del" style="padding:3px 8px;font-size:11px;">取消</button>
+                <button type="button" class="jlc-wb-btn ghost scout-track-site-open">续看</button>
+                <button type="button" class="jlc-wb-btn danger scout-track-site-del">取消</button>
               </div>`;
           }
           return `
             <div class="scout-track-site-row${isCur ? ' is-current' : ''}" data-site="${escapeHtml(sid)}">
               <span class="jlc-site-pill is-empty">${escapeHtml(short)}${isCur ? ' ·本站' : ''}</span>
               <span class="scout-track-site-meta">未订阅</span>
-              <button type="button" class="jlc-wb-btn ghost scout-track-site-search" style="padding:3px 8px;font-size:11px;">去搜</button>
+              <button type="button" class="jlc-wb-btn ghost scout-track-site-search">去搜</button>
             </div>`;
         })
         .join('');
@@ -9501,29 +10356,29 @@ function renderTracksPage() {
           <div class="jlc-wb-item-row">
             <div class="jlc-wb-item-body">
               <div class="jlc-wb-item-title-row">
-                <span class="jlc-wb-item-title" style="color:var(--scout-theme-color);">⭐ ${escapeHtml(g.label)}</span>
+                <span class="jlc-wb-item-title scout-track-title">⭐ ${escapeHtml(g.label)}</span>
                 <span class="jlc-site-pill">${g.siteCount} 站</span>
               </div>
-              <div class="scout-track-site-pills" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${sitePills}</div>
-              <div class="jlc-wb-item-meta-line" style="font-size:12px;margin-top:4px;">
+              <div class="scout-track-site-pills">${sitePills}</div>
+              <div class="jlc-wb-item-meta-line scout-track-query">
                 查询: <b>${escapeHtml(g.query)}</b>
               </div>
-              <div class="jlc-wb-item-meta-line" style="font-size:11px;color:#a89078;">
+              <div class="jlc-wb-item-meta-line scout-track-updated">
                 ${escapeHtml(curMeta)}${timeStr ? ' | ' + escapeHtml(timeStr) : ''}
               </div>
             </div>
             <div class="jlc-wb-item-side">
-              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" style="min-width:54px;padding:6px 12px;font-size:12px;" title="优先当前站断点">续看</button>
-              <button type="button" class="jlc-wb-btn ghost scout-track-expand-btn" style="min-width:54px;padding:4px 8px;font-size:11px;margin-top:4px;">站点</button>
+              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="优先当前站断点">续看</button>
+              <button type="button" class="jlc-wb-btn ghost scout-track-expand-btn">站点</button>
               <button type="button" class="jlc-wb-more-btn scout-track-more-btn">•••</button>
             </div>
           </div>
           <div class="scout-track-group-sites">${rowsHtml}</div>
           <div class="jlc-wb-item-edit scout-track-edit">
-            <div style="display:flex;justify-content:flex-end;gap:8px;width:100%;flex-wrap:wrap;border-top:1px dashed #efe0cc;padding-top:8px;margin-top:6px;">
-              ${curTrack ? '<button type="button" class="jlc-wb-btn danger scout-track-del-current-btn" style="padding:4px 10px;font-size:12px;">取消当前站</button>' : ''}
-              <button type="button" class="jlc-wb-btn danger scout-track-delete-btn" style="padding:4px 10px;font-size:12px;">删除整组</button>
-              <button type="button" class="jlc-wb-btn ghost scout-track-cancel-btn" style="padding:4px 10px;font-size:12px;">取消</button>
+            <div class="scout-track-edit-actions">
+              ${curTrack ? '<button type="button" class="jlc-wb-btn danger scout-track-del-current-btn">取消当前站</button>' : ''}
+              <button type="button" class="jlc-wb-btn danger scout-track-delete-btn">删除整组</button>
+              <button type="button" class="jlc-wb-btn ghost scout-track-cancel-btn">取消</button>
             </div>
           </div>
         </div>`;
@@ -9531,8 +10386,8 @@ function renderTracksPage() {
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-top:14px;">
-      <div class="legacy-note" style="margin:0 14px 10px;line-height:1.45;">
+    <div class="jlc-wb-list-scroll scout-wb-list">
+      <div class="legacy-note scout-wb-page-note">
         同搜索词多站合成一卡。<b>续看优先当前站</b>；点「站点」可看三站断点 / 去搜。
       </div>
       ${listHtml}
@@ -9629,6 +10484,7 @@ function renderTracksPage() {
       });
     });
   });
+  markScoutWorkbenchPageRendered('tracks');
 }
 
 // 
@@ -9651,67 +10507,67 @@ function renderBlocksPage() {
       const scopeLabel = scope === 'both' ? '标题+上传者' : scope === 'uploader' ? '上传者' : '标题';
 
       const modeBadge = isHide
-        ? `<span class="jlc-status-pill tone-red scout-toggle-mode-btn" style="font-size:10px;padding:1px 6px;cursor:pointer;" data-id="${b.id}" title="点击切换为弱淡化">🚫 强隐藏</span>`
-        : `<span class="jlc-status-pill tone-yellow scout-toggle-mode-btn" style="font-size:10px;padding:1px 6px;cursor:pointer;background:#ffe8c2;color:#b54708;border-color:#f5c77a;" data-id="${b.id}" title="点击切换为强隐藏">🌁 弱淡化</span>`;
-      const matchBadge = `<span class="jlc-status-pill scout-toggle-match-btn" style="font-size:10px;padding:1px 6px;cursor:pointer;background:#efe4d2;color:#6b4a2e;" data-id="${b.id}" title="点击切换 整词/子串">${isSub ? '⊂ 子串' : '⬚ 整词'}</span>`;
-      const scopeBadge = `<span class="jlc-status-pill scout-toggle-scope-btn" style="font-size:10px;padding:1px 6px;cursor:pointer;background:#e7f1ff;color:#175cd3;" data-id="${b.id}" title="点击切换匹配范围">${escapeHtml(scopeLabel)}</span>`;
+        ? `<span class="jlc-status-pill tone-red scout-toggle-mode-btn" data-id="${b.id}" title="点击切换为弱淡化">🚫 强隐藏</span>`
+        : `<span class="jlc-status-pill tone-yellow scout-toggle-mode-btn" data-id="${b.id}" title="点击切换为强隐藏">🌁 弱淡化</span>`;
+      const matchBadge = `<span class="jlc-status-pill scout-toggle-match-btn" data-id="${b.id}" title="点击切换 整词/子串">${isSub ? '⊂ 子串' : '⬚ 整词'}</span>`;
+      const scopeBadge = `<span class="jlc-status-pill scout-toggle-scope-btn" data-id="${b.id}" title="点击切换匹配范围">${escapeHtml(scopeLabel)}</span>`;
 
       listHtml += `
-        <div class="person-item" style="border-radius:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <div style="min-width:0;flex:1;">
-            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-              <b style="color:#b42318;">${escapeHtml(b.text)}</b>${escapeHtml(zhPart)}
+        <div class="person-item scout-block-item">
+          <div class="scout-block-body">
+            <div class="scout-block-heading">
+              <b class="scout-block-name">${escapeHtml(b.text)}</b>${escapeHtml(zhPart)}
               ${modeBadge}${matchBadge}${scopeBadge}
             </div>
-            <div style="font-size:11px;color:#9a7d60;margin-top:4px;">${escapeHtml(reasonPart)}</div>
+            <div class="scout-block-reason">${escapeHtml(reasonPart)}</div>
           </div>
-          <span class="remove" data-id="${b.id}" title="取消屏蔽" style="color:#b42318;font-weight:bold;cursor:pointer;font-size:16px;flex:0 0 auto;">✕</span>
+          <span class="remove scout-block-remove" data-id="${b.id}" title="取消屏蔽">✕</span>
         </div>
       `;
     });
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-top:14px;">
+    <div class="jlc-wb-list-scroll scout-wb-list">
       ${listHtml}
     </div>
 
     <div class="jlc-wb-footer">
-      <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;">
-        <input type="text" class="jlc-wb-search" id="scout-add-block-text" placeholder="屏蔽词..." style="flex:1.5;padding:8px;font-size:13px;">
-        <input type="text" class="jlc-wb-search" id="scout-add-block-zh" placeholder="中文翻译..." style="flex:1;padding:8px;font-size:13px;">
-        <input type="text" class="jlc-wb-search" id="scout-add-block-reason" placeholder="屏蔽理由..." style="flex:100%;padding:8px;font-size:13px;margin-top:4px;">
+      <div class="scout-wb-add-form is-wrap">
+        <input type="text" class="jlc-wb-search scout-wb-add-primary" id="scout-add-block-text" placeholder="屏蔽词...">
+        <input type="text" class="jlc-wb-search scout-wb-add-secondary" id="scout-add-block-zh" placeholder="中文翻译...">
+        <input type="text" class="jlc-wb-search scout-wb-add-detail" id="scout-add-block-reason" placeholder="屏蔽理由...">
 
-        <div style="display:flex;align-items:center;gap:10px;width:100%;margin-top:4px;padding:0 4px;flex-wrap:wrap;">
-          <span style="font-size:12px;color:#7a5a3c;font-weight:bold;">效果:</span>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-mode" value="dim" checked style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 弱淡化
+        <div class="scout-block-options is-first">
+          <span class="scout-block-option-title">效果:</span>
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-mode" value="dim" checked> 弱淡化
           </label>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-mode" value="hide" style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 强隐藏
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-mode" value="hide"> 强隐藏
           </label>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;width:100%;padding:0 4px;flex-wrap:wrap;">
-          <span style="font-size:12px;color:#7a5a3c;font-weight:bold;">匹配:</span>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-match" value="word" checked style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 整词
+        <div class="scout-block-options">
+          <span class="scout-block-option-title">匹配:</span>
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-match" value="word" checked> 整词
           </label>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-match" value="sub" style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 子串
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-match" value="sub"> 子串
           </label>
-          <span style="font-size:12px;color:#7a5a3c;font-weight:bold;margin-left:6px;">范围:</span>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-scope" value="title" checked style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 标题
+          <span class="scout-block-option-title is-scope">范围:</span>
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-scope" value="title" checked> 标题
           </label>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-scope" value="uploader" style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 上传者
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-scope" value="uploader"> 上传者
           </label>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-scope" value="both" style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 两者
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-scope" value="both"> 两者
           </label>
         </div>
 
-        <button class="jlc-wb-btn primary" id="scout-add-block-btn" style="flex:1;margin-top:6px;padding:8px;justify-content:center;">添加屏蔽</button>
+        <button class="jlc-wb-btn primary" id="scout-add-block-btn">添加屏蔽</button>
       </div>
     </div>
   `;
@@ -9794,6 +10650,7 @@ function renderBlocksPage() {
       renderBlocksPage();
     }
   });
+  markScoutWorkbenchPageRendered('blocks');
 }
 
 // 
@@ -9812,6 +10669,15 @@ function renderScoutSettingsSection(tab) {
   document.querySelectorAll('[data-scout-settings-tab]').forEach((b) => {
     b.classList.toggle('active', b.getAttribute('data-scout-settings-tab') === t);
   });
+  const container = document.getElementById('scout-settings-body');
+  if (
+    container &&
+    container.childElementCount > 0 &&
+    container.dataset.scoutSettingsSection === t &&
+    !isScoutWorkbenchPageDirty('settings')
+  ) {
+    return;
+  }
   renderSettingsPage(t);
 }
 
@@ -9820,14 +10686,18 @@ function renderSettingsPage(section) {
   if (!container) return;
   const sec = section || 'overview';
 
-  const cfg = getConfig();
-  const terms = getLexiconTerms();
-  const blocks = getBlockList();
-  const tracks = getTracks();
-  const pubs = getPublishers();
-  const clickCount = typeof getClickedCount === 'function' ? getClickedCount() : 0;
-
-  const statusStr = scoutSync ? scoutSync.statusText() : '未加载同步模块';
+  const cfg = sec === 'ui' || sec === 'sync' ? getConfig() : null;
+  const terms = sec === 'overview' ? getLexiconTerms() : [];
+  const blocks = sec === 'overview' ? getBlockList() : [];
+  const tracks = sec === 'overview' ? getTracks() : [];
+  const pubs = sec === 'overview' ? getPublishers() : [];
+  const works = sec === 'overview' && typeof getWorks === 'function' ? getWorks() : [];
+  const clickCount = sec === 'overview' && typeof getClickedCount === 'function'
+    ? getClickedCount()
+    : 0;
+  const statusStr = sec === 'sync'
+    ? (scoutSync ? scoutSync.statusText() : '未加载同步模块')
+    : '';
   let html = '';
 
   if (sec === 'ui') {
@@ -9839,25 +10709,25 @@ function renderSettingsPage(section) {
           <input type="checkbox" id="scout-cfg-cream-site" ${cfg.cream_site_theme !== false ? 'checked' : ''}>
         </label>
       </div>
-      <div class="legacy-note" style="margin-top:8px;line-height:1.5;">
+      <div class="legacy-note scout-settings-note is-compact">
         开启后重绘三站底色、顶栏、列表卡片（非统一奶油）。<br>
         <b>xvideos 暖红 · xnxx 冷蓝 · eporner 叶绿</b>。卡片用站点色，不用白底。关闭=原生样式。
       </div>
-      <h3 style="margin-top:16px;">浏览</h3>
+      <h3 class="scout-settings-subheading">浏览</h3>
       <div class="legacy-row">
         <label class="legacy-toggle">
           <span>新标签打开影片</span>
           <input type="checkbox" id="scout-cfg-open-new-tab" ${cfg.open_videos_new_tab !== false ? 'checked' : ''}>
         </label>
       </div>
-      <div class="legacy-note" style="margin-top:8px;">开启后列表点影片在新标签打开，不离开当前搜索页。组合搜索同样用新标签。</div>
-      <div class="legacy-row" style="margin-top:12px;">
+      <div class="legacy-note scout-settings-note">开启后列表点影片在新标签打开，不离开当前搜索页。组合搜索同样用新标签。</div>
+      <div class="legacy-row scout-settings-spaced-row">
         <label class="legacy-toggle">
           <span>关闭站点自动预览</span>
           <input type="checkbox" id="scout-cfg-block-site-preview" ${cfg.block_site_auto_preview !== false ? 'checked' : ''}>
         </label>
       </div>
-      <div class="legacy-note" style="margin-top:8px;line-height:1.5;">
+      <div class="legacy-note scout-settings-note is-compact">
         关闭站点列表自动播放预览，减轻下滑卡顿。<br>
         点缩略图的手动预览仍可用。
       </div>
@@ -9871,49 +10741,49 @@ function renderSettingsPage(section) {
         <div class="stat-item"><b>${pubs.length}</b><span>熟人</span></div>
         <div class="stat-item"><b>${tracks.length}</b><span>追更</span></div>
       </div>
-      <div class="stat-box" style="margin-top:10px;">
-        <div class="stat-item"><b>${typeof getWorks === 'function' ? getWorks().length : 0}</b><span>作品</span></div>
+      <div class="stat-box scout-settings-secondary-stats">
+        <div class="stat-item"><b>${works.length}</b><span>作品</span></div>
         <div class="stat-item"><b>${clickCount}</b><span>已点</span></div>
-        <div class="stat-item" style="flex:2;text-align:left;padding:0 8px;">
-          <span style="display:block;font-size:12px;color:#9a7d60;line-height:1.45;text-transform:none;letter-spacing:0;">
+        <div class="stat-item scout-settings-stat-summary">
+          <span class="scout-settings-stat-copy">
             已点 = 点过的片（灰显）· 断点 = 收藏搜索 last_seen
           </span>
         </div>
       </div>
-      <button type="button" class="jlc-wb-btn ghost" id="scout-clear-clicks-btn" style="margin-top:12px;width:100%;">清空已点记录</button>
-      <button type="button" class="jlc-wb-btn ghost" id="scout-purge-block-terms-btn" style="margin-top:8px;width:100%;">清理词库中的屏蔽词</button>
-      <div class="legacy-note" style="margin-top:6px;">把「已在屏蔽表」或 note 写「用于屏蔽」的条目移出词库，只留在屏蔽里。</div>
+      <button type="button" class="jlc-wb-btn ghost scout-settings-wide-action is-first" id="scout-clear-clicks-btn">清空已点记录</button>
+      <button type="button" class="jlc-wb-btn ghost scout-settings-wide-action is-next" id="scout-purge-block-terms-btn">清理词库中的屏蔽词</button>
+      <div class="legacy-note scout-settings-cleanup-note">把「已在屏蔽表」或 note 写「用于屏蔽」的条目移出词库，只留在屏蔽里。</div>
     `;
   } else if (sec === 'backup') {
     html = `
       <h3>词库+屏蔽（给 AI）</h3>
-      <div class="legacy-note" style="margin:0 0 8px;line-height:1.45;">
+      <div class="legacy-note scout-settings-intro">
         推荐：点「复制给 AI」= 提示词 + 数据包，直接粘贴对话。<br>
         回填后整段 JSON 粘到下方点「覆盖导入」。<br>
         <b>覆盖</b>＝以包为准（包外旧词会删），<b>同词保留本地热度/use</b>。<br>
         「合并」只增补不删旧词。不含熟人/断点/已点。
       </div>
-      <textarea id="scout-ai-textarea" style="width:100%;height:120px;font-family:monospace;font-size:11.5px;padding:8px;border-radius:12px;border:1px solid #e4d4bc;" placeholder="词库+屏蔽 JSON…"></textarea>
-      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
-        <button class="jlc-wb-btn primary" id="scout-ai-copy-chat" style="flex:1.4;min-width:100px;">📋 复制给 AI</button>
-        <button class="jlc-wb-btn ghost" id="scout-ai-copy-prompt" style="flex:1;min-width:80px;">只复制提示词</button>
+      <textarea id="scout-ai-textarea" class="scout-settings-textarea is-ai" placeholder="词库+屏蔽 JSON…"></textarea>
+      <div class="scout-settings-actions">
+        <button class="jlc-wb-btn primary scout-settings-action is-copy-all" id="scout-ai-copy-chat">📋 复制给 AI</button>
+        <button class="jlc-wb-btn ghost scout-settings-action is-prompt" id="scout-ai-copy-prompt">只复制提示词</button>
       </div>
-      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
-        <button class="jlc-wb-btn ghost" id="scout-ai-export" style="flex:1;min-width:70px;">导出JSON</button>
-        <button class="jlc-wb-btn ghost" id="scout-ai-copy" style="flex:1;min-width:70px;">复制JSON</button>
-        <button class="jlc-wb-btn ghost" id="scout-ai-import" style="flex:1.2;min-width:80px;color:#b54708;">覆盖导入</button>
-        <button class="jlc-wb-btn ghost" id="scout-ai-import-merge" style="flex:1;min-width:70px;">合并</button>
-        <button class="jlc-wb-btn ghost" id="scout-ai-clip" style="flex:1;min-width:70px;color:#b54708;">剪贴板覆盖</button>
+      <div class="scout-settings-actions">
+        <button class="jlc-wb-btn ghost scout-settings-action" id="scout-ai-export">导出JSON</button>
+        <button class="jlc-wb-btn ghost scout-settings-action" id="scout-ai-copy">复制JSON</button>
+        <button class="jlc-wb-btn ghost scout-settings-action is-replace scout-settings-danger-action" id="scout-ai-import">覆盖导入</button>
+        <button class="jlc-wb-btn ghost scout-settings-action" id="scout-ai-import-merge">合并</button>
+        <button class="jlc-wb-btn ghost scout-settings-action scout-settings-danger-action" id="scout-ai-clip">剪贴板覆盖</button>
       </div>
 
-      <h3 style="margin-top:16px;">完整备份</h3>
-      <div class="legacy-note" style="margin:0 0 8px;">词库+屏蔽+熟人+断点+已点</div>
-      <textarea id="scout-backup-textarea" style="width:100%;height:72px;font-family:monospace;font-size:11.5px;padding:8px;border-radius:12px;border:1px solid #e4d4bc;" placeholder="完整 JSON…"></textarea>
-      <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
-        <button class="jlc-wb-btn ghost" id="scout-export-btn" style="flex:1;min-width:70px;">导出</button>
-        <button class="jlc-wb-btn ghost" id="scout-copy-btn" style="flex:1;min-width:70px;">复制</button>
-        <button class="jlc-wb-btn ghost" id="scout-import-btn" style="flex:1;min-width:70px;color:#b54708;">导入</button>
-        <button class="jlc-wb-btn ghost" id="scout-import-clipboard-btn" style="flex:1;min-width:70px;color:#b54708;">剪贴板</button>
+      <h3 class="scout-settings-subheading">完整备份</h3>
+      <div class="legacy-note scout-settings-backup-note">词库+屏蔽+熟人+断点+已点</div>
+      <textarea id="scout-backup-textarea" class="scout-settings-textarea is-backup" placeholder="完整 JSON…"></textarea>
+      <div class="scout-settings-actions">
+        <button class="jlc-wb-btn ghost scout-settings-action" id="scout-export-btn">导出</button>
+        <button class="jlc-wb-btn ghost scout-settings-action" id="scout-copy-btn">复制</button>
+        <button class="jlc-wb-btn ghost scout-settings-action scout-settings-danger-action" id="scout-import-btn">导入</button>
+        <button class="jlc-wb-btn ghost scout-settings-action scout-settings-danger-action" id="scout-import-clipboard-btn">剪贴板</button>
       </div>
     `;
   } else {
@@ -9925,7 +10795,7 @@ function renderSettingsPage(section) {
           <input type="checkbox" id="scout-wd-enabled" ${cfg.webdav_enabled ? 'checked' : ''}>
         </label>
       </div>
-      <div id="scout-wd-form" style="${cfg.webdav_enabled ? '' : 'display:none;'}">
+      <div id="scout-wd-form" class="scout-settings-sync-form" ${cfg.webdav_enabled ? '' : 'hidden'}>
         <label>服务器地址</label>
         <input type="text" id="scout-wd-url" value="${escapeHtml(cfg.webdav_url)}" placeholder="https://dav.jianguoyun.com/dav/">
         <label>用户名</label>
@@ -9934,7 +10804,7 @@ function renderSettingsPage(section) {
         <input type="password" id="scout-wd-password" value="${escapeHtml(cfg.webdav_password)}" placeholder="应用密码">
         <label>远端路径</label>
         <input type="text" id="scout-wd-path" value="${escapeHtml(cfg.webdav_path)}" placeholder="/Creamu">
-        <div class="legacy-row" style="margin-top:12px;">
+        <div class="legacy-row scout-settings-spaced-row">
           <label class="legacy-toggle">
             <span>自动同步 (约 8 秒)</span>
             <input type="checkbox" id="scout-wd-auto" ${cfg.webdav_auto !== false ? 'checked' : ''}>
@@ -9946,12 +10816,12 @@ function renderSettingsPage(section) {
           <option value="local" ${cfg.webdav_conflict === 'local' ? 'selected' : ''}>本机优先</option>
           <option value="remote" ${cfg.webdav_conflict === 'remote' ? 'selected' : ''}>云端优先</option>
         </select>
-        <div class="legacy-note" style="margin-top:10px;word-break:break-all;">
+        <div class="legacy-note scout-settings-sync-status">
           <b>状态</b><br><span id="scout-wd-status-text">${escapeHtml(statusStr)}</span>
         </div>
-        <div style="display:flex;gap:6px;margin-top:12px;">
-          <button class="jlc-wb-btn ghost" id="scout-wd-test-btn" style="flex:1;">测试连接</button>
-          <button class="jlc-wb-btn primary" id="scout-wd-sync-btn" style="flex:1;">手动同步</button>
+        <div class="scout-settings-sync-actions">
+          <button class="jlc-wb-btn ghost" id="scout-wd-test-btn">测试连接</button>
+          <button class="jlc-wb-btn primary" id="scout-wd-sync-btn">手动同步</button>
         </div>
       </div>
     `;
@@ -10018,10 +10888,8 @@ function renderSettingsPage(section) {
     if (r.dedupedTerms) msg += ` · 压重复词 ${r.dedupedTerms}`;
     if (r.dedupedBlocks) msg += ` · 压重复屏蔽 ${r.dedupedBlocks}`;
     showToast(msg);
-    renderLexiconPage();
-    renderComboPage();
     applyListBlocks();
-    renderBlocksPage();
+    refreshScoutWorkbenchPagesIfActive('combo', 'lexicon', 'blocks');
   };
   container.querySelector('#scout-ai-copy-chat')?.addEventListener('click', () => {
     const blob = exportAiLexiconForChat();
@@ -10077,9 +10945,7 @@ function renderSettingsPage(section) {
     if (!confirm('从词库移除：已在屏蔽表中的词，以及标记「用于屏蔽」的词？')) return;
     const n = purgeBlockedTermsFromLexicon();
     showToast(n ? `已从词库清除 ${n} 条（仅保留在屏蔽）` : '词库中没有需要清理的屏蔽词');
-    renderLexiconPage();
-    renderComboPage();
-    renderBlocksPage();
+    refreshScoutWorkbenchPagesIfActive('combo', 'lexicon', 'blocks');
     refresh();
   });
 
@@ -10095,6 +10961,7 @@ function renderSettingsPage(section) {
     if (!confirm('确定从文本框导入并合并？')) return;
     if (importLexiconPackage(val)) {
       showToast('导入成功');
+      refreshScoutWorkbenchPagesIfActive();
       refresh();
     }
   });
@@ -10121,6 +10988,7 @@ function renderSettingsPage(section) {
       if (!text) return showToast('剪贴板为空，请手动粘贴后导入', true);
       if (importLexiconPackage(text)) {
         showToast('剪贴板导入成功');
+        refreshScoutWorkbenchPagesIfActive();
         refresh();
       }
     } catch (_) {
@@ -10134,7 +11002,7 @@ function renderSettingsPage(section) {
     const curCfg = getConfig();
     curCfg.webdav_enabled = !!wdEnabledCb.checked;
     saveConfig(curCfg);
-    if (wdForm) wdForm.style.display = curCfg.webdav_enabled ? '' : 'none';
+    if (wdForm) wdForm.hidden = !curCfg.webdav_enabled;
     initScoutWebDav();
     refresh();
   });
@@ -10190,11 +11058,7 @@ function renderSettingsPage(section) {
     try {
       if (!scoutSync) throw new Error('同步实例未就绪');
       await scoutSync.syncNow();
-      renderLexiconPage();
-      renderBlocksPage();
-      renderPublishersPage();
-      renderTracksPage();
-      renderComboPage();
+      refreshScoutWorkbenchPagesIfActive();
     } catch (e) {
       showToast(e.message || '同步出错', true);
     } finally {
@@ -10203,10 +11067,69 @@ function renderSettingsPage(section) {
       refresh();
     }
   });
+  container.dataset.scoutSettingsSection = sec;
+  markScoutWorkbenchPageRendered('settings');
 }
 
 // 
 // @@creamu-part:40-workbench-shell
+const SCOUT_WORKBENCH_PAGE_NAMES = [
+  'combo',
+  'lexicon',
+  'works',
+  'publishers',
+  'tracks',
+  'blocks',
+  'settings',
+];
+const __scoutWorkbenchDirtyPages = new Set(SCOUT_WORKBENCH_PAGE_NAMES);
+
+function markScoutWorkbenchPagesDirty(...pageNames) {
+  const names = pageNames.length ? pageNames : SCOUT_WORKBENCH_PAGE_NAMES;
+  names.forEach((name) => {
+    if (SCOUT_WORKBENCH_PAGE_NAMES.includes(name)) {
+      __scoutWorkbenchDirtyPages.add(name);
+    }
+  });
+}
+
+function markScoutWorkbenchPageRendered(pageName) {
+  __scoutWorkbenchDirtyPages.delete(pageName);
+}
+
+function isScoutWorkbenchPageDirty(pageName) {
+  return __scoutWorkbenchDirtyPages.has(pageName);
+}
+
+function renderScoutWorkbenchTab(tabName) {
+  const container = document.querySelector(`[data-jlc-wb-page="${tabName}"]`);
+  if (container && container.childElementCount > 0 && !isScoutWorkbenchPageDirty(tabName)) {
+    return false;
+  }
+  if (tabName === 'combo') renderComboPage();
+  else if (tabName === 'lexicon') renderLexiconPage();
+  else if (tabName === 'works') renderWorksPage();
+  else if (tabName === 'publishers') renderPublishersPage();
+  else if (tabName === 'tracks') renderTracksPage();
+  else if (tabName === 'blocks') renderBlocksPage();
+  else return false;
+  return true;
+}
+
+function refreshScoutWorkbenchPageIfActive(pageName) {
+  return refreshScoutWorkbenchPagesIfActive(pageName);
+}
+
+function refreshScoutWorkbenchPagesIfActive(...pageNames) {
+  const workbench = document.getElementById('jlc-wb');
+  if (!workbench || !workbench.classList.contains('is-open')) return false;
+  const active = workbench.querySelector('.jlc-wb-nav button.active');
+  const activePageName = active && active.getAttribute('data-tab');
+  const candidates = pageNames.length ? pageNames : SCOUT_WORKBENCH_PAGE_NAMES;
+  if (!activePageName || !candidates.includes(activePageName)) return false;
+  return renderScoutWorkbenchTab(activePageName);
+}
+
 function initScoutWorkbench() {
   if (typeof injectCreamuWorkbenchStyles === 'function') {
     injectCreamuWorkbenchStyles({
@@ -10329,12 +11252,7 @@ function initScoutWorkbench() {
       }
     });
 
-    if (tabName === 'combo') renderComboPage();
-    else if (tabName === 'lexicon') renderLexiconPage();
-    else if (tabName === 'works') renderWorksPage();
-    else if (tabName === 'publishers') renderPublishersPage();
-    else if (tabName === 'tracks') renderTracksPage();
-    else if (tabName === 'blocks') renderBlocksPage();
+    renderScoutWorkbenchTab(tabName);
   }
 
   function openScoutWorkbench(tabName) {
@@ -10434,10 +11352,8 @@ function initScoutWorkbench() {
       }
     }, { passive: true });
   }
-
-  renderComboPage();
 }
-// @@creamu-part:boot
+// @@creamu-part:tracking-runtime
 
 function findBreakpointVideoElement(track) {
   const els = getVideoElements();
@@ -10458,60 +11374,85 @@ function findBreakpointVideoElement(track) {
 
 /**
  * 列表点击 → 写追更断点（与 JLC last_seen 类似）。
- * 在搜索页始终绑定；是否写入取决于当前 URL 能否匹配收藏 track。
+ * 仅在搜索页绑定；是否写入取决于当前 URL 能否匹配收藏 track。
  */
-function setupSearchClickTracking() {
-  if (window.__creamuScoutClickTrackBound) return;
-  window.__creamuScoutClickTrackBound = true;
+const SCOUT_SEARCH_TRACK_EVENTS = ['click', 'auxclick', 'pointerdown'];
 
-  const markBreakpointFromEvent = (e) => {
-    const site = detectSite();
-    if (!site) return;
-    if (detectPageKind() !== 'search') return;
+function markSearchTrackingBreakpointFromEvent(e) {
+  const site = detectSite();
+  if (!site) return;
+  if (detectPageKind() !== 'search') return;
 
-    const videoEl = e.target.closest(
-      '.mozaique .thumb-block, .mozaique [id^="video_"], .video-block, ' +
-        '#videos-list .post, .post, .post-container, ' +
-        '#vidresults .mb, .mb[data-id], div.mb'
-    );
-    if (!videoEl) return;
+  const videoEl = e.target.closest(
+    '.mozaique .thumb-block, .mozaique [id^="video_"], .video-block, ' +
+      '#videos-list .post, .post, .post-container, ' +
+      '#vidresults .mb, .mb[data-id], div.mb'
+  );
+  if (!videoEl) return;
 
-    const meta = parseVideoElement(videoEl);
-    if (!meta || !meta.url) return;
+  const meta = parseVideoElement(videoEl);
+  if (!meta || !meta.url) return;
 
-    const searchCtx = parseSearchContext();
-    if (!searchCtx.query) return;
+  const searchCtx = parseSearchContext();
+  if (!searchCtx.query) return;
 
-    const matchedTrack =
-      typeof findTrackBySiteQuery === 'function'
-        ? findTrackBySiteQuery(site, searchCtx.query)
-        : null;
-    if (!matchedTrack) return;
+  const matchedTrack =
+    typeof findTrackBySiteQuery === 'function'
+      ? findTrackBySiteQuery(site, searchCtx.query)
+      : null;
+  if (!matchedTrack) return;
 
-    const videoId = videoIdFromUrl(meta.url);
-    const currentPage = parseListPage(site);
+  const videoId = videoIdFromUrl(meta.url);
+  const currentPage = parseListPage(site);
 
-    updateTrack(matchedTrack.id, {
-      last_seen_item: videoId,
-      last_seen_page: currentPage,
-      url: searchCtx.url || matchedTrack.url,
-      updated_at: new Date().toISOString()
-    });
+  updateTrack(matchedTrack.id, {
+    last_seen_item: videoId,
+    last_seen_page: currentPage,
+    url: searchCtx.url || matchedTrack.url,
+    updated_at: new Date().toISOString()
+  });
 
-    markVideoClicked({
-      site,
-      videoId,
-      title: meta.title,
-      url: meta.url,
-      thumb: meta.thumb,
-      uploader: meta.uploader
-    });
-  };
+  markVideoClicked({
+    site,
+    videoId,
+    title: meta.title,
+    url: meta.url,
+    thumb: meta.thumb,
+    uploader: meta.uploader
+  });
+}
+
+function enableSearchClickTracking() {
+  if (typeof detectPageKind === 'function' && detectPageKind() !== 'search') return;
+  if (window.__creamuScoutClickTrackTarget) return;
+  const target = document.body;
+  if (!target) return;
 
   // 捕获阶段：新标签打开（preventDefault）前也能记断点；中键 auxclick 一并覆盖
-  document.body.addEventListener('click', markBreakpointFromEvent, true);
-  document.body.addEventListener('auxclick', markBreakpointFromEvent, true);
-  document.body.addEventListener('pointerdown', markBreakpointFromEvent, true);
+  SCOUT_SEARCH_TRACK_EVENTS.forEach((type) => {
+    target.addEventListener(type, markSearchTrackingBreakpointFromEvent, true);
+  });
+  window.__creamuScoutClickTrackTarget = target;
+}
+
+function disableSearchClickTracking() {
+  const target = window.__creamuScoutClickTrackTarget;
+  if (!target) return;
+  SCOUT_SEARCH_TRACK_EVENTS.forEach((type) => {
+    target.removeEventListener(type, markSearchTrackingBreakpointFromEvent, true);
+  });
+  window.__creamuScoutClickTrackTarget = null;
+}
+
+function applySearchClickTrackingMode() {
+  const isSearch =
+    typeof detectPageKind !== 'function' || detectPageKind() === 'search';
+  if (isSearch) enableSearchClickTracking();
+  else disableSearchClickTracking();
+}
+
+function setupSearchClickTracking() {
+  applySearchClickTrackingMode();
 }
 
 function showTrackingPagebar(track, targetEl) {
@@ -10520,14 +11461,7 @@ function showTrackingPagebar(track, targetEl) {
 
   bar = document.createElement('div');
   bar.id = 'jlc-tracking-pagebar';
-  bar.className = 'jlc-wb-pagebar';
-  // 单行矮条：少占高度（PC/手机同一套）
-  bar.style.cssText =
-    'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:999999;' +
-    'width:min(420px,94vw);display:flex;align-items:center;gap:8px;' +
-    'padding:5px 8px 5px 10px;border-radius:999px;box-sizing:border-box;' +
-    'background:rgba(18,20,28,.92);border:1px solid rgba(255,255,255,.12);' +
-    'box-shadow:0 4px 14px rgba(0,0,0,.28);color:#e8eaef;font-size:12px;';
+  bar.className = 'jlc-wb-pagebar scout-tracking-pagebar';
 
   let hint = '';
   let buttonText = '';
@@ -10556,13 +11490,11 @@ function showTrackingPagebar(track, targetEl) {
   }
 
   bar.innerHTML = `
-    <span class="jlc-tracking-pagebar-text" title="${label}" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650;">
+    <span class="jlc-tracking-pagebar-text" title="${label}">
       ⭐ ${label} · ${hint}
     </span>
-    <button type="button" class="jlc-bp-continue" id="scout-bp-jump-btn"
-      style="flex:0 0 auto;padding:3px 10px;font-size:11.5px;border-radius:999px;cursor:pointer;border:0;background:var(--scout-accent,#5b8def);color:#fff;font-weight:650;">${buttonText}</button>
-    <button type="button" id="scout-bp-close-bar-btn"
-      style="flex:0 0 auto;padding:3px 8px;font-size:11.5px;border-radius:999px;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,.2);color:#c8cdd8;">忽略</button>
+    <button type="button" class="scout-tracking-pagebar-action jlc-bp-continue" id="scout-bp-jump-btn">${buttonText}</button>
+    <button type="button" class="scout-tracking-pagebar-action scout-bp-dismiss" id="scout-bp-close-bar-btn">忽略</button>
   `;
 
   document.body.appendChild(bar);
@@ -10609,6 +11541,7 @@ function checkSearchTrackingBreakpoints() {
     showTrackingPagebar(matchedTrack, null);
   }
 }
+// @@creamu-part:preview-runtime
 
 // ----------------------------------------
 // 列表预览：点缩略图播预览，再点一次进详情（xvideos/xnxx 的 data-pvv；eporner 不做预览）
@@ -10641,7 +11574,7 @@ function stopListPreview() {
     __scoutPreviewVideo = null;
   }
   if (__scoutPreviewHost) {
-    __scoutPreviewHost.classList.remove('scout-preview-playing');
+    __scoutPreviewHost.classList.remove('scout-preview-playing', 'scout-preview-positioned');
     __scoutPreviewHost.querySelectorAll('img[data-scout-orig-src]').forEach((img) => {
       if (img.dataset.scoutOrigSrc) img.src = img.dataset.scoutOrigSrc;
     });
@@ -10650,7 +11583,7 @@ function stopListPreview() {
     __scoutPreviewHost = null;
   }
   document.querySelectorAll('.scout-preview-playing').forEach((el) => {
-    el.classList.remove('scout-preview-playing');
+    el.classList.remove('scout-preview-playing', 'scout-preview-positioned');
   });
   document.querySelectorAll('.scout-list-preview-layer').forEach((el) => el.remove());
 }
@@ -10743,85 +11676,101 @@ function playListPreviewOnHost(host, img) {
   // 仅在已有定位上下文时叠层；不强制改 eporner 式布局
   try {
     const cs = window.getComputedStyle(host);
-    if (cs.position === 'static') host.style.position = 'relative';
+    if (cs.position === 'static') host.classList.add('scout-preview-positioned');
   } catch (_) {
-    host.style.position = 'relative';
+    host.classList.add('scout-preview-positioned');
   }
 
   mountPreviewVideo(host, pvv);
   return true;
 }
 
-function setupListPreviewPlayback() {
-  if (window.__scoutListPreviewBound) return;
-  window.__scoutListPreviewBound = true;
-
+function enableListPreviewPlayback() {
+  if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+  if (window.__creamuScoutListPreviewRuntime) return;
   let lastScrollY = window.scrollY || 0;
 
   // 点缩略图区域：先预览；再点同卡缩略图 → 放行进详情
-  document.addEventListener(
-    'click',
-    (e) => {
-      if (!isScoutMobileListViewport()) return;
-      if (detectPageKind && detectPageKind() === 'video') return;
-      if (e.target.closest('#jlc-wb, #jlc-wb-fab, #scout-search-track-bar')) return;
+  const onClick = (e) => {
+    if (!isScoutMobileListViewport()) return;
+    if (e.target.closest('#jlc-wb, #jlc-wb-fab, #scout-search-track-bar')) return;
 
-      // 标题/元信息区：不拦截
-      if (e.target.closest('.thumb-under, .mbtit, p.title, .title, .mbunder, .mbstats, .uploader')) {
-        return;
-      }
+    // 标题/元信息区：不拦截
+    if (e.target.closest('.thumb-under, .mbtit, p.title, .title, .mbunder, .mbstats, .uploader')) {
+      return;
+    }
 
-      // eporner 列表无预览能力：完全不拦截
-      if (isEpornerListContext(e.target)) return;
+    // eporner 列表无预览能力：完全不拦截
+    if (isEpornerListContext(e.target)) return;
 
-      // xvideos / xnxx 卡
-      const card = e.target.closest('.thumb-block, .mozaique [id^="video_"]');
-      const img =
-        (e.target.tagName === 'IMG' ? e.target : null) ||
-        (card && card.querySelector('.thumb img, .thumb-inside img, img'));
-      if (!img) return;
+    // xvideos / xnxx 卡
+    const card = e.target.closest('.thumb-block, .mozaique [id^="video_"]');
+    const img =
+      (e.target.tagName === 'IMG' ? e.target : null) ||
+      (card && card.querySelector('.thumb img, .thumb-inside img, img'));
+    if (!img) return;
 
-      // 必须点在图区域
-      const inThumb = e.target.closest('.thumb, .thumb-inside, a[href*="/video"]');
-      if (!inThumb && e.target !== img) return;
+    // 必须点在图区域
+    const inThumb = e.target.closest('.thumb, .thumb-inside, a[href*="/video"]');
+    if (!inThumb && e.target !== img) return;
 
-      const a =
-        img.closest('a[href*="/video"]') ||
-        (card && card.querySelector('a[href*="/video"]'));
-      if (!a) return;
+    const a =
+      img.closest('a[href*="/video"]') ||
+      (card && card.querySelector('a[href*="/video"]'));
+    if (!a) return;
 
-      const host = img.closest('.thumb, .thumb-inside') || a || img.parentElement;
-      if (!host) return;
+    const host = img.closest('.thumb, .thumb-inside') || a || img.parentElement;
+    if (!host) return;
 
-      // 第二次点同一预览中的图 → 不拦截，进详情
-      if (__scoutPreviewHost === host && host.classList.contains('scout-preview-playing')) {
-        stopListPreview();
-        return;
-      }
+    // 第二次点同一预览中的图 → 不拦截，进详情
+    if (__scoutPreviewHost === host && host.classList.contains('scout-preview-playing')) {
+      stopListPreview();
+      return;
+    }
 
-      const ok = playListPreviewOnHost(host, img);
-      if (ok) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    },
-    true
-  );
+    const ok = playListPreviewOnHost(host, img);
+    if (ok) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+  document.addEventListener('click', onClick, true);
 
   // 明显滚动才停预览（避免点按微抖立刻关掉）
-  window.addEventListener(
-    'scroll',
-    () => {
-      const y = window.scrollY || 0;
-      if (Math.abs(y - lastScrollY) < 48) return;
-      lastScrollY = y;
-      if (__scoutPreviewHost || __scoutPreviewVideo) stopListPreview();
-    },
-    { passive: true, capture: true }
-  );
-  document.addEventListener('visibilitychange', () => {
+  const onScroll = () => {
+    const y = window.scrollY || 0;
+    if (Math.abs(y - lastScrollY) < 48) return;
+    lastScrollY = y;
+    if (__scoutPreviewHost || __scoutPreviewVideo) stopListPreview();
+  };
+  window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+
+  const onVisibilityChange = () => {
     if (document.hidden) stopListPreview();
-  });
+  };
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window.__creamuScoutListPreviewRuntime = { onClick, onScroll, onVisibilityChange };
+}
+
+function disableListPreviewPlayback() {
+  const runtime = window.__creamuScoutListPreviewRuntime;
+  if (!runtime) return;
+  document.removeEventListener('click', runtime.onClick, true);
+  window.removeEventListener('scroll', runtime.onScroll, true);
+  document.removeEventListener('visibilitychange', runtime.onVisibilityChange);
+  window.__creamuScoutListPreviewRuntime = null;
+  stopListPreview();
+}
+
+function applyListPreviewPlaybackMode() {
+  const isList =
+    typeof detectPageKind !== 'function' || detectPageKind() !== 'video';
+  if (isList) enableListPreviewPlayback();
+  else disableListPreviewPlayback();
+}
+
+function setupListPreviewPlayback() {
+  applyListPreviewPlaybackMode();
 }
 
 // 站点列表自动预览拦截（block_site_auto_preview）
@@ -10919,7 +11868,7 @@ function killSiteListPreviewVideo(v) {
     try {
       if (v.parentNode && !v.classList.contains('scout-list-preview-video')) {
         v.dataset.scoutKilledPreview = '1';
-        v.style.display = 'none';
+        v.classList.add('scout-site-preview-disabled');
       }
     } catch (_) { /* ignore */ }
   } catch (_) { /* ignore */ }
@@ -10932,39 +11881,55 @@ function pauseSiteListPreviewVideos() {
   document.querySelectorAll('video').forEach((v) => killSiteListPreviewVideo(v));
 }
 
-function applyBlockSiteAutoPreviewMode() {
-  if (typeof isBlockSiteAutoPreview === 'function' && isBlockSiteAutoPreview()) {
-    pauseSiteListPreviewVideos();
-  } else {
-    restoreSitePreviewAttrs(document);
-  }
+const SCOUT_SITE_PREVIEW_HOVER_EVENTS = [
+  'mouseenter',
+  'mouseover',
+  'pointerenter',
+  'pointerover'
+];
+
+function shouldRunBlockSiteAutoPreview() {
+  const enabled =
+    typeof isBlockSiteAutoPreview !== 'function' || isBlockSiteAutoPreview();
+  const pageKind = typeof detectPageKind === 'function' ? detectPageKind() : '';
+  return enabled && pageKind !== 'video';
 }
 
-function setupBlockSiteAutoPreview() {
-  if (window.__scoutBlockSitePreviewBound) return;
-  window.__scoutBlockSitePreviewBound = true;
+function enableBlockSiteAutoPreview() {
+  if (!shouldRunBlockSiteAutoPreview()) return false;
+  if (window.__creamuScoutBlockSitePreviewRuntime) return false;
+
+  const runtime = {
+    stopHoverPreview: null,
+    stopPlayingPreview: null,
+    observer: null,
+    mediaPrototype: null,
+    originalPlay: null,
+    guardedPlay: null
+  };
+  window.__creamuScoutBlockSitePreviewRuntime = runtime;
 
   const stopHoverPreview = (e) => {
-    if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
-    if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
     if (e.target && e.target.closest && e.target.closest('#jlc-wb, #jlc-wb-fab, .scout-list-preview-layer')) {
       return;
     }
     if (!isSiteListPreviewHost(e.target)) return;
     e.stopPropagation();
   };
-  ['mouseenter', 'mouseover', 'pointerenter', 'pointerover'].forEach((type) => {
+  runtime.stopHoverPreview = stopHoverPreview;
+  SCOUT_SITE_PREVIEW_HOVER_EVENTS.forEach((type) => {
     document.addEventListener(type, stopHoverPreview, true);
   });
 
   try {
-    if (!window.__scoutPlayPatched) {
-      window.__scoutPlayPatched = true;
-      const origPlay = HTMLMediaElement.prototype.play;
-      HTMLMediaElement.prototype.play = function scoutGuardedPlay() {
+    const mediaPrototype =
+      typeof HTMLMediaElement !== 'undefined' ? HTMLMediaElement.prototype : null;
+    if (mediaPrototype && typeof mediaPrototype.play === 'function') {
+      runtime.mediaPrototype = mediaPrototype;
+      runtime.originalPlay = mediaPrototype.play;
+      runtime.guardedPlay = function scoutGuardedPlay() {
         if (
-          typeof isBlockSiteAutoPreview === 'function' &&
-          isBlockSiteAutoPreview() &&
+          shouldRunBlockSiteAutoPreview() &&
           this &&
           this.tagName === 'VIDEO' &&
           isBlockedSiteListVideo(this)
@@ -10972,29 +11937,24 @@ function setupBlockSiteAutoPreview() {
           killSiteListPreviewVideo(this);
           return Promise.resolve();
         }
-        return origPlay.apply(this, arguments);
+        return runtime.originalPlay.apply(this, arguments);
       };
+      mediaPrototype.play = runtime.guardedPlay;
     }
   } catch (e) {
     console.warn('[Creamu Scout] play() patch failed', e);
   }
 
-  document.addEventListener(
-    'play',
-    (e) => {
-      const v = e.target;
-      if (!v || v.tagName !== 'VIDEO') return;
-      if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
-      if (!isBlockedSiteListVideo(v)) return;
-      killSiteListPreviewVideo(v);
-    },
-    true
-  );
+  runtime.stopPlayingPreview = (e) => {
+    const v = e.target;
+    if (!v || v.tagName !== 'VIDEO') return;
+    if (!isBlockedSiteListVideo(v)) return;
+    killSiteListPreviewVideo(v);
+  };
+  document.addEventListener('play', runtime.stopPlayingPreview, true);
 
   try {
-    const obs = new MutationObserver((mutations) => {
-      if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) return;
-      if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+    runtime.observer = new MutationObserver((mutations) => {
       for (let i = 0; i < mutations.length; i++) {
         const m = mutations[i];
         if (m.type === 'attributes' && m.target && m.target.tagName === 'IMG') {
@@ -11022,7 +11982,7 @@ function setupBlockSiteAutoPreview() {
         });
       }
     });
-    obs.observe(document.documentElement, {
+    runtime.observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
       attributes: true,
@@ -11031,13 +11991,51 @@ function setupBlockSiteAutoPreview() {
   } catch (e) {
     console.warn('[Creamu Scout] preview attr observer failed', e);
   }
+  return true;
+}
 
-  if (typeof isBlockSiteAutoPreview === 'function' && isBlockSiteAutoPreview()) {
-    try {
-      pauseSiteListPreviewVideos();
-    } catch (_) { /* ignore */ }
+function disableBlockSiteAutoPreview() {
+  const runtime = window.__creamuScoutBlockSitePreviewRuntime;
+  if (!runtime) return;
+
+  SCOUT_SITE_PREVIEW_HOVER_EVENTS.forEach((type) => {
+    if (runtime.stopHoverPreview) {
+      document.removeEventListener(type, runtime.stopHoverPreview, true);
+    }
+  });
+  if (runtime.stopPlayingPreview) {
+    document.removeEventListener('play', runtime.stopPlayingPreview, true);
+  }
+  if (runtime.observer) {
+    try { runtime.observer.disconnect(); } catch (_) { /* ignore */ }
+  }
+  if (
+    runtime.mediaPrototype &&
+    runtime.guardedPlay &&
+    runtime.mediaPrototype.play === runtime.guardedPlay
+  ) {
+    runtime.mediaPrototype.play = runtime.originalPlay;
+  }
+  window.__creamuScoutBlockSitePreviewRuntime = null;
+}
+
+function applyBlockSiteAutoPreviewMode() {
+  if (shouldRunBlockSiteAutoPreview()) {
+    const started = enableBlockSiteAutoPreview();
+    if (started) pauseSiteListPreviewVideos();
+    return;
+  }
+
+  disableBlockSiteAutoPreview();
+  if (typeof isBlockSiteAutoPreview === 'function' && !isBlockSiteAutoPreview()) {
+    restoreSitePreviewAttrs(document);
   }
 }
+
+function setupBlockSiteAutoPreview() {
+  applyBlockSiteAutoPreviewMode();
+}
+// @@creamu-part:detail-runtime
 
 // 详情全屏横滑 seek
 
@@ -11080,11 +12078,8 @@ function showScoutSeekHud(text, mountRoot) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'scout-seek-hud';
-    el.style.cssText =
-      'position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:2147483646;' +
-      'padding:10px 16px;border-radius:12px;background:rgba(0,0,0,.72);color:#fff;' +
-      'font-size:16px;font-weight:700;pointer-events:none;white-space:nowrap;' +
-      'box-shadow:0 6px 20px rgba(0,0,0,.35);display:none;';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
   }
   if (el.parentNode !== root) {
     try {
@@ -11094,18 +12089,16 @@ function showScoutSeekHud(text, mountRoot) {
     }
   }
   el.textContent = text;
-  el.style.display = 'block';
   el.classList.add('is-on');
   if (el._scoutHideTimer) clearTimeout(el._scoutHideTimer);
   el._scoutHideTimer = setTimeout(() => {
-    el.style.display = 'none';
     el.classList.remove('is-on');
   }, 700);
 }
 
-function setupVideoSeekGesture() {
-  if (window.__scoutSeekGestureBound) return;
-  window.__scoutSeekGestureBound = true;
+function enableVideoSeekGesture() {
+  if (typeof detectPageKind === 'function' && detectPageKind() !== 'video') return;
+  if (window.__creamuScoutSeekGestureRuntime) return;
 
   let tracking = false;
   let axisLocked = '';
@@ -11183,21 +12176,129 @@ function setupVideoSeekGesture() {
     reset();
   };
 
+  window.__creamuScoutSeekGestureRuntime = { onStart, onMove, onEnd, reset };
   document.addEventListener('touchstart', onStart, { passive: true, capture: true });
   document.addEventListener('touchmove', onMove, { passive: false, capture: true });
   document.addEventListener('touchend', onEnd, { passive: true, capture: true });
   document.addEventListener('touchcancel', onEnd, { passive: true, capture: true });
 }
 
+function disableVideoSeekGesture() {
+  const runtime = window.__creamuScoutSeekGestureRuntime;
+  if (!runtime) return;
+  document.removeEventListener('touchstart', runtime.onStart, true);
+  document.removeEventListener('touchmove', runtime.onMove, true);
+  document.removeEventListener('touchend', runtime.onEnd, true);
+  document.removeEventListener('touchcancel', runtime.onEnd, true);
+  runtime.reset();
+  window.__creamuScoutSeekGestureRuntime = null;
+
+  const hud = document.getElementById('scout-seek-hud');
+  if (hud) {
+    if (hud._scoutHideTimer) clearTimeout(hud._scoutHideTimer);
+    hud.remove();
+  }
+}
+
+function applyVideoSeekGestureMode() {
+  const isVideo =
+    typeof detectPageKind !== 'function' || detectPageKind() === 'video';
+  if (isVideo) enableVideoSeekGesture();
+  else disableVideoSeekGesture();
+}
+
+function setupVideoSeekGesture() {
+  applyVideoSeekGestureMode();
+}
+// @@creamu-part:page-lifecycle
+
 // ----------------------------------------
 // Page lifecycle: MutationObserver + history
 // ----------------------------------------
 let __scoutEnhancing = false;
 let __scoutRefreshTimer = null;
+let __scoutPendingRefreshReason = '';
 let __scoutLastHref = '';
 let __scoutLastKind = '';
+let __scoutLastListSignature = null;
+let __scoutLastDetailSignature = null;
+let __scoutNextListNodeId = 1;
+const __scoutListNodeIds = new WeakMap();
 
-function refreshPageEnhancements(reason) {
+function getScoutListContentSignature(listEntries) {
+  let entries;
+  try {
+    entries = listEntries || collectListVideoEntries();
+  } catch (_) {
+    return null;
+  }
+
+  const isNarrow =
+    typeof isScoutMobileListViewport === 'function' && isScoutMobileListViewport();
+  const parts = [isNarrow ? 'narrow' : 'wide', String(entries.length)];
+  entries.forEach((entry) => {
+    const item = entry && entry.element;
+    if (!item || (typeof item !== 'object' && typeof item !== 'function')) {
+      parts.push('');
+      return;
+    }
+    let nodeId = __scoutListNodeIds.get(item);
+    if (!nodeId) {
+      nodeId = __scoutNextListNodeId++;
+      __scoutListNodeIds.set(item, nodeId);
+    }
+    const meta = entry && entry.meta;
+    parts.push([
+      nodeId,
+      meta && meta.url,
+      meta && meta.title,
+      meta && meta.uploader
+    ].map((value) => String(value || '')).join('\u001f'));
+  });
+  return parts.join('\u001e');
+}
+
+function rememberScoutListContent(listEntries, knownSignature) {
+  const signature = knownSignature === undefined
+    ? getScoutListContentSignature(listEntries)
+    : knownSignature;
+  if (signature !== null) __scoutLastListSignature = signature;
+}
+
+function hasScoutListContentChanged(knownSignature) {
+  const signature = knownSignature === undefined
+    ? getScoutListContentSignature()
+    : knownSignature;
+  return (
+    signature === null ||
+    __scoutLastListSignature === null ||
+    signature !== __scoutLastListSignature
+  );
+}
+
+function readScoutDetailContentSignature() {
+  if (typeof getScoutDetailContentSignature !== 'function') return null;
+  try {
+    return getScoutDetailContentSignature();
+  } catch (_) {
+    return null;
+  }
+}
+
+function rememberScoutDetailContent() {
+  const signature = readScoutDetailContentSignature();
+  if (signature !== null) __scoutLastDetailSignature = signature;
+}
+
+function hasScoutDetailContentChanged(knownSignature) {
+  return (
+    knownSignature === null ||
+    __scoutLastDetailSignature === null ||
+    knownSignature !== __scoutLastDetailSignature
+  );
+}
+
+function refreshPageEnhancements(reason, options) {
   if (__scoutEnhancing) return;
   __scoutEnhancing = true;
   try {
@@ -11215,39 +12316,45 @@ function refreshPageEnhancements(reason) {
     const navigated = href !== __scoutLastHref || kind !== __scoutLastKind;
     __scoutLastHref = href;
     __scoutLastKind = kind;
+    let listEntries = options && options.listEntries;
+
+    if (typeof applyBlockSiteAutoPreviewMode === 'function') {
+      try { applyBlockSiteAutoPreviewMode(); } catch (e) { console.warn(e); }
+    }
+    if (typeof applyListPreviewPlaybackMode === 'function') {
+      try { applyListPreviewPlaybackMode(); } catch (e) { console.warn(e); }
+    }
+    if (typeof applySearchClickTrackingMode === 'function') {
+      try { applySearchClickTrackingMode(); } catch (e) { console.warn(e); }
+    }
+    if (typeof applyVideoSeekGestureMode === 'function') {
+      try { applyVideoSeekGestureMode(); } catch (e) { console.warn(e); }
+    }
 
     if (kind === 'video') {
       markCurrentVideoPageClicked();
       enhancePageTags();
       enhancePagePublisher();
+      rememberScoutDetailContent();
     } else if (kind === 'search') {
-      applyListBlocks(); // 内含已点 + 词库列表流
-      // 再显式刷一次列表词库流（防止 applyListBlocks 中途 return/抛错漏掉）
-      if (typeof enhanceListLexiconHitFlows === 'function') {
-        try { enhanceListLexiconHitFlows(); } catch (e) { console.warn(e); }
-      }
+      if (!listEntries) listEntries = collectListVideoEntries();
+      applyListBlocks(listEntries); // 内含已点 + 词库列表流
       // 搜索页顶栏：订阅/取消追更（不依赖打开工作台）
       if (typeof enhanceSearchTrackSubscribe === 'function') {
         try { enhanceSearchTrackSubscribe(); } catch (e) { console.warn(e); }
       }
-      if (typeof setupListPreviewPlayback === 'function') {
-        try { setupListPreviewPlayback(); } catch (e) { console.warn(e); }
-      }
       if (navigated || reason === 'boot') {
         checkSearchTrackingBreakpoints();
       }
-      pauseSiteListPreviewVideos();
+      rememberScoutListContent(listEntries, options && options.listSignature);
     } else {
       // 首页/分类等列表页
-      applyClickedEnhancements();
+      if (!listEntries) listEntries = collectListVideoEntries();
+      applyClickedEnhancements(listEntries);
       if (typeof enhanceListLexiconHitFlows === 'function') {
-        try { enhanceListLexiconHitFlows(); } catch (e) { console.warn(e); }
-      }
-      if (typeof setupListPreviewPlayback === 'function') {
-        try { setupListPreviewPlayback(); } catch (e) { console.warn(e); }
+        try { enhanceListLexiconHitFlows(listEntries); } catch (e) { console.warn(e); }
       }
       document.getElementById('scout-search-track-bar')?.remove();
-      pauseSiteListPreviewVideos();
     }
 
     if (kind === 'video') {
@@ -11264,10 +12371,13 @@ function refreshPageEnhancements(reason) {
 function schedulePageRefresh(reason) {
   if (__scoutEnhancing) return;
   if (window.__scoutUiMutating) return;
-  if (__scoutRefreshTimer) clearTimeout(__scoutRefreshTimer);
+  __scoutPendingRefreshReason = reason || __scoutPendingRefreshReason || 'debounced';
+  if (__scoutRefreshTimer !== null) return;
   __scoutRefreshTimer = setTimeout(() => {
+    const pendingReason = __scoutPendingRefreshReason || 'debounced';
     __scoutRefreshTimer = null;
-    refreshPageEnhancements(reason || 'debounced');
+    __scoutPendingRefreshReason = '';
+    refreshPageEnhancements(pendingReason);
   }, 280);
 }
 
@@ -11280,6 +12390,8 @@ function isScoutUiNode(node) {
     node.id === 'scout-search-track-bar' ||
     node.id === 'scout-tags-toggle' ||
     node.id === 'scout-desc-toggle' ||
+    node.id === 'scout-collect-dialog' ||
+    node.id === 'creamu-scout-toast-container' ||
     node.id === 'jlc-tracking-pagebar' ||
     node.id === 'jlc-wb' ||
     node.id === 'jlc-wb-fab'
@@ -11302,8 +12414,28 @@ function isScoutUiNode(node) {
   }
   if (node.id === 'scout-seek-hud') return true;
   return !!(node.closest && node.closest(
-    '#scout-lex-hit-bar, #scout-work-fav-bar, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
+    '#scout-lex-hit-bar, #scout-work-fav-bar, #scout-collect-dialog, #creamu-scout-toast-container, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
   ));
+}
+
+function shouldRefreshForScoutMutation(mutation) {
+  if (mutation.target && isScoutUiNode(mutation.target)) return false;
+  const changedNodes = [];
+  if (mutation.addedNodes && mutation.addedNodes.length) {
+    mutation.addedNodes.forEach((node) => changedNodes.push(node));
+  }
+  if (mutation.removedNodes && mutation.removedNodes.length) {
+    mutation.removedNodes.forEach((node) => changedNodes.push(node));
+  }
+  if (!changedNodes.length) {
+    return !!(mutation.target && !isScoutUiNode(mutation.target));
+  }
+  return changedNodes.some((node) => {
+    if (!node) return false;
+    if (isScoutUiNode(node)) return false;
+    if (node.nodeType !== 1 && isScoutUiNode(node.parentElement || mutation.target)) return false;
+    return true;
+  });
 }
 
 function setupScoutPageLifecycle() {
@@ -11315,16 +12447,7 @@ function setupScoutPageLifecycle() {
     const obs = new MutationObserver((mutations) => {
       for (let i = 0; i < mutations.length; i++) {
         const m = mutations[i];
-        const nodes = [];
-        if (m.target) nodes.push(m.target);
-        if (m.addedNodes && m.addedNodes.length) {
-          m.addedNodes.forEach((n) => nodes.push(n));
-        }
-        if (m.removedNodes && m.removedNodes.length) {
-          m.removedNodes.forEach((n) => nodes.push(n));
-        }
-        // 任意非 scout 节点变化才刷新
-        if (nodes.some((n) => n && !isScoutUiNode(n))) {
+        if (shouldRefreshForScoutMutation(m)) {
           schedulePageRefresh('mutation');
           return;
         }
@@ -11353,20 +12476,28 @@ function setupScoutPageLifecycle() {
     window.addEventListener('hashchange', () => schedulePageRefresh('hashchange'));
   }
 
-  // 兜底：极低频轮询（站点偶发不触发 mutation）
+  // 兜底：只补偿未触发 mutation 的真实内容变化
   setInterval(() => {
     if (location.href !== __scoutLastHref) {
       refreshPageEnhancements('href-poll');
     } else {
       const kind = detectPageKind();
-      if (kind === 'search') applyListBlocks();
-      else if (kind === 'video') {
-        enhancePageTags();
-        enhancePagePublisher();
+      if (kind === 'search') {
+        const listEntries = collectListVideoEntries();
+        const listSignature = getScoutListContentSignature(listEntries);
+        if (hasScoutListContentChanged(listSignature)) {
+          refreshPageEnhancements('content-poll', { listEntries, listSignature });
+        }
+      } else if (kind === 'video') {
+        const detailSignature = readScoutDetailContentSignature();
+        if (hasScoutDetailContentChanged(detailSignature)) {
+          refreshPageEnhancements('detail-poll');
+        }
       }
     }
   }, 8000);
 }
+// @@creamu-part:boot
 
 function bootCreamuScout() {
   const currentSite = detectSite();
@@ -11374,11 +12505,9 @@ function bootCreamuScout() {
     document.body.classList.add(`creamu-site-${currentSite}`);
   }
 
+  setupScoutStorageChangeListeners();
   initScoutWebDav();
   initScoutWorkbench();
-  if (typeof setupSearchClickTracking === 'function') {
-    try { setupSearchClickTracking(); } catch (_) { /* ignore */ }
-  }
   if (typeof applyScoutSiteTheme === 'function') {
     try { applyScoutSiteTheme(); } catch (_) { /* ignore */ }
   }
@@ -11393,16 +12522,7 @@ function bootCreamuScout() {
     try { dedupeBlockListStore(); } catch (_) { /* ignore */ }
   }
   setupScoutPageLifecycle();
-  if (typeof setupBlockSiteAutoPreview === 'function') {
-    try { setupBlockSiteAutoPreview(); } catch (_) { /* ignore */ }
-  }
-  if (typeof setupVideoSeekGesture === 'function') {
-    try { setupVideoSeekGesture(); } catch (_) { /* ignore */ }
-  }
   refreshPageEnhancements('boot');
-  if (typeof applyVideoOpenMode === 'function') {
-    try { applyVideoOpenMode(); } catch (_) { /* ignore */ }
-  }
 
   if (scoutSync) {
     scoutSync.bootSync().catch((err) => {

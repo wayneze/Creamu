@@ -86,15 +86,15 @@ function renderTracksPage() {
               <div class="scout-track-site-row${isCur ? ' is-current' : ''}" data-site="${escapeHtml(sid)}" data-track-id="${escapeHtml(t.id)}">
                 <span class="jlc-site-pill${isCur ? ' is-current' : ''}">${escapeHtml(short)}${isCur ? ' ·本站' : ''}</span>
                 <span class="scout-track-site-meta">p${t.last_seen_page || 1}${t.last_seen_item ? ' · 已记片' : ''}</span>
-                <button type="button" class="jlc-wb-btn ghost scout-track-site-open" style="padding:3px 8px;font-size:11px;">续看</button>
-                <button type="button" class="jlc-wb-btn danger scout-track-site-del" style="padding:3px 8px;font-size:11px;">取消</button>
+                <button type="button" class="jlc-wb-btn ghost scout-track-site-open">续看</button>
+                <button type="button" class="jlc-wb-btn danger scout-track-site-del">取消</button>
               </div>`;
           }
           return `
             <div class="scout-track-site-row${isCur ? ' is-current' : ''}" data-site="${escapeHtml(sid)}">
               <span class="jlc-site-pill is-empty">${escapeHtml(short)}${isCur ? ' ·本站' : ''}</span>
               <span class="scout-track-site-meta">未订阅</span>
-              <button type="button" class="jlc-wb-btn ghost scout-track-site-search" style="padding:3px 8px;font-size:11px;">去搜</button>
+              <button type="button" class="jlc-wb-btn ghost scout-track-site-search">去搜</button>
             </div>`;
         })
         .join('');
@@ -104,29 +104,29 @@ function renderTracksPage() {
           <div class="jlc-wb-item-row">
             <div class="jlc-wb-item-body">
               <div class="jlc-wb-item-title-row">
-                <span class="jlc-wb-item-title" style="color:var(--scout-theme-color);">⭐ ${escapeHtml(g.label)}</span>
+                <span class="jlc-wb-item-title scout-track-title">⭐ ${escapeHtml(g.label)}</span>
                 <span class="jlc-site-pill">${g.siteCount} 站</span>
               </div>
-              <div class="scout-track-site-pills" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${sitePills}</div>
-              <div class="jlc-wb-item-meta-line" style="font-size:12px;margin-top:4px;">
+              <div class="scout-track-site-pills">${sitePills}</div>
+              <div class="jlc-wb-item-meta-line scout-track-query">
                 查询: <b>${escapeHtml(g.query)}</b>
               </div>
-              <div class="jlc-wb-item-meta-line" style="font-size:11px;color:#a89078;">
+              <div class="jlc-wb-item-meta-line scout-track-updated">
                 ${escapeHtml(curMeta)}${timeStr ? ' | ' + escapeHtml(timeStr) : ''}
               </div>
             </div>
             <div class="jlc-wb-item-side">
-              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" style="min-width:54px;padding:6px 12px;font-size:12px;" title="优先当前站断点">续看</button>
-              <button type="button" class="jlc-wb-btn ghost scout-track-expand-btn" style="min-width:54px;padding:4px 8px;font-size:11px;margin-top:4px;">站点</button>
+              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="优先当前站断点">续看</button>
+              <button type="button" class="jlc-wb-btn ghost scout-track-expand-btn">站点</button>
               <button type="button" class="jlc-wb-more-btn scout-track-more-btn">•••</button>
             </div>
           </div>
           <div class="scout-track-group-sites">${rowsHtml}</div>
           <div class="jlc-wb-item-edit scout-track-edit">
-            <div style="display:flex;justify-content:flex-end;gap:8px;width:100%;flex-wrap:wrap;border-top:1px dashed #efe0cc;padding-top:8px;margin-top:6px;">
-              ${curTrack ? '<button type="button" class="jlc-wb-btn danger scout-track-del-current-btn" style="padding:4px 10px;font-size:12px;">取消当前站</button>' : ''}
-              <button type="button" class="jlc-wb-btn danger scout-track-delete-btn" style="padding:4px 10px;font-size:12px;">删除整组</button>
-              <button type="button" class="jlc-wb-btn ghost scout-track-cancel-btn" style="padding:4px 10px;font-size:12px;">取消</button>
+            <div class="scout-track-edit-actions">
+              ${curTrack ? '<button type="button" class="jlc-wb-btn danger scout-track-del-current-btn">取消当前站</button>' : ''}
+              <button type="button" class="jlc-wb-btn danger scout-track-delete-btn">删除整组</button>
+              <button type="button" class="jlc-wb-btn ghost scout-track-cancel-btn">取消</button>
             </div>
           </div>
         </div>`;
@@ -134,8 +134,8 @@ function renderTracksPage() {
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-top:14px;">
-      <div class="legacy-note" style="margin:0 14px 10px;line-height:1.45;">
+    <div class="jlc-wb-list-scroll scout-wb-list">
+      <div class="legacy-note scout-wb-page-note">
         同搜索词多站合成一卡。<b>续看优先当前站</b>；点「站点」可看三站断点 / 去搜。
       </div>
       ${listHtml}
@@ -232,6 +232,7 @@ function renderTracksPage() {
       });
     });
   });
+  markScoutWorkbenchPageRendered('tracks');
 }
 
 // 
@@ -254,67 +255,67 @@ function renderBlocksPage() {
       const scopeLabel = scope === 'both' ? '标题+上传者' : scope === 'uploader' ? '上传者' : '标题';
 
       const modeBadge = isHide
-        ? `<span class="jlc-status-pill tone-red scout-toggle-mode-btn" style="font-size:10px;padding:1px 6px;cursor:pointer;" data-id="${b.id}" title="点击切换为弱淡化">🚫 强隐藏</span>`
-        : `<span class="jlc-status-pill tone-yellow scout-toggle-mode-btn" style="font-size:10px;padding:1px 6px;cursor:pointer;background:#ffe8c2;color:#b54708;border-color:#f5c77a;" data-id="${b.id}" title="点击切换为强隐藏">🌁 弱淡化</span>`;
-      const matchBadge = `<span class="jlc-status-pill scout-toggle-match-btn" style="font-size:10px;padding:1px 6px;cursor:pointer;background:#efe4d2;color:#6b4a2e;" data-id="${b.id}" title="点击切换 整词/子串">${isSub ? '⊂ 子串' : '⬚ 整词'}</span>`;
-      const scopeBadge = `<span class="jlc-status-pill scout-toggle-scope-btn" style="font-size:10px;padding:1px 6px;cursor:pointer;background:#e7f1ff;color:#175cd3;" data-id="${b.id}" title="点击切换匹配范围">${escapeHtml(scopeLabel)}</span>`;
+        ? `<span class="jlc-status-pill tone-red scout-toggle-mode-btn" data-id="${b.id}" title="点击切换为弱淡化">🚫 强隐藏</span>`
+        : `<span class="jlc-status-pill tone-yellow scout-toggle-mode-btn" data-id="${b.id}" title="点击切换为强隐藏">🌁 弱淡化</span>`;
+      const matchBadge = `<span class="jlc-status-pill scout-toggle-match-btn" data-id="${b.id}" title="点击切换 整词/子串">${isSub ? '⊂ 子串' : '⬚ 整词'}</span>`;
+      const scopeBadge = `<span class="jlc-status-pill scout-toggle-scope-btn" data-id="${b.id}" title="点击切换匹配范围">${escapeHtml(scopeLabel)}</span>`;
 
       listHtml += `
-        <div class="person-item" style="border-radius:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-          <div style="min-width:0;flex:1;">
-            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-              <b style="color:#b42318;">${escapeHtml(b.text)}</b>${escapeHtml(zhPart)}
+        <div class="person-item scout-block-item">
+          <div class="scout-block-body">
+            <div class="scout-block-heading">
+              <b class="scout-block-name">${escapeHtml(b.text)}</b>${escapeHtml(zhPart)}
               ${modeBadge}${matchBadge}${scopeBadge}
             </div>
-            <div style="font-size:11px;color:#9a7d60;margin-top:4px;">${escapeHtml(reasonPart)}</div>
+            <div class="scout-block-reason">${escapeHtml(reasonPart)}</div>
           </div>
-          <span class="remove" data-id="${b.id}" title="取消屏蔽" style="color:#b42318;font-weight:bold;cursor:pointer;font-size:16px;flex:0 0 auto;">✕</span>
+          <span class="remove scout-block-remove" data-id="${b.id}" title="取消屏蔽">✕</span>
         </div>
       `;
     });
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-top:14px;">
+    <div class="jlc-wb-list-scroll scout-wb-list">
       ${listHtml}
     </div>
 
     <div class="jlc-wb-footer">
-      <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;">
-        <input type="text" class="jlc-wb-search" id="scout-add-block-text" placeholder="屏蔽词..." style="flex:1.5;padding:8px;font-size:13px;">
-        <input type="text" class="jlc-wb-search" id="scout-add-block-zh" placeholder="中文翻译..." style="flex:1;padding:8px;font-size:13px;">
-        <input type="text" class="jlc-wb-search" id="scout-add-block-reason" placeholder="屏蔽理由..." style="flex:100%;padding:8px;font-size:13px;margin-top:4px;">
+      <div class="scout-wb-add-form is-wrap">
+        <input type="text" class="jlc-wb-search scout-wb-add-primary" id="scout-add-block-text" placeholder="屏蔽词...">
+        <input type="text" class="jlc-wb-search scout-wb-add-secondary" id="scout-add-block-zh" placeholder="中文翻译...">
+        <input type="text" class="jlc-wb-search scout-wb-add-detail" id="scout-add-block-reason" placeholder="屏蔽理由...">
 
-        <div style="display:flex;align-items:center;gap:10px;width:100%;margin-top:4px;padding:0 4px;flex-wrap:wrap;">
-          <span style="font-size:12px;color:#7a5a3c;font-weight:bold;">效果:</span>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-mode" value="dim" checked style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 弱淡化
+        <div class="scout-block-options is-first">
+          <span class="scout-block-option-title">效果:</span>
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-mode" value="dim" checked> 弱淡化
           </label>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-mode" value="hide" style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 强隐藏
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-mode" value="hide"> 强隐藏
           </label>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;width:100%;padding:0 4px;flex-wrap:wrap;">
-          <span style="font-size:12px;color:#7a5a3c;font-weight:bold;">匹配:</span>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-match" value="word" checked style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 整词
+        <div class="scout-block-options">
+          <span class="scout-block-option-title">匹配:</span>
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-match" value="word" checked> 整词
           </label>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-match" value="sub" style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 子串
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-match" value="sub"> 子串
           </label>
-          <span style="font-size:12px;color:#7a5a3c;font-weight:bold;margin-left:6px;">范围:</span>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-scope" value="title" checked style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 标题
+          <span class="scout-block-option-title is-scope">范围:</span>
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-scope" value="title" checked> 标题
           </label>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-scope" value="uploader" style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 上传者
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-scope" value="uploader"> 上传者
           </label>
-          <label style="display:inline-flex;align-items:center;font-size:12.5px;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;">
-            <input type="radio" name="scout-add-block-scope" value="both" style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);"> 两者
+          <label class="scout-block-option">
+            <input type="radio" name="scout-add-block-scope" value="both"> 两者
           </label>
         </div>
 
-        <button class="jlc-wb-btn primary" id="scout-add-block-btn" style="flex:1;margin-top:6px;padding:8px;justify-content:center;">添加屏蔽</button>
+        <button class="jlc-wb-btn primary" id="scout-add-block-btn">添加屏蔽</button>
       </div>
     </div>
   `;
@@ -397,6 +398,7 @@ function renderBlocksPage() {
       renderBlocksPage();
     }
   });
+  markScoutWorkbenchPageRendered('blocks');
 }
 
 // 

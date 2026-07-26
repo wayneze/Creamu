@@ -9,13 +9,13 @@ function renderLexiconPage() {
   let curType = container.getAttribute('data-selected-type') || '全部';
   let searchQuery = (container.querySelector('#scout-lexicon-search') ? container.querySelector('#scout-lexicon-search').value : '') || '';
 
-  let typeChipsHtml = `<span class="jlc-wb-chip ${curType === '全部' ? 'is-on' : ''}" data-type="全部" style="margin:2px;cursor:pointer;">全部 (${terms.filter(t => t.status !== 'retired').length})</span>`;
+  let typeChipsHtml = `<span class="jlc-wb-chip scout-wb-chip ${curType === '全部' ? 'is-on' : ''}" data-type="全部">全部 (${terms.filter(t => t.status !== 'retired').length})</span>`;
   types.forEach(t => {
     const count = terms.filter(item => item.type === t && item.status !== 'retired').length;
-    typeChipsHtml += `<span class="jlc-wb-chip ${curType === t ? 'is-on' : ''}" data-type="${escapeHtml(t)}" style="margin:2px;cursor:pointer;">${escapeHtml(t)} (${count})</span>`;
+    typeChipsHtml += `<span class="jlc-wb-chip scout-wb-chip ${curType === t ? 'is-on' : ''}" data-type="${escapeHtml(t)}">${escapeHtml(t)} (${count})</span>`;
   });
   const retiredCount = terms.filter(t => t.status === 'retired').length;
-  typeChipsHtml += `<span class="jlc-wb-chip ${curType === '已废弃' ? 'is-on' : ''}" data-type="已废弃" style="margin:2px;cursor:pointer;background:#ffe5e5;color:#b42318;">已废弃 (${retiredCount})</span>`;
+  typeChipsHtml += `<span class="jlc-wb-chip scout-wb-chip is-retired ${curType === '已废弃' ? 'is-on' : ''}" data-type="已废弃">已废弃 (${retiredCount})</span>`;
 
   let filtered = terms;
   if (curType === '全部') {
@@ -42,9 +42,9 @@ function renderLexiconPage() {
     itemsHtml = '<div class="jlc-wb-empty">该分类下没有词，快去采集或者在下方新增一个吧～</div>';
   } else {
     filtered.forEach(t => {
-      const zhText = t.zh ? ` · ${t.zh}` : ' · <span style="color:#b09070;font-style:italic;">暂无翻译</span>';
-      const statusPill = t.status === 'confirmed' ? '<span class="jlc-status-pill tone-green" style="font-size:10px;padding:1px 4px;margin-left:4px;">已确认</span>' : '';
-      const loveHeart = t.loved ? '<span style="color:#e54840;margin-right:4px;" title="心动标签">❤️</span>' : '';
+      const zhText = t.zh ? ` · ${t.zh}` : ' · <span class="scout-lexicon-missing">暂无翻译</span>';
+      const statusPill = t.status === 'confirmed' ? '<span class="jlc-status-pill tone-green scout-lexicon-confirmed">已确认</span>' : '';
+      const loveHeart = t.loved ? '<span class="scout-lexicon-loved" title="心动标签">❤️</span>' : '';
       
       let typeOpts = '';
       types.forEach(ty => {
@@ -59,7 +59,7 @@ function renderLexiconPage() {
                 <span class="jlc-wb-item-title">${loveHeart}${escapeHtml(t.text)}${zhText}${statusPill}</span>
                 <span class="jlc-wb-leaf tone-yellow" title="原始热度: ${t.heat}">🔥 ${getEffectiveHeat(t).toFixed(1)}</span>
               </div>
-              <div class="jlc-wb-item-meta-line" style="font-size:11.5px;color:#9a7d60;">
+              <div class="jlc-wb-item-meta-line scout-lexicon-meta">
                 分类: ${escapeHtml(t.type)} | 使用: ${t.use} | 赞/踩: ${t.good}/${t.bad}
               </div>
             </div>
@@ -69,36 +69,36 @@ function renderLexiconPage() {
           </div>
 
           <div class="jlc-wb-item-edit" id="edit-${t.id}">
-            <div style="display:flex;flex-direction:column;gap:8px;width:100%;margin-top:8px;border-top:1px dashed #efe0cc;padding-top:8px;">
-              <div style="display:flex;gap:6px;align-items:center;">
-                <span style="font-size:12px;color:#7a5a3c;width:54px;">翻译:</span>
-                <input type="text" value="${escapeHtml(t.zh || '')}" placeholder="中文含义" class="scout-edit-zh" style="flex:1;padding:6px;font-size:13px;">
+            <div class="scout-lexicon-edit">
+              <div class="scout-lexicon-edit-row">
+                <span class="scout-lexicon-edit-label">翻译:</span>
+                <input type="text" value="${escapeHtml(t.zh || '')}" placeholder="中文含义" class="scout-edit-zh scout-lexicon-edit-input">
               </div>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <span style="font-size:12px;color:#7a5a3c;width:54px;">类型:</span>
-                <select class="jlc-wb-select scout-edit-type" style="flex:1;padding:4px 6px;">
+              <div class="scout-lexicon-edit-row">
+                <span class="scout-lexicon-edit-label">类型:</span>
+                <select class="jlc-wb-select scout-edit-type scout-lexicon-edit-select">
                   ${typeOpts}
                 </select>
               </div>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <span style="font-size:12px;color:#7a5a3c;width:54px;">心动:</span>
-                <label style="display:inline-flex;align-items:center;cursor:pointer;margin-top:0;text-transform:none;letter-spacing:0;font-size:13px;">
-                  <input type="checkbox" class="scout-edit-loved" ${t.loved ? 'checked' : ''} style="width:16px;height:16px;margin-right:6px;accent-color:var(--scout-theme-color);"> 标记为心动标签
+              <div class="scout-lexicon-edit-row">
+                <span class="scout-lexicon-edit-label">心动:</span>
+                <label class="scout-lexicon-loved-toggle">
+                  <input type="checkbox" class="scout-edit-loved scout-lexicon-loved-checkbox" ${t.loved ? 'checked' : ''}> 标记为心动标签
                 </label>
               </div>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <span style="font-size:12px;color:#7a5a3c;width:54px;">备注:</span>
-                <input type="text" value="${escapeHtml(t.note || '')}" placeholder="来源/其他备注" class="scout-edit-note" style="flex:1;padding:6px;font-size:13px;">
+              <div class="scout-lexicon-edit-row">
+                <span class="scout-lexicon-edit-label">备注:</span>
+                <input type="text" value="${escapeHtml(t.note || '')}" placeholder="来源/其他备注" class="scout-edit-note scout-lexicon-edit-input">
               </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;flex-wrap:wrap;gap:6px;">
-                <div style="display:flex;gap:4px;">
-                  <button class="jlc-wb-btn primary scout-save-btn" style="padding:4px 8px;font-size:12px;">保存</button>
-                  <button class="jlc-wb-btn ghost scout-cancel-btn" style="padding:4px 8px;font-size:12px;">取消</button>
+              <div class="scout-lexicon-edit-actions">
+                <div class="scout-wb-button-group">
+                  <button class="jlc-wb-btn primary scout-save-btn scout-wb-btn-compact">保存</button>
+                  <button class="jlc-wb-btn ghost scout-cancel-btn scout-wb-btn-compact">取消</button>
                 </div>
-                <div style="display:flex;gap:4px;">
-                  <button class="jlc-wb-btn primary scout-good-btn" title="很好用，热度+3" style="padding:4px 8px;font-size:12px;background:#2f6b3a;border:0;">👍 赞</button>
-                  <button class="jlc-wb-btn ghost scout-bad-btn" title="不好用，热度-2" style="padding:4px 8px;font-size:12px;color:#8a3a32;border-color:#e8b8b0;">👎 踩</button>
-                  <button class="jlc-wb-btn danger scout-retire-btn" style="padding:4px 8px;font-size:12px;">🗑️ 废弃</button>
+                <div class="scout-wb-button-group">
+                  <button class="jlc-wb-btn primary scout-good-btn scout-wb-btn-compact scout-lexicon-good" title="很好用，热度+3">👍 赞</button>
+                  <button class="jlc-wb-btn ghost scout-bad-btn scout-wb-btn-compact scout-lexicon-bad" title="不好用，热度-2">👎 踩</button>
+                  <button class="jlc-wb-btn danger scout-retire-btn scout-wb-btn-compact">🗑️ 废弃</button>
                 </div>
               </div>
             </div>
@@ -109,11 +109,11 @@ function renderLexiconPage() {
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-toolbar" style="padding-top:12px;">
+    <div class="jlc-wb-toolbar scout-lexicon-toolbar">
       <div class="jlc-wb-toolbar-row">
-        <input type="text" class="jlc-wb-search" id="scout-lexicon-search" placeholder="在词库中搜索..." value="${escapeHtml(searchQuery)}" style="padding:8px 12px;font-size:13.5px;">
+        <input type="text" class="jlc-wb-search scout-lexicon-search" id="scout-lexicon-search" placeholder="在词库中搜索..." value="${escapeHtml(searchQuery)}">
       </div>
-      <div style="display:flex;flex-wrap:wrap;margin-top:2px;">
+      <div class="scout-lexicon-types">
         ${typeChipsHtml}
       </div>
     </div>
@@ -122,11 +122,11 @@ function renderLexiconPage() {
       ${itemsHtml}
     </div>
 
-    <div class="jlc-wb-footer" style="padding:10px 14px;">
-      <div style="display:flex;gap:6px;width:100%;">
-        <input type="text" class="jlc-wb-search" id="scout-add-term-text" placeholder="英文词..." style="flex:1.5;padding:8px;font-size:13px;">
-        <input type="text" class="jlc-wb-search" id="scout-add-term-zh" placeholder="中文翻译..." style="flex:1;padding:8px;font-size:13px;">
-        <button class="jlc-wb-btn primary" id="scout-add-term-btn" style="padding:8px 12px;">添加</button>
+    <div class="jlc-wb-footer scout-lexicon-footer">
+      <div class="scout-wb-add-form">
+        <input type="text" class="jlc-wb-search scout-wb-add-primary" id="scout-add-term-text" placeholder="英文词...">
+        <input type="text" class="jlc-wb-search scout-wb-add-secondary" id="scout-add-term-zh" placeholder="中文翻译...">
+        <button class="jlc-wb-btn primary scout-wb-add-submit" id="scout-add-term-btn">添加</button>
       </div>
     </div>
   `;
@@ -216,6 +216,7 @@ function renderLexiconPage() {
       renderLexiconPage();
     });
   });
+  markScoutWorkbenchPageRendered('lexicon');
 }
 
 // 
@@ -241,15 +242,15 @@ function renderPublishersPage() {
       const notePart = p.note ? ` [备注: ${p.note}]` : '';
       
       listHtml += `
-        <div class="person-item" style="border-radius:12px;margin-bottom:8px;">
+        <div class="person-item scout-publisher-item">
           <div>
-            <b style="color:${isLoved ? '#2f6b3a' : '#b42318'};">${escapeHtml(p.name)}</b> 
-            <span class="jlc-status-pill ${statusClass}" style="font-size:10.5px;padding:1px 6px;margin-left:4px;">${statusText}</span>
-            <span style="font-size:11px;color:#9a7d60;margin-left:4px;">(${p.site || '未知'})</span>
-            <div style="font-size:11px;color:#9a7d60;margin-top:2px;">${escapeHtml(notePart)}</div>
+            <b class="scout-publisher-name ${isLoved ? 'is-loved' : 'is-blocked'}">${escapeHtml(p.name)}</b>
+            <span class="jlc-status-pill ${statusClass} scout-publisher-status">${statusText}</span>
+            <span class="scout-publisher-site">(${p.site || '未知'})</span>
+            <div class="scout-publisher-note">${escapeHtml(notePart)}</div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span class="remove" data-id="${p.id}" title="取消熟人状态" style="cursor:pointer;font-weight:bold;">✕</span>
+          <div class="scout-publisher-actions">
+            <span class="remove scout-publisher-remove" data-id="${p.id}" title="取消熟人状态">✕</span>
           </div>
         </div>
       `;
@@ -257,17 +258,17 @@ function renderPublishersPage() {
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-top:14px;">
+    <div class="jlc-wb-list-scroll scout-wb-list">
       ${listHtml}
     </div>
     <div class="jlc-wb-footer">
-      <div style="display:flex;gap:6px;width:100%;flex-wrap:wrap;">
-        <input type="text" class="jlc-wb-search" id="scout-add-pub-name" placeholder="频道/制片名称..." style="flex:1.5;padding:8px;font-size:13px;">
-        <select class="jlc-wb-select" id="scout-add-pub-status" style="flex:1;padding:4px 6px;">
+      <div class="scout-wb-add-form is-wrap">
+        <input type="text" class="jlc-wb-search scout-wb-add-primary" id="scout-add-pub-name" placeholder="频道/制片名称...">
+        <select class="jlc-wb-select scout-wb-add-secondary" id="scout-add-pub-status">
           <option value="loved">❤️ 关注熟人</option>
           <option value="blocked">✕ 拉黑频道</option>
         </select>
-        <button class="jlc-wb-btn primary" id="scout-add-pub-btn" style="flex:1;padding:8px;justify-content:center;">手动添加</button>
+        <button class="jlc-wb-btn primary scout-wb-add-submit is-grow" id="scout-add-pub-btn">手动添加</button>
       </div>
     </div>
   `;
@@ -297,6 +298,7 @@ function renderPublishersPage() {
       renderPublishersPage();
     }
   });
+  markScoutWorkbenchPageRendered('publishers');
 }
 
 // Render Tab: Works（作品收藏）
@@ -352,32 +354,32 @@ function renderWorksPage() {
       listHtml += `
         <div class="jlc-wb-item" data-work-id="${escapeHtml(w.id)}">
           <div class="jlc-wb-item-row">
-            <div class="jlc-wb-cover is-poster" style="flex:0 0 72px;width:72px;height:54px;border-radius:10px;overflow:hidden;background:#efe4d2;">
+            <div class="jlc-wb-cover is-poster scout-work-cover">
               ${w.thumb
-                ? `<img class="scout-work-thumb" src="${escapeHtml(w.thumb)}" alt="" referrerpolicy="no-referrer" loading="lazy" style="width:100%;height:100%;object-fit:cover;"><span class="jlc-wb-cover-fallback" hidden>▶</span>`
+                ? `<img class="scout-work-thumb" src="${escapeHtml(w.thumb)}" alt="" referrerpolicy="no-referrer" loading="lazy"><span class="jlc-wb-cover-fallback" hidden>▶</span>`
                 : '<span class="jlc-wb-cover-fallback">▶</span>'}
             </div>
-            <div class="jlc-wb-item-body" style="min-width:0;">
+            <div class="jlc-wb-item-body">
               <div class="jlc-wb-item-title-row">
                 <span class="jlc-wb-item-title">${escapeHtml(w.title || w.videoId || '未命名')}</span>
                 <span class="jlc-site-pill">${escapeHtml(typeof scoutSiteShortLabel === 'function' ? scoutSiteShortLabel(workSite) : workSite.toUpperCase())}</span>
               </div>
-              <div class="jlc-wb-item-meta-line" style="font-size:11.5px;color:#9a7d60;">
+              <div class="jlc-wb-item-meta-line scout-work-meta">
                 ${w.uploader ? escapeHtml(w.uploader) + ' · ' : ''}${timeStr}
               </div>
-              ${tags ? `<div class="jlc-wb-item-meta-line" style="font-size:11px;color:#a89078;margin-top:2px;">站标: ${tags}${more}</div>` : ''}
+              ${tags ? `<div class="jlc-wb-item-meta-line scout-work-tags">站标: ${tags}${more}</div>` : ''}
               <div class="scout-work-site-chips">${chips}</div>
-              <div class="scout-lex-flow scout-lex-flow-work" style="margin-top:6px;">${(() => {
+              <div class="scout-lex-flow scout-lex-flow-work">${(() => {
                 const m = matchLexiconHits({ title: w.title, tags: w.tags || [], uploader: w.uploader });
                 return buildLexiconHitFlowHtml(m, { max: 8, showCount: false, emptyHtml: '<span class="scout-lex-flow-empty">暂无词库标签</span>' });
               })()}</div>
             </div>
             <div class="jlc-wb-item-side">
-              <button type="button" class="jlc-wb-open-btn scout-work-open" style="min-width:52px;padding:6px 10px;font-size:12px;" title="${escapeHtml(primaryTitle)}">${primaryLabel}</button>
+              <button type="button" class="jlc-wb-open-btn scout-work-open" title="${escapeHtml(primaryTitle)}">${primaryLabel}</button>
               ${!onCurrent && currentSite && workSite
-                ? '<button type="button" class="jlc-wb-btn ghost scout-work-origin" style="min-width:52px;padding:4px 8px;font-size:11px;margin-top:4px;" title="打开收藏时的原站链接">原站</button>'
+                ? '<button type="button" class="jlc-wb-btn ghost scout-work-origin" title="打开收藏时的原站链接">原站</button>'
                 : ''}
-              <button type="button" class="jlc-wb-btn danger scout-work-del" style="padding:4px 8px;font-size:11px;margin-top:4px;">删除</button>
+              <button type="button" class="jlc-wb-btn danger scout-work-del">删除</button>
             </div>
           </div>
         </div>`;
@@ -385,8 +387,8 @@ function renderWorksPage() {
   }
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-top:12px;">
-      <div class="legacy-note" style="margin:0 14px 10px;line-height:1.45;">
+    <div class="jlc-wb-list-scroll scout-wb-list is-compact">
+      <div class="legacy-note scout-wb-page-note">
         详情收藏 → 本列表 → 采标签库。主按钮<b>优先当前站</b>（本站片=打开；跨站=本站搜标题）。
         芯片 XV/XN/EP：★=原站打开，其余=按标题搜。共 <b>${works.length}</b> 部。
       </div>
@@ -473,6 +475,7 @@ function renderWorksPage() {
       renderWorksPage();
     });
   });
+  markScoutWorkbenchPageRendered('works');
 }
 
 // Render Tab 4: Tracks (Saved Searches)

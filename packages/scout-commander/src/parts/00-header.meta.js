@@ -12,6 +12,7 @@
 // @match        *://*.eporner.com/*
 // @match        *://eporner.com/*
 // @grant        GM_addStyle
+// @grant        GM_addValueChangeListener
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue

@@ -6,15 +6,25 @@ function getComboTokens() {
 }
 function saveComboTokens(list) {
   GM_setValue('scout_combo_tokens', list || []);
+  markScoutStorageChanged('scout_combo_tokens');
+}
+function addComboTokens(values) {
+  const list = getComboTokens();
+  const seen = new Set(list.map((item) => item.toLowerCase()));
+  let changed = false;
+  (Array.isArray(values) ? values : [values]).forEach((value) => {
+    const text = compactText(value);
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) return;
+    seen.add(key);
+    list.push(text);
+    changed = true;
+  });
+  if (changed) saveComboTokens(list);
+  return list;
 }
 function addComboToken(text) {
-  const t = compactText(text);
-  if (!t) return getComboTokens();
-  const list = getComboTokens();
-  if (list.some(x => x.toLowerCase() === t.toLowerCase())) return list;
-  list.push(t);
-  saveComboTokens(list);
-  return list;
+  return addComboTokens([text]);
 }
 function removeComboToken(text) {
   const t = compactText(text).toLowerCase();
@@ -39,16 +49,16 @@ function renderComboPage() {
   // 已选 chips
   let selectedHtml = tokens.length
     ? tokens.map(t => `
-        <span class="jlc-wb-chip is-on" data-combo-token="${escapeHtml(t)}" style="margin:2px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;" title="点击移除">
-          ${escapeHtml(t)} <b style="opacity:.8;">×</b>
+        <span class="jlc-wb-chip is-on scout-wb-chip scout-combo-token" data-combo-token="${escapeHtml(t)}" title="点击移除">
+          ${escapeHtml(t)} <b class="scout-combo-token-remove">×</b>
         </span>`).join('')
-    : '<span style="font-size:12.5px;color:#9a7d60;">点下方词库添加，或手动输入多个词组合搜索</span>';
+    : '<span class="scout-combo-empty is-selected">点下方词库添加，或手动输入多个词组合搜索</span>';
 
   // 分类筛选
   const typeFilters = ['全部', ...types];
   let filterHtml = typeFilters.map(ty => {
     const on = filterType === ty ? 'is-on' : '';
-    return `<span class="jlc-wb-chip ${on}" data-combo-filter="${escapeHtml(ty)}" style="margin:2px;cursor:pointer;font-size:12px;">${escapeHtml(ty)}</span>`;
+    return `<span class="jlc-wb-chip scout-wb-chip scout-combo-filter ${on}" data-combo-filter="${escapeHtml(ty)}">${escapeHtml(ty)}</span>`;
   }).join('');
 
   // 词库快捷（未选中的）
@@ -65,27 +75,27 @@ function renderComboPage() {
     ? pool.map(t => {
         const zh = t.zh ? ` · ${t.zh}` : '';
         const heart = t.loved ? '❤️' : '';
-        return `<span class="jlc-wb-chip" data-combo-pick="${escapeHtml(t.text)}" style="margin:2px;cursor:pointer;font-size:12px;" title="${escapeHtml(t.type)}">
+        return `<span class="jlc-wb-chip scout-wb-chip scout-combo-pick" data-combo-pick="${escapeHtml(t.text)}" title="${escapeHtml(t.type)}">
           ${heart}${escapeHtml(t.text)}${escapeHtml(zh)}
         </span>`;
       }).join('')
-    : '<span style="font-size:12px;color:#9a7d60;">该分类暂无更多词，可手动输入</span>';
+    : '<span class="scout-combo-empty">该分类暂无更多词，可手动输入</span>';
 
   // 当前视频标签
   let currentVideoTagsHtml = '';
   if (meta && meta.tags && meta.tags.length > 0) {
     const tagPills = meta.tags.map(tag => `
-      <span class="jlc-wb-chip" style="margin:2px;display:inline-flex;align-items:center;gap:4px;padding:4px 8px;font-size:12px;" data-tag="${escapeHtml(tag)}">
+      <span class="jlc-wb-chip scout-combo-video-tag" data-tag="${escapeHtml(tag)}">
         ${escapeHtml(tag)}
-        <b class="scout-combo-pick-tag" style="color:#2f6b3a;cursor:pointer;" title="加入组合">＋</b>
-        <b class="scout-add-quick" style="color:#2f6b3a;cursor:pointer;">库</b>
-        <b class="scout-block-quick" style="color:#b42318;cursor:pointer;">✕</b>
+        <b class="scout-combo-pick-tag" title="加入组合">＋</b>
+        <b class="scout-add-quick">库</b>
+        <b class="scout-block-quick">✕</b>
       </span>`).join('');
     currentVideoTagsHtml = `
-      <div class="jlc-wb-view-block" style="margin-top:14px;">
+      <div class="jlc-wb-view-block scout-combo-video-tags">
         <div class="jlc-wb-view-title">当前视频标签</div>
-        <div style="display:flex;flex-wrap:wrap;max-height:120px;overflow:auto;">${tagPills}</div>
-        <div style="font-size:11px;color:#9a7d60;margin-top:4px;">＋加入组合 · 库入库 · ✕屏蔽</div>
+        <div class="scout-combo-video-tag-list">${tagPills}</div>
+        <div class="scout-combo-video-tag-hint">＋加入组合 · 库入库 · ✕屏蔽</div>
       </div>`;
   }
 
@@ -95,8 +105,8 @@ function renderComboPage() {
     { key: 'eporner', name: 'EP', full: 'EPorner' }
   ];
   const siteRadioHtml = sites.map(s => `
-    <label class="scout-combo-site" title="${escapeHtml(s.full)}" style="display:inline-flex;align-items:center;gap:3px;margin:0;padding:2px 6px;border-radius:999px;border:1px solid #e4d4bc;font-size:11.5px;cursor:pointer;text-transform:none;letter-spacing:0;">
-      <input type="radio" name="scout-search-site" value="${s.key}" ${s.key === activeSite ? 'checked' : ''} style="width:13px;height:13px;margin:0;accent-color:var(--scout-theme-color);">
+    <label class="scout-combo-site" title="${escapeHtml(s.full)}">
+      <input type="radio" name="scout-search-site" value="${s.key}" ${s.key === activeSite ? 'checked' : ''}>
       ${s.name}
     </label>`).join('');
 
@@ -117,34 +127,34 @@ function renderComboPage() {
     { key: 'or', label: 'OR', tip: 'word1 or word2' }
   ];
   const joinHtml = joinOpts.map(o => `
-    <label style="display:inline-flex;align-items:center;margin-right:10px;font-size:12.5px;cursor:pointer;text-transform:none;letter-spacing:0;margin-top:0;" title="${escapeHtml(o.tip)}">
-      <input type="radio" name="scout-combo-join" value="${o.key}" ${joinMode === o.key ? 'checked' : ''} style="width:15px;height:15px;margin-right:4px;accent-color:var(--scout-theme-color);">
+    <label class="scout-combo-join" title="${escapeHtml(o.tip)}">
+      <input type="radio" name="scout-combo-join" value="${o.key}" ${joinMode === o.key ? 'checked' : ''}>
       ${o.label}
     </label>`).join('');
 
   container.innerHTML = `
-    <div class="jlc-wb-list-scroll" style="padding-bottom:12px;">
+    <div class="jlc-wb-list-scroll scout-combo-scroll">
       <div class="jlc-wb-view-block">
         <div class="jlc-wb-view-title">已选词（可多个，顺序=搜索顺序）</div>
-        <div id="scout-combo-selected" style="display:flex;flex-wrap:wrap;min-height:32px;margin-bottom:8px;">${selectedHtml}</div>
-        <div style="margin-bottom:8px;">
-          <span style="font-size:12px;color:#9a7d60;margin-right:6px;">连接方式</span>
+        <div id="scout-combo-selected" class="scout-combo-selected">${selectedHtml}</div>
+        <div class="scout-combo-join-row">
+          <span class="scout-combo-join-title">连接方式</span>
           ${joinHtml}
         </div>
-        <div style="font-size:12px;color:#9a7d60;margin-bottom:10px;word-break:break-word;">预览：<b style="color:var(--scout-theme-color);">${escapeHtml(preview)}</b></div>
-        <div style="font-size:11.5px;color:#9a7d60;margin-bottom:10px;line-height:1.4;">
+        <div class="scout-combo-preview">预览：<b class="scout-combo-preview-value">${escapeHtml(preview)}</b></div>
+        <div class="scout-combo-help">
           提示：多站用空格拼词常无结果，用 <b>AND</b> 更稳。多词短语请整段添加为一个 token。
         </div>
-        <div style="display:flex;gap:6px;">
-          <input type="text" class="jlc-wb-search" id="scout-combo-free-input" placeholder="手动加词，回车或点添加" style="flex:1;padding:8px 12px;font-size:13.5px;">
-          <button class="jlc-wb-btn primary" id="scout-combo-add-btn" style="padding:8px 14px;">添加</button>
+        <div class="scout-combo-manual">
+          <input type="text" class="jlc-wb-search scout-combo-manual-input" id="scout-combo-free-input" placeholder="手动加词，回车或点添加">
+          <button class="jlc-wb-btn primary" id="scout-combo-add-btn">添加</button>
         </div>
       </div>
 
       <div class="jlc-wb-view-block">
         <div class="jlc-wb-view-title">从词库点选</div>
-        <div style="display:flex;flex-wrap:wrap;margin-bottom:8px;">${filterHtml}</div>
-        <div id="scout-combo-pool" style="display:flex;flex-wrap:wrap;max-height:160px;overflow:auto;">${poolHtml}</div>
+        <div class="scout-combo-filters">${filterHtml}</div>
+        <div id="scout-combo-pool" class="scout-combo-pool">${poolHtml}</div>
       </div>
 
       ${currentVideoTagsHtml}
@@ -193,13 +203,7 @@ function renderComboPage() {
     const v = freeInp.value.trim();
     if (!v) return;
     // 逗号批量；否则整段算一个 token（可含空格短语）
-    if (/[,，;；]/.test(v)) {
-      v.split(/[,，;；]+/).forEach(part => {
-        if (part.trim()) addComboToken(part.trim());
-      });
-    } else {
-      addComboToken(v);
-    }
+    addComboTokens(/[,，;；]/.test(v) ? v.split(/[,，;；]+/) : [v]);
     freeInp.value = '';
     refresh();
   };
@@ -223,6 +227,7 @@ function renderComboPage() {
 
   container.querySelector('#scout-combo-auto-track')?.addEventListener('change', (e) => {
     GM_setValue('scout_combo_auto_track', !!e.currentTarget.checked);
+    markScoutStorageChanged('scout_combo_auto_track');
   });
 
   container.querySelector('#scout-combo-search-btn')?.addEventListener('click', (e) => {
@@ -323,6 +328,5 @@ function renderComboPage() {
       refresh();
     });
   });
+  markScoutWorkbenchPageRendered('combo');
 }
-
-// 

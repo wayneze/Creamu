@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta property="og:image" content="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" />
+  <title>Sample Documentary Detail</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; }
+    #content { width: min(760px, 100%); margin: 0 auto; padding: 18px; }
+    .page-title { margin: 0 0 12px; }
+    .video-player { width: 100%; aspect-ratio: 16 / 7; background: #16181e; }
+    .video-player video { display: block; width: 100%; height: 100%; }
+    .video-metadata { margin-top: 12px; }
+    .uploader { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+    .video-tags-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .video-tags-list a { color: inherit; text-decoration: none; }
+    .video-description { line-height: 1.45; }
+  </style>
+</head>
+<body>
+  <main id="content">
+    <h2 class="page-title">Sample Documentary 12 min 1080p</h2>
+    <div class="video-player">
+      <video poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="></video>
+    </div>
+    <div class="video-metadata">
+      <div class="uploader">
+        <a class="uploader-tag" href="/profiles/studio-north"><span class="name">Studio North</span></a>
+      </div>
+    </div>
+    <div class="video-metadata video-tags-list cropped">
+      <a class="is-keyword" href="/tags/documentary">documentary</a>
+      <a class="is-keyword" href="/tags/city-walk">city walk</a>
+      <a class="is-keyword" href="/tags/night">night</a>
+      <a class="is-keyword" href="/tags/spoiler">spoiler</a>
+    </div>
+    <p class="video-description">
+      A long sample description used to verify that the mobile detail view initially clamps text to two lines,
+      exposes an accessible expansion control, and restores the complete description without shifting controls
+      outside the viewport or relying on element-level presentation attributes.
+    </p>
+  </main>
+</body>
+</html>

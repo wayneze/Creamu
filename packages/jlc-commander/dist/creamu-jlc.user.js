@@ -4677,15 +4677,11 @@ function getCreamuWorkbenchCss(options = {}) {
             background: rgba(255,255,255,.55); font-size: 14.5px; line-height: 1.65;
         }
 
-        #jlc-wb #jlc-wb-view-root .jlc-wb-view-block,
-        #jlc-wb #jlc-wb-library-root .jlc-wb-view-block,
-        #jlc-wb #jlc-wb-filter-root .jlc-wb-view-block {
+        #jlc-wb .jlc-wb-view-block {
             background: var(--creamu-wb-surface); border: 1px solid #efe0cc; border-radius: 16px; padding: 14px; margin-bottom: 14px;
             box-shadow: 0 3px 0 #ead7bb;
         }
-        #jlc-wb #jlc-wb-view-root .jlc-wb-view-title,
-        #jlc-wb #jlc-wb-library-root .jlc-wb-view-title,
-        #jlc-wb #jlc-wb-filter-root .jlc-wb-view-title {
+        #jlc-wb .jlc-wb-view-title {
             font-size: 12px; color: var(--creamu-wb-accent); font-weight: 750; letter-spacing: .5px; margin: 0 0 12px;
             text-transform: uppercase;
         }
@@ -4774,17 +4770,13 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb #jlc-wb-library-root select:focus {
             border-color: var(--creamu-wb-accent); outline: none; background: var(--creamu-wb-surface-raised);
         }
-        #jlc-wb .jlc-wb-settings .stat-box,
-        #jlc-wb #jlc-wb-library-root .stat-box {
+        #jlc-wb .stat-box {
             display: flex; justify-content: space-around; background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
             border-radius: 14px; padding: 14px; margin-bottom: 14px;
         }
-        #jlc-wb .jlc-wb-settings .stat-item,
-        #jlc-wb #jlc-wb-library-root .stat-item { text-align: center; }
-        #jlc-wb .jlc-wb-settings .stat-item b,
-        #jlc-wb #jlc-wb-library-root .stat-item b { display: block; color: var(--creamu-wb-accent); font-size: 22px; margin-bottom: 4px; }
-        #jlc-wb .jlc-wb-settings .stat-item span,
-        #jlc-wb #jlc-wb-library-root .stat-item span { font-size: 11px; color: var(--creamu-wb-text-muted); }
+        #jlc-wb .stat-item { text-align: center; }
+        #jlc-wb .stat-item b { display: block; color: var(--creamu-wb-accent); font-size: 22px; margin-bottom: 4px; }
+        #jlc-wb .stat-item span { font-size: 11px; color: var(--creamu-wb-text-muted); }
         #jlc-wb .person-item {
             background: var(--creamu-wb-surface); padding: 12px 14px; border-radius: 12px; margin-bottom: 8px;
             display: flex; justify-content: space-between; align-items: center; border: 1px solid #efe0cc; font-size: 14px;
@@ -5595,7 +5587,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const when = m.last_sync ? new Date(m.last_sync).toLocaleString() : '从未';
       const err = m.last_error ? ' · 错: ' + m.last_error : '';
       const en = st.enabled ? '' : ' · 未启用';
-      return st.user + ' · ' + vaultRelPath() + ' · rev ' + m.local_revision + ' · 上次 ' + when + en + err;
+      const relPath = st.path + '/' + vaultName;
+      return st.user + ' · ' + relPath + ' · rev ' + m.local_revision + ' · 上次 ' + when + en + err;
     }
 
     async function davRequest(method, url, body, headers, timeout) {

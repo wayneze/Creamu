@@ -6,11 +6,22 @@ import { createContext, runInContext } from 'node:vm';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const partsDir = path.join(dirname, '..', 'src', 'parts');
+const corePartFiles = [
+  '10-core.js',
+  '12-library-state.js',
+  '14-tracking-state.js',
+  '16-data-portability.js',
+  '18-webdav.js',
+];
 const store = new Map();
 
 function loadCore() {
   store.clear();
-  const source = fs.readFileSync(path.join(partsDir, '10-core.js'), 'utf8');
+  const valueChangeListeners = new Map();
+  const dirtyPageCalls = [];
+  const source = corePartFiles
+    .map((file) => fs.readFileSync(path.join(partsDir, file), 'utf8'))
+    .join('\n');
   const context = createContext({
     console,
     Date,
@@ -23,16 +34,27 @@ function loadCore() {
     Set,
     Map,
     Error,
+    URL,
+    location: { origin: 'https://www.xvideos.com' },
     GM_getValue(key, fallback) {
       return store.has(key) ? store.get(key) : fallback;
     },
     GM_setValue(key, value) {
       store.set(key, value);
     },
+    GM_addValueChangeListener(key, callback) {
+      valueChangeListeners.set(key, callback);
+      return valueChangeListeners.size;
+    },
+    __testValueChangeListeners: valueChangeListeners,
+    __testDirtyPageCalls: dirtyPageCalls,
+    markScoutWorkbenchPagesDirty(...pages) {
+      dirtyPageCalls.push(pages);
+    },
     createCreamuWebDavSync: undefined,
     scoutSync: null,
   });
-  runInContext(source, context, { filename: '10-core.js' });
+  runInContext(source, context, { filename: 'scout-core-parts.js' });
   return context;
 }
 
@@ -75,6 +97,31 @@ function test(name, fn) {
 }
 
 console.log('Scout core tests');
+
+test('library revision tracks detail-facing stores', () => {
+  const ctx = loadCore();
+  assert.equal(ctx.getScoutLibraryRevision(), 0);
+  ctx.setupScoutStorageChangeListeners();
+  ctx.setupScoutStorageChangeListeners();
+  assert.equal(ctx.__testValueChangeListeners.size, 10);
+  const remoteListener = ctx.__testValueChangeListeners.get('creamu_scout_lexicon_terms');
+  remoteListener('creamu_scout_lexicon_terms', [], [], false);
+  assert.equal(ctx.getScoutLibraryRevision(), 0);
+  assert.equal(ctx.__testDirtyPageCalls.length, 0);
+  remoteListener('creamu_scout_lexicon_terms', [], [], true);
+  assert.equal(ctx.getScoutLibraryRevision(), 1);
+  assert.deepEqual(
+    [...ctx.__testDirtyPageCalls[0]],
+    ['combo', 'lexicon', 'settings']
+  );
+  ctx.saveLexiconTerms([]);
+  ctx.saveBlockList([]);
+  ctx.savePublishers([]);
+  ctx.saveWorks([]);
+  assert.equal(ctx.getScoutLibraryRevision(), 5);
+  ctx.saveLexiconTypes(['主题']);
+  assert.equal(ctx.getScoutLibraryRevision(), 5);
+});
 
 test('lexicon terms merge by normalized identity', () => {
   const ctx = loadCore();
@@ -280,6 +327,40 @@ test('effective heat decays over time', () => {
   assert.ok(heat < 100 && heat > 50);
 });
 
+test('prepared lexicon matching preserves hit sources and boundaries', () => {
+  const ctx = loadCore();
+  const terms = [
+    { text: 'summer travel', zh: 'Summer Travel', status: 'confirmed', heat: 4 },
+    { text: 'step mother', zh: 'Step Mother', status: 'confirmed', heat: 5 },
+    { text: 'portrait', zh: 'Portrait', status: 'confirmed', heat: 2, loved: true },
+    { text: 'channel one', zh: 'Channel One', status: 'confirmed', heat: 3 },
+    { text: 'landscape demo', zh: 'Landscape Demo', status: 'confirmed', heat: 1 },
+    { text: 'ass', zh: 'Boundary Guard', status: 'confirmed', heat: 10 },
+  ];
+  const meta = {
+    title: 'A stepmother summer-travel portrait class',
+    tags: [],
+    uploader: 'Channel One',
+    url: 'https://www.xvideos.com/video.demo/landscape.demo~extra',
+  };
+
+  const preparedTerms = ctx.prepareLexiconMatcher(terms);
+  const direct = JSON.parse(JSON.stringify(ctx.matchLexiconHits(meta, { terms })));
+  const prepared = JSON.parse(JSON.stringify(ctx.matchLexiconHits(meta, { preparedTerms })));
+  assert.deepEqual(prepared, direct);
+  assert.deepEqual(
+    Object.fromEntries(prepared.hits.map((hit) => [hit.text, hit.via])),
+    {
+      portrait: 'title',
+      'step mother': 'title',
+      'summer travel': 'title',
+      'channel one': 'uploader',
+      'landscape demo': 'tag',
+    }
+  );
+  assert.ok(!prepared.hits.some((hit) => hit.text === 'ass'));
+});
+
 console.log('\nScout site helpers');
 
 test('site pagination uses each provider contract', () => {
@@ -350,8 +431,53 @@ test('block scopes select title and uploader independently', () => {
   assert.equal(ctx.blockMatchesVideo(metadata, { text: 'travel', match: 'word', scope: 'both' }), true);
 });
 
+test('prepared block matching preserves word, substring, and scope rules', () => {
+  const ctx = loadCore();
+  const metadata = {
+    title: 'A classy summer travel guide',
+    uploader: 'Blocked Channel',
+  };
+  const blocks = [
+    { text: 'ass', match: 'word', scope: 'title' },
+    { text: 'class', match: 'sub', scope: 'title' },
+    { text: 'summer travel', match: 'word', scope: 'title' },
+    { text: 'Blocked Channel', match: 'word', scope: 'uploader' },
+    { text: 'missing', match: 'sub', scope: 'both' },
+  ];
+  const preparedMeta = {
+    title: ctx.normalizeBlockText(metadata.title),
+    uploader: ctx.normalizeBlockText(metadata.uploader),
+  };
+  const prepared = ctx.prepareBlockMatchers(blocks);
+
+  assert.equal(prepared.length, blocks.length);
+  assert.deepEqual(
+    prepared.map((matcher) => ctx.preparedBlockMatchesVideo(preparedMeta, matcher)),
+    blocks.map((block) => ctx.blockMatchesVideo(metadata, block))
+  );
+  assert.deepEqual(
+    prepared.map((matcher) => ctx.preparedBlockMatchesVideo(preparedMeta, matcher)),
+    [false, true, true, true, false]
+  );
+});
+
+test('publisher index keeps the first normalized name match', () => {
+  const ctx = loadCore();
+  const first = { id: 'first', name: 'Sample   Channel', status: 'loved' };
+  const index = ctx.buildPublisherIndex([
+    first,
+    { id: 'second', name: 'sample channel', status: 'blocked' },
+  ]);
+  assert.equal(index.get(ctx.publisherIdentityKey(' SAMPLE CHANNEL ')), first);
+});
+
 test('theme visibility rules preserve blocked states', () => {
-  const source = fs.readFileSync(path.join(partsDir, '25-theme.js'), 'utf8');
+  const source = [
+    '25-theme.js',
+    '27-page-enhancement-theme.js',
+    '29-site-layout-theme.js',
+  ].map((filename) => fs.readFileSync(path.join(partsDir, filename), 'utf8')).join('\n');
+  const siteTheme = fs.readFileSync(path.join(partsDir, '26-site-theme.js'), 'utf8');
   assert.ok(
     source.includes('.mb:not(.scout-blocked-hide)') ||
       source.includes('.mb[data-id]:not(.scout-blocked-hide)')
@@ -361,6 +487,8 @@ test('theme visibility rules preserve blocked states', () => {
       source.includes('not(.scout-blocked-dim)')
   );
   assert.ok(source.includes('.scout-blocked-hide') && source.includes('.scout-blocked-dim'));
+  assert.ok(siteTheme.includes('function applyScoutSiteTheme'));
+  assert.ok(siteTheme.includes('function getScoutSitePageThemeCss'));
 });
 
 if (process.exitCode) {

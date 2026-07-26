@@ -1,4 +1,61 @@
 // @@creamu-part:40-workbench-shell
+const SCOUT_WORKBENCH_PAGE_NAMES = [
+  'combo',
+  'lexicon',
+  'works',
+  'publishers',
+  'tracks',
+  'blocks',
+  'settings',
+];
+const __scoutWorkbenchDirtyPages = new Set(SCOUT_WORKBENCH_PAGE_NAMES);
+
+function markScoutWorkbenchPagesDirty(...pageNames) {
+  const names = pageNames.length ? pageNames : SCOUT_WORKBENCH_PAGE_NAMES;
+  names.forEach((name) => {
+    if (SCOUT_WORKBENCH_PAGE_NAMES.includes(name)) {
+      __scoutWorkbenchDirtyPages.add(name);
+    }
+  });
+}
+
+function markScoutWorkbenchPageRendered(pageName) {
+  __scoutWorkbenchDirtyPages.delete(pageName);
+}
+
+function isScoutWorkbenchPageDirty(pageName) {
+  return __scoutWorkbenchDirtyPages.has(pageName);
+}
+
+function renderScoutWorkbenchTab(tabName) {
+  const container = document.querySelector(`[data-jlc-wb-page="${tabName}"]`);
+  if (container && container.childElementCount > 0 && !isScoutWorkbenchPageDirty(tabName)) {
+    return false;
+  }
+  if (tabName === 'combo') renderComboPage();
+  else if (tabName === 'lexicon') renderLexiconPage();
+  else if (tabName === 'works') renderWorksPage();
+  else if (tabName === 'publishers') renderPublishersPage();
+  else if (tabName === 'tracks') renderTracksPage();
+  else if (tabName === 'blocks') renderBlocksPage();
+  else return false;
+  return true;
+}
+
+function refreshScoutWorkbenchPageIfActive(pageName) {
+  return refreshScoutWorkbenchPagesIfActive(pageName);
+}
+
+function refreshScoutWorkbenchPagesIfActive(...pageNames) {
+  const workbench = document.getElementById('jlc-wb');
+  if (!workbench || !workbench.classList.contains('is-open')) return false;
+  const active = workbench.querySelector('.jlc-wb-nav button.active');
+  const activePageName = active && active.getAttribute('data-tab');
+  const candidates = pageNames.length ? pageNames : SCOUT_WORKBENCH_PAGE_NAMES;
+  if (!activePageName || !candidates.includes(activePageName)) return false;
+  return renderScoutWorkbenchTab(activePageName);
+}
+
 function initScoutWorkbench() {
   if (typeof injectCreamuWorkbenchStyles === 'function') {
     injectCreamuWorkbenchStyles({
@@ -121,12 +178,7 @@ function initScoutWorkbench() {
       }
     });
 
-    if (tabName === 'combo') renderComboPage();
-    else if (tabName === 'lexicon') renderLexiconPage();
-    else if (tabName === 'works') renderWorksPage();
-    else if (tabName === 'publishers') renderPublishersPage();
-    else if (tabName === 'tracks') renderTracksPage();
-    else if (tabName === 'blocks') renderBlocksPage();
+    renderScoutWorkbenchTab(tabName);
   }
 
   function openScoutWorkbench(tabName) {
@@ -226,6 +278,4 @@ function initScoutWorkbench() {
       }
     }, { passive: true });
   }
-
-  renderComboPage();
 }

@@ -179,7 +179,8 @@
       const when = m.last_sync ? new Date(m.last_sync).toLocaleString() : '从未';
       const err = m.last_error ? ' · 错: ' + m.last_error : '';
       const en = st.enabled ? '' : ' · 未启用';
-      return st.user + ' · ' + vaultRelPath() + ' · rev ' + m.local_revision + ' · 上次 ' + when + en + err;
+      const relPath = st.path + '/' + vaultName;
+      return st.user + ' · ' + relPath + ' · rev ' + m.local_revision + ' · 上次 ' + when + en + err;
     }
 
     async function davRequest(method, url, body, headers, timeout) {

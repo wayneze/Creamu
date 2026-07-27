@@ -6,6 +6,7 @@
     let workbenchTrackingRecordsState = { revision: -1, records: null };
     let workbenchTrackingRecordsLoad = null;
     let workbenchTrackingRenderState = { root: null, key: '' };
+    let workbenchTrackingRenderSequence = 0;
 
     function primeWorkbenchTrackingRecordsState(records) {
         if (!Array.isArray(records)) return workbenchTrackingRecordsState;
@@ -587,6 +588,7 @@
     }
 
     async function renderWorkbenchTrackingList(options = {}) {
+        const renderSequence = ++workbenchTrackingRenderSequence;
         const root = document.getElementById('jlc-wb-tracking-root');
         if (!root) return;
         // 整表 innerHTML 会把 scrollTop 清零；先记下当前滚动，渲染后再写回
@@ -608,6 +610,10 @@
             return;
         }
         const recordsState = await getWorkbenchTrackingRecordsState();
+        if (
+            renderSequence !== workbenchTrackingRenderSequence
+            || document.getElementById('jlc-wb-tracking-root') !== root
+        ) return;
         const allRecords = recordsState.records.filter(record => !record.archived);
         let list = allRecords.slice();
 

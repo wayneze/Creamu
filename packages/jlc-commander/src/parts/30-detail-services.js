@@ -127,31 +127,14 @@
         }
     }
 
-    class SettingMenu {
-        constructor() {
-            createWorkbenchV3();
-
-            let version = Status.get('version');
-            if (version != VERSION) {
-                if (!version) {
-                    setTimeout(() => openCommanderPanel('tracking'), 120);
-                }
-                showAlert(NOTICE, true);
-                Status.set('version', VERSION);
-            }
+    function showVersionNotice() {
+        const version = Status.get('version');
+        if (version === VERSION) return;
+        if (!version) {
+            window.setTimeout(() => openCommanderPanel('tracking'), 120);
         }
-    }
-
-
-    const notice = ($menu)=>{
-        let version = Status.get("version");
-        if(version != VERSION){
-            if(!version){
-                $menu.slideDown();
-            }
-            showAlert(NOTICE,true);
-            Status.set("version",VERSION);
-        }
+        showAlert(NOTICE, true);
+        Status.set('version', VERSION);
     }
     function showMagnetTable(itemID,avid,href,elem) {
         if ($(elem).hasClass("span-loading")) {return;}

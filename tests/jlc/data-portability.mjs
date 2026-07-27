@@ -4,6 +4,7 @@ import vm from 'node:vm';
 
 const source = fs.readFileSync('packages/jlc-commander/src/parts/14-data-portability.js', 'utf8');
 const coreSource = fs.readFileSync('packages/jlc-commander/src/parts/10-core.js', 'utf8');
+const librarySource = fs.readFileSync('packages/jlc-commander/src/parts/17-library-sync.js', 'utf8');
 const settingsSource = fs.readFileSync('packages/jlc-commander/src/parts/13-settings-bridge.js', 'utf8');
 
 function extract(pattern, label) {
@@ -13,13 +14,13 @@ function extract(pattern, label) {
 }
 
 assert.doesNotMatch(coreSource, /function buildBackupPayload/, 'data portability must stay out of core');
-assert.match(settingsSource, /function getLegacySettingsSchema/, 'settings bridge must expose the legacy schema');
+assert.match(settingsSource, /function getListSettingsSchema/, 'settings bridge must expose the list settings schema');
 
 const importedConfigSource = extract(
   /function applyImportedConfig[\s\S]*?(?=\n\s*function describeLiveConfig)/,
   'imported config application'
 );
-const knownPersonsSource = coreSource.match(
+const knownPersonsSource = librarySource.match(
   /function refreshKnownPersonsFromSnapshot[\s\S]*?(?=\n\s*function getEmbyMovieRecordsFromSnapshot)/
 );
 assert.ok(knownPersonsSource, 'known-person snapshot refresh not found');
@@ -48,6 +49,48 @@ assert.deepEqual(
 );
 assert.equal(importedConfigContext.libraryDataRevision, 5);
 
+const putAllSource = extract(
+  /async function putAllInStore[\s\S]*?(?=\n\s*\/\*\* 列表\/界面偏好)/,
+  'backup store writer'
+);
+let importTransaction = null;
+const importedRows = [];
+const importContext = {
+  db: {
+    objectStoreNames: { contains: () => true },
+    transaction() {
+      importTransaction = {
+        objectStore() {
+          return {
+            put(row) {
+              if (row.invalid) throw new Error('invalid backup row');
+              importedRows.push(row);
+            },
+          };
+        },
+        oncomplete: null,
+        onerror: null,
+        onabort: null,
+        error: null,
+      };
+      return importTransaction;
+    },
+  },
+  invalidateIdbStoreSnapshot() {},
+  setTimeout(callback) {
+    callback();
+  },
+};
+vm.createContext(importContext);
+vm.runInContext(putAllSource, importContext);
+const importedCountPromise = importContext.putAllInStore('videos', [
+  { avid: 'ABP-001' },
+  { invalid: true },
+]);
+importTransaction.oncomplete();
+assert.equal(await importedCountPromise, 1, 'restore statistics should exclude rejected rows');
+assert.deepEqual(importedRows, [{ avid: 'ABP-001' }]);
+
 const preferenceSource = extract(
   /const STATUS_PREF_SIMPLE_KEYS[\s\S]*?(?=\n\s*function markStatusPrefsDirty)/,
   'status preference portability'
@@ -62,7 +105,7 @@ const storedValues = new Map([
 const writtenValues = [];
 const preferenceContext = {
   currentWeb: 'javlibrary',
-  legacySettingHandlers: null,
+  listSettingHandlers: null,
   statusDefault: {
     autoPage: false,
     copyBtn: true,

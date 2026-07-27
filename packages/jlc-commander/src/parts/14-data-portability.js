@@ -182,18 +182,22 @@
         let written = 0;
         for (let i = 0; i < rows.length; i += chunkSize) {
             const chunk = rows.slice(i, i + chunkSize);
-            await new Promise((resolve, reject) => {
+            const chunkWritten = await new Promise((resolve, reject) => {
                 let settled = false;
+                let enqueued = 0;
                 const tx = db.transaction(storeName, 'readwrite');
                 const store = tx.objectStore(storeName);
                 chunk.forEach(row => {
-                    try { store.put(row); } catch (e) { /* skip bad row */ }
+                    try {
+                        store.put(row);
+                        enqueued += 1;
+                    } catch (e) { /* skip bad row */ }
                 });
-                tx.oncomplete = () => { if (!settled) { settled = true; resolve(); } };
+                tx.oncomplete = () => { if (!settled) { settled = true; resolve(enqueued); } };
                 tx.onerror = () => { if (!settled) { settled = true; reject(tx.error || new Error(storeName + ' 写入失败')); } };
                 tx.onabort = () => { if (!settled) { settled = true; reject(tx.error || new Error(storeName + ' 写入中止')); } };
             });
-            written += chunk.length;
+            written += chunkWritten;
             // 让出主线程，避免 50MB 备份卡死页面
             await new Promise(r => setTimeout(r, 0));
         }
@@ -258,13 +262,13 @@
         }
         // 应用列表相关开关（若页面已初始化）；不含 uiBtnScale
         try {
-            if (typeof legacySettingHandlers !== 'undefined' && legacySettingHandlers) {
+            if (typeof listSettingHandlers !== 'undefined' && listSettingHandlers) {
                 ['autoPage', 'copyBtn', 'toolBar', 'halfImg', 'fullTitle', 'columnNum', 'waterfallWidth'].forEach((k) => {
-                    if (k === 'columnNum') legacySettingHandlers.columnNum?.(Status?.getColumnNum?.() ?? prefs.columnNumFull);
+                    if (k === 'columnNum') listSettingHandlers.columnNum?.(Status?.getColumnNum?.() ?? prefs.columnNumFull);
                     else if (k === 'waterfallWidth') {
                         const w = Status?.get?.('waterfallWidth');
-                        if (w != null) legacySettingHandlers.waterfallWidth?.(w);
-                    } else if (prefs[k] !== undefined) legacySettingHandlers[k]?.(prefs[k]);
+                        if (w != null) listSettingHandlers.waterfallWidth?.(w);
+                    } else if (prefs[k] !== undefined) listSettingHandlers[k]?.(prefs[k]);
                 });
             }
         } catch (_) { /* ignore */ }

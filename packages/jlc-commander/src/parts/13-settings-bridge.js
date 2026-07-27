@@ -42,7 +42,7 @@
         toggleWorkbenchV3(tabId);
     }
 
-    function getLegacySettingsSchema() {
+    function getListSettingsSchema() {
         const items = [
             { type: 'toggle', key: 'autoPage', label: lang.menu_autoPage },
             { type: 'toggle', key: 'copyBtn', label: lang.menu_copyBtn },
@@ -59,12 +59,10 @@
         items.push({ type: 'range', key: 'columnNum', label: lang.menu_columnNum, value: Status.getColumnNum(), min: 1, max: 8 });
         items.push({ type: 'range', key: 'waterfallWidth', label: '%', value: Status.get('waterfallWidth'), min: 1, max: currentObj?.maxWidth ? currentObj.maxWidth : 100 });
         items.push({ type: 'range', key: 'uiBtnScale', label: lang.menu_uiBtnScale, value: Status.get('uiBtnScale'), min: 70, max: 110, step: 5 });
-        items.push({ type: 'button', key: 'downloadPanel', label: '批量下载封面' });
-        items.push({ type: 'button', key: 'addHiddenWords', label: '添加屏蔽词' });
         return items;
     }
 
-    const legacySettingHandlers = {
+    const listSettingHandlers = {
         autoPage() {
             if (scroller) {
                 scroller.destroy();
@@ -108,12 +106,7 @@
             if (typeof applyUiBtnScale === 'function') applyUiBtnScale(value);
         },
         downloadPanel() {
-            closeCommanderPanel();
-            TabPanel.getInstance().show(0);
-        },
-        addHiddenWords() {
-            closeCommanderPanel();
-            TabPanel.getInstance().show(1);
+            openCoverDownloadDialog();
         }
     };
     let libraryUiRenderState = { revision: -1, mEl: null, mElV3: null };

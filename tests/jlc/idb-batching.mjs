@@ -2,7 +2,44 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const source = fs.readFileSync('packages/jlc-commander/src/parts/10-core.js', 'utf8');
+const source = fs.readFileSync('packages/jlc-commander/src/parts/16-indexeddb.js', 'utf8');
+const librarySource = fs.readFileSync('packages/jlc-commander/src/parts/17-library-sync.js', 'utf8');
+
+const readMatch = source.match(
+  /async function getVal[\s\S]*?(?=\r?\n\s*async function getManyFromStore)/
+);
+assert.ok(readMatch, 'getVal implementation not found');
+
+let readTransaction = null;
+let readRequest = null;
+const readContext = {
+  db: {
+    transaction(store, mode) {
+      assert.equal(store, 'videos');
+      assert.equal(mode, 'readonly');
+      readRequest = { result: undefined, onsuccess: null, onerror: null };
+      readTransaction = {
+        objectStore() {
+          return { get: () => readRequest };
+        },
+        onabort: null,
+      };
+      return readTransaction;
+    },
+  },
+};
+vm.createContext(readContext);
+vm.runInContext(readMatch[0], readContext);
+
+const successfulRead = readContext.getVal('videos', 'A-001');
+readRequest.result = { avid: 'A-001', status: 'like' };
+readRequest.onsuccess();
+assert.deepEqual(await successfulRead, { avid: 'A-001', status: 'like' });
+
+const abortedRead = readContext.getVal('videos', 'B-002');
+readTransaction.onabort();
+assert.equal(await abortedRead, null, 'an aborted read should settle with null');
+
 const match = source.match(
   /async function getManyFromStore[\s\S]*?(?=\n\s*\/\*\* 会进 WebDAV vault)/
 );
@@ -109,8 +146,8 @@ assert.equal(multiStoreRows.get('emby_data').length, 1);
 assert.equal(multiStoreRows.get('tracking_searches').length, 1);
 assert.deepEqual(Array.from(multiStoreRows.get('missing')), []);
 
-const radarMatch = source.match(
-  /function getEmbyDataSnapshot[\s\S]*?(?=\r?\n\s*function syncEmby)/
+const radarMatch = librarySource.match(
+  /function getEmbyDataSnapshot[\s\S]*?(?=\r?\n\s*async function syncEmby)/
 );
 assert.ok(radarMatch, 'Emby snapshot implementation not found');
 let radarReads = 0;
@@ -147,6 +184,8 @@ assert.ok(writeMatch, 'setManyVals implementation not found');
 
 let writeTransaction = null;
 let dirtyMarks = 0;
+let writeAbortCalls = 0;
+let rejectedWriteAvid = '';
 const writes = [];
 const writeContext = {
   db: {
@@ -157,9 +196,13 @@ const writeContext = {
         objectStore() {
           return {
             put(value) {
+              if (value.avid === rejectedWriteAvid) throw new Error('invalid cache row');
               writes.push(value);
             },
           };
+        },
+        abort() {
+          writeAbortCalls += 1;
         },
         oncomplete: null,
         onerror: null,
@@ -191,5 +234,60 @@ const failedWrite = writeContext.setManyVals('meta_cache', [
 writeTransaction.onabort();
 assert.equal(await failedWrite, false, 'an aborted batch should report failure');
 assert.equal(dirtyMarks, 1, 'an aborted batch must not invalidate committed data');
+
+rejectedWriteAvid = 'D-004';
+assert.equal(
+  await writeContext.setManyVals('meta_cache', [
+    { avid: 'C-003', genres: ['C'] },
+    { avid: 'D-004', genres: ['D'] },
+  ]),
+  false,
+  'a synchronous enqueue failure should report failure'
+);
+assert.equal(writeAbortCalls, 1, 'a partial batch must abort instead of committing earlier puts');
+assert.equal(dirtyMarks, 1, 'an enqueue failure must not invalidate committed data');
+
+const deleteMatch = source.match(
+  /async function deleteVal[\s\S]*?(?=\r?\n\s*async function getAllFromStores)/
+);
+assert.ok(deleteMatch, 'deleteVal implementation not found');
+
+let deleteTransaction = null;
+let deleteDirtyMarks = 0;
+const deletedKeys = [];
+const deleteContext = {
+  db: {
+    transaction(store, mode) {
+      assert.equal(store, 'videos');
+      assert.equal(mode, 'readwrite');
+      deleteTransaction = {
+        objectStore() {
+          return { delete: key => deletedKeys.push(key) };
+        },
+        oncomplete: null,
+        onerror: null,
+        onabort: null,
+      };
+      return deleteTransaction;
+    },
+  },
+  markIdbStoreDirty(store) {
+    assert.equal(store, 'videos');
+    deleteDirtyMarks += 1;
+  },
+};
+vm.createContext(deleteContext);
+vm.runInContext(deleteMatch[0], deleteContext);
+
+const committedDelete = deleteContext.deleteVal('videos', 'A-001');
+deleteTransaction.oncomplete();
+assert.equal(await committedDelete, true, 'a committed delete should report success');
+assert.equal(deleteDirtyMarks, 1, 'a committed delete should invalidate its store once');
+
+const abortedDelete = deleteContext.deleteVal('videos', 'B-002');
+deleteTransaction.onabort();
+assert.equal(await abortedDelete, false, 'an aborted delete should report failure');
+assert.equal(deleteDirtyMarks, 1, 'an aborted delete must not invalidate committed data');
+assert.deepEqual(deletedKeys, ['A-001', 'B-002']);
 
 console.log('JLC IndexedDB batching tests OK');

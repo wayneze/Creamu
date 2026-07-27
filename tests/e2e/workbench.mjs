@@ -198,6 +198,19 @@ function createJlcStressFixture(count) {
     + '<body><div class="videothumblist"><div class="videos">' + cards + '</div></div></body></html>';
 }
 
+function createJlcDetailFixture() {
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>ABP-001 - JavLibrary</title>'
+    + '<style>#jlc-detail-spacer{height:1800px}</style></head><body>'
+    + '<div id="jlc-detail-spacer"></div>'
+    + '<div id="video_title"><h3><a href="/cn/?v=abp001">Resource detail fixture</a></h3></div>'
+    + '<table id="video_info"><tbody>'
+    + '<tr id="video_id"><td>ID</td><td class="text">ABP-001</td></tr>'
+    + '<tr id="video_date"><td>发行日期</td><td class="text">2026-07-28</td></tr>'
+    + '</tbody></table>'
+    + '<div id="video_favorite_edit"></div>'
+    + '</body></html>';
+}
+
 function createExhStressFixture(count) {
   const rows = Array.from({ length: count }, (_, index) => {
     const gid = String(710000 + index);
@@ -774,6 +787,24 @@ async function openWorkbenchSettingsTab(page, tab) {
   }
   await drawer.locator(`[data-jlc-settings-tab="${tab}"]`).click();
   await drawer.locator(`[data-jlc-settings-tab="${tab}"].active`).waitFor();
+}
+
+async function exerciseJlcCoverDownloadDialog(page, label) {
+  await page.locator('[data-jlc-wb-action="downloadPanel"]').click();
+  await page.locator('#jlc-cover-download-dialog:not([hidden])').waitFor();
+  assert.deepEqual(
+    await page.evaluate(() => ({
+      parent: document.getElementById('jlc-cover-download-dialog')?.parentElement?.id || '',
+      libraryLoaded: typeof globalThis.JSZip === 'function',
+    })),
+    { parent: 'jlc-wb', libraryLoaded: false },
+    'opening the cover dialog should stay inside the workbench and defer JSZip'
+  );
+  await assertWorkbenchRegionLayout(page, '#jlc-cover-download-dialog', label);
+  await page.locator('#jlc-cover-download-dialog button[name="close"]').click();
+  await page.waitForFunction(
+    () => document.getElementById('jlc-cover-download-dialog')?.hidden === true
+  );
 }
 
 async function assertWorkbenchRegionLayout(page, selector, label) {
@@ -2237,6 +2268,78 @@ try {
   );
 
   await runCase(
+    'JLC detail: resource work waits for visibility and stable renders reuse DOM',
+    {
+      host: 'www.javlibrary.com',
+      fixtureHtml: createJlcDetailFixture(),
+      scriptPath: PATHS.jlcDist,
+      needJquery: true,
+      gmValues: { version: '20250311' },
+      beforeScript: async (page) => {
+        await page.evaluate(() => {
+          window.__jlcDetailResourceRequests = [];
+          const recordRequest = (kind, value) => {
+            const url = typeof value === 'string' ? value : (value?.url || String(value || ''));
+            window.__jlcDetailResourceRequests.push(kind + ':' + url);
+          };
+          window.GM_xmlhttpRequest = function (options) {
+            const request = options || {};
+            recordRequest('gm', request.url || '');
+            window.setTimeout(() => request.onload?.({
+              status: 404,
+              responseText: '',
+              finalUrl: request.url || '',
+              responseHeaders: '',
+            }), 0);
+          };
+          window.fetch = async function (input) {
+            recordRequest('fetch', input);
+            return new Response('', { status: 404 });
+          };
+        });
+      },
+    },
+    async (page) => {
+      const center = page.locator('#jlc-resource-center');
+      await center.waitFor({ state: 'attached', timeout: 15000 });
+      await page.evaluate(() => {
+        window.__jlcInitialResourceCard = document.querySelector('#jlc-resource-center .jlc-resource-card');
+      });
+      await page.waitForTimeout(2400);
+
+      const deferred = await page.evaluate(() => {
+        const centerNode = document.getElementById('jlc-resource-center');
+        const badge = document.querySelector('.avid-date-badge[data-jlc-detail-date="1"]');
+        return {
+          requests: window.__jlcDetailResourceRequests.slice(),
+          reusedDom: centerNode?.querySelector('.jlc-resource-card') === window.__jlcInitialResourceCard,
+          cards: centerNode?.querySelectorAll('.jlc-resource-card').length || 0,
+          links: centerNode?.querySelectorAll('[data-jlc-resource="links"] a').length || 0,
+          renderSignature: centerNode?.dataset.renderSignature || '',
+          badgeExists: !!badge,
+          badgeInlineStyle: badge?.getAttribute('style') || '',
+          badgeMargin: badge ? getComputedStyle(badge).marginLeft : '',
+        };
+      });
+      assert.equal(deferred.reusedDom, true, 'delayed startup passes should preserve resource card DOM');
+      assert.equal(deferred.requests.length, 0, 'offscreen resource cards should not issue network requests');
+      assert.equal(deferred.cards, 4, 'all enabled resource modules should render');
+      assert.ok(deferred.links > 0, 'the enabled external-links module should be wired into the resource center');
+      assert.ok(deferred.renderSignature, 'the resource center should persist its render signature');
+      assert.equal(deferred.badgeExists, true, 'the page release date should survive metadata decoration');
+      assert.equal(deferred.badgeInlineStyle, '', 'detail badges should keep presentation in the stylesheet');
+      assert.equal(deferred.badgeMargin, '8px');
+
+      await center.scrollIntoViewIfNeeded();
+      await page.waitForFunction(
+        () => window.__jlcDetailResourceRequests.length > 0,
+        null,
+        { timeout: 10000 }
+      );
+    }
+  );
+
+  await runCase(
     'JLC: open, switch library and filter, close',
     {
       host: 'www.javlibrary.com',
@@ -2381,6 +2484,9 @@ try {
           '#jlc-wb .jlc-wb-settings-body',
           'JLC ' + tab + ' settings'
         );
+        if (tab === 'display') {
+          await exerciseJlcCoverDownloadDialog(page, 'JLC cover download dialog');
+        }
       }
       await page.locator('#jlc-wb-settings-close').click();
 
@@ -2742,6 +2848,9 @@ try {
           '#jlc-wb .jlc-wb-settings-body',
           'JLC mobile ' + tab + ' settings'
         );
+        if (tab === 'display') {
+          await exerciseJlcCoverDownloadDialog(page, 'JLC mobile cover download dialog');
+        }
       }
       await page.locator('#jlc-wb-settings-close').click();
       await page.locator('#jlc-wb-close-btn').click();

@@ -2,7 +2,7 @@
     function renderWorkbenchViewSettings() {
         const container = document.getElementById('jlc-wb-view-root');
         if (!container) return;
-        const items = getLegacySettingsSchema().filter(item => item.type !== 'button');
+        const items = getListSettingsSchema();
         const toggles = items.filter(item => item.type === 'toggle');
         const layoutRanges = items.filter(item => item.type === 'range' && (item.key === 'columnNum' || item.key === 'waterfallWidth'));
         const uiRanges = items.filter(item => item.type === 'range' && item.key === 'uiBtnScale');
@@ -46,7 +46,7 @@
             input.addEventListener('change', () => {
                 const key = input.getAttribute('data-jlc-wb-toggle');
                 Status.set(key, !!input.checked);
-                legacySettingHandlers[key]?.(!!input.checked);
+                listSettingHandlers[key]?.(!!input.checked);
             });
         });
         container.querySelectorAll('[data-jlc-wb-range]').forEach(input => {
@@ -58,13 +58,13 @@
                 if (valueEl) valueEl.textContent = String(value);
                 if (key === 'columnNum') Status.set('columnNum', value);
                 else Status.set(key, value);
-                legacySettingHandlers[key]?.(value);
+                listSettingHandlers[key]?.(value);
             });
         });
         container.querySelectorAll('[data-jlc-wb-action]').forEach(button => {
             button.addEventListener('click', () => {
                 const key = button.getAttribute('data-jlc-wb-action');
-                legacySettingHandlers[key]?.();
+                listSettingHandlers[key]?.();
             });
         });
         container.querySelector('#jlc-wb-view-open-mode')?.addEventListener('change', (e) => {
@@ -251,8 +251,6 @@
             if (typeof showDataIntegrityReport === 'function') void showDataIntegrityReport();
             else showAlert('检查功能未就绪', true);
         });
-        // 屏蔽词已内联在「过滤」主 Tab，不再跳转 TabPanel
-
         const applyWdFormToConfig = () => {
             config.webdav_url = (shell.querySelector('#jlc-wb-wd-url')?.value || '').trim();
             config.webdav_user = (shell.querySelector('#jlc-wb-wd-user')?.value || '').trim();

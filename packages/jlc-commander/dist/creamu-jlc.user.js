@@ -24,8 +24,6 @@
 
 (function () {
     'use strict';
-    // @require      https://cdn.jsdelivr.net/npm/vanilla-lazyload@17.8.2/dist/lazyload.min.js
-    !function(n,t){"object"==typeof exports&&"undefined"!=typeof module?module.exports=t():"function"==typeof define&&define.amd?define(t):(n="undefined"!=typeof globalThis?globalThis:n||self).LazyLoad=t()}(this,(function(){"use strict";function n(){return n=Object.assign||function(n){for(var t=1;t<arguments.length;t++){var e=arguments[t];for(var i in e)Object.prototype.hasOwnProperty.call(e,i)&&(n[i]=e[i])}return n},n.apply(this,arguments)}var t="undefined"!=typeof window,e=t&&!("onscroll"in window)||"undefined"!=typeof navigator&&/(gle|ing|ro)bot|crawl|spider/i.test(navigator.userAgent),i=t&&"IntersectionObserver"in window,o=t&&"classList"in document.createElement("p"),a=t&&window.devicePixelRatio>1,r={elements_selector:".lazy",container:e||t?document:null,threshold:300,thresholds:null,data_src:"src",data_srcset:"srcset",data_sizes:"sizes",data_bg:"bg",data_bg_hidpi:"bg-hidpi",data_bg_multi:"bg-multi",data_bg_multi_hidpi:"bg-multi-hidpi",data_bg_set:"bg-set",data_poster:"poster",class_applied:"applied",class_loading:"loading",class_loaded:"loaded",class_error:"error",class_entered:"entered",class_exited:"exited",unobserve_completed:!0,unobserve_entered:!1,cancel_on_exit:!0,callback_enter:null,callback_exit:null,callback_applied:null,callback_loading:null,callback_loaded:null,callback_error:null,callback_finish:null,callback_cancel:null,use_native:!1,restore_on_error:!1},c=function(t){return n({},r,t)},l=function(n,t){var e,i="LazyLoad::Initialized",o=new n(t);try{e=new CustomEvent(i,{detail:{instance:o}})}catch(n){(e=document.createEvent("CustomEvent")).initCustomEvent(i,!1,!1,{instance:o})}window.dispatchEvent(e)},u="src",s="srcset",d="sizes",f="poster",_="llOriginalAttrs",g="data",v="loading",b="loaded",m="applied",p="error",h="native",E="data-",I="ll-status",y=function(n,t){return n.getAttribute(E+t)},k=function(n){return y(n,I)},w=function(n,t){return function(n,t,e){var i="data-ll-status";null!==e?n.setAttribute(i,e):n.removeAttribute(i)}(n,0,t)},A=function(n){return w(n,null)},L=function(n){return null===k(n)},O=function(n){return k(n)===h},x=[v,b,m,p],C=function(n,t,e,i){n&&(void 0===i?void 0===e?n(t):n(t,e):n(t,e,i))},N=function(n,t){o?n.classList.add(t):n.className+=(n.className?" ":"")+t},M=function(n,t){o?n.classList.remove(t):n.className=n.className.replace(new RegExp("(^|\\s+)"+t+"(\\s+|$)")," ").replace(/^\s+/,"").replace(/\s+$/,"")},z=function(n){return n.llTempImage},T=function(n,t){if(t){var e=t._observer;e&&e.unobserve(n)}},R=function(n,t){n&&(n.loadingCount+=t)},G=function(n,t){n&&(n.toLoadCount=t)},j=function(n){for(var t,e=[],i=0;t=n.children[i];i+=1)"SOURCE"===t.tagName&&e.push(t);return e},D=function(n,t){var e=n.parentNode;e&&"PICTURE"===e.tagName&&j(e).forEach(t)},H=function(n,t){j(n).forEach(t)},V=[u],F=[u,f],B=[u,s,d],J=[g],P=function(n){return!!n[_]},S=function(n){return n[_]},U=function(n){return delete n[_]},$=function(n,t){if(!P(n)){var e={};t.forEach((function(t){e[t]=n.getAttribute(t)})),n[_]=e}},q=function(n,t){if(P(n)){var e=S(n);t.forEach((function(t){!function(n,t,e){e?n.setAttribute(t,e):n.removeAttribute(t)}(n,t,e[t])}))}},K=function(n,t,e){N(n,t.class_applied),w(n,m),e&&(t.unobserve_completed&&T(n,t),C(t.callback_applied,n,e))},Q=function(n,t,e){N(n,t.class_loading),w(n,v),e&&(R(e,1),C(t.callback_loading,n,e))},W=function(n,t,e){e&&n.setAttribute(t,e)},X=function(n,t){W(n,d,y(n,t.data_sizes)),W(n,s,y(n,t.data_srcset)),W(n,u,y(n,t.data_src))},Y={IMG:function(n,t){D(n,(function(n){$(n,B),X(n,t)})),$(n,B),X(n,t)},IFRAME:function(n,t){$(n,V),W(n,u,y(n,t.data_src))},VIDEO:function(n,t){H(n,(function(n){$(n,V),W(n,u,y(n,t.data_src))})),$(n,F),W(n,f,y(n,t.data_poster)),W(n,u,y(n,t.data_src)),n.load()},OBJECT:function(n,t){$(n,J),W(n,g,y(n,t.data_src))}},Z=["IMG","IFRAME","VIDEO","OBJECT"],nn=function(n,t){!t||function(n){return n.loadingCount>0}(t)||function(n){return n.toLoadCount>0}(t)||C(n.callback_finish,t)},tn=function(n,t,e){n.addEventListener(t,e),n.llEvLisnrs[t]=e},en=function(n,t,e){n.removeEventListener(t,e)},on=function(n){return!!n.llEvLisnrs},an=function(n){if(on(n)){var t=n.llEvLisnrs;for(var e in t){var i=t[e];en(n,e,i)}delete n.llEvLisnrs}},rn=function(n,t,e){!function(n){delete n.llTempImage}(n),R(e,-1),function(n){n&&(n.toLoadCount-=1)}(e),M(n,t.class_loading),t.unobserve_completed&&T(n,e)},cn=function(n,t,e){var i=z(n)||n;on(i)||function(n,t,e){on(n)||(n.llEvLisnrs={});var i="VIDEO"===n.tagName?"loadeddata":"load";tn(n,i,t),tn(n,"error",e)}(i,(function(o){!function(n,t,e,i){var o=O(t);rn(t,e,i),N(t,e.class_loaded),w(t,b),C(e.callback_loaded,t,i),o||nn(e,i)}(0,n,t,e),an(i)}),(function(o){!function(n,t,e,i){var o=O(t);rn(t,e,i),N(t,e.class_error),w(t,p),C(e.callback_error,t,i),e.restore_on_error&&q(t,B),o||nn(e,i)}(0,n,t,e),an(i)}))},ln=function(n,t,e){!function(n){return Z.indexOf(n.tagName)>-1}(n)?function(n,t,e){!function(n){n.llTempImage=document.createElement("IMG")}(n),cn(n,t,e),function(n){P(n)||(n[_]={backgroundImage:n.style.backgroundImage})}(n),function(n,t,e){var i=y(n,t.data_bg),o=y(n,t.data_bg_hidpi),r=a&&o?o:i;r&&(n.style.backgroundImage='url("'.concat(r,'")'),z(n).setAttribute(u,r),Q(n,t,e))}(n,t,e),function(n,t,e){var i=y(n,t.data_bg_multi),o=y(n,t.data_bg_multi_hidpi),r=a&&o?o:i;r&&(n.style.backgroundImage=r,K(n,t,e))}(n,t,e),function(n,t,e){var i=y(n,t.data_bg_set);if(i){var o=i.split("|"),a=o.map((function(n){return"image-set(".concat(n,")")}));n.style.backgroundImage=a.join(),""===n.style.backgroundImage&&(a=o.map((function(n){return"-webkit-image-set(".concat(n,")")})),n.style.backgroundImage=a.join()),K(n,t,e)}}(n,t,e)}(n,t,e):function(n,t,e){cn(n,t,e),function(n,t,e){var i=Y[n.tagName];i&&(i(n,t),Q(n,t,e))}(n,t,e)}(n,t,e)},un=function(n){n.removeAttribute(u),n.removeAttribute(s),n.removeAttribute(d)},sn=function(n){D(n,(function(n){q(n,B)})),q(n,B)},dn={IMG:sn,IFRAME:function(n){q(n,V)},VIDEO:function(n){H(n,(function(n){q(n,V)})),q(n,F),n.load()},OBJECT:function(n){q(n,J)}},fn=function(n,t){(function(n){var t=dn[n.tagName];t?t(n):function(n){if(P(n)){var t=S(n);n.style.backgroundImage=t.backgroundImage}}(n)})(n),function(n,t){L(n)||O(n)||(M(n,t.class_entered),M(n,t.class_exited),M(n,t.class_applied),M(n,t.class_loading),M(n,t.class_loaded),M(n,t.class_error))}(n,t),A(n),U(n)},_n=["IMG","IFRAME","VIDEO"],gn=function(n){return n.use_native&&"loading"in HTMLImageElement.prototype},vn=function(n,t,e){n.forEach((function(n){return function(n){return n.isIntersecting||n.intersectionRatio>0}(n)?function(n,t,e,i){var o=function(n){return x.indexOf(k(n))>=0}(n);w(n,"entered"),N(n,e.class_entered),M(n,e.class_exited),function(n,t,e){t.unobserve_entered&&T(n,e)}(n,e,i),C(e.callback_enter,n,t,i),o||ln(n,e,i)}(n.target,n,t,e):function(n,t,e,i){L(n)||(N(n,e.class_exited),function(n,t,e,i){e.cancel_on_exit&&function(n){return k(n)===v}(n)&&"IMG"===n.tagName&&(an(n),function(n){D(n,(function(n){un(n)})),un(n)}(n),sn(n),M(n,e.class_loading),R(i,-1),A(n),C(e.callback_cancel,n,t,i))}(n,t,e,i),C(e.callback_exit,n,t,i))}(n.target,n,t,e)}))},bn=function(n){return Array.prototype.slice.call(n)},mn=function(n){return n.container.querySelectorAll(n.elements_selector)},pn=function(n){return function(n){return k(n)===p}(n)},hn=function(n,t){return function(n){return bn(n).filter(L)}(n||mn(t))},En=function(n,e){var o=c(n);this._settings=o,this.loadingCount=0,function(n,t){i&&!gn(n)&&(t._observer=new IntersectionObserver((function(e){vn(e,n,t)}),function(n){return{root:n.container===document?null:n.container,rootMargin:n.thresholds||n.threshold+"px"}}(n)))}(o,this),function(n,e){t&&(e._onlineHandler=function(){!function(n,t){var e;(e=mn(n),bn(e).filter(pn)).forEach((function(t){M(t,n.class_error),A(t)})),t.update()}(n,e)},window.addEventListener("online",e._onlineHandler))}(o,this),this.update(e)};return En.prototype={update:function(n){var t,o,a=this._settings,r=hn(n,a);G(this,r.length),!e&&i?gn(a)?function(n,t,e){n.forEach((function(n){-1!==_n.indexOf(n.tagName)&&function(n,t,e){n.setAttribute("loading","lazy"),cn(n,t,e),function(n,t){var e=Y[n.tagName];e&&e(n,t)}(n,t),w(n,h)}(n,t,e)})),G(e,0)}(r,a,this):(o=r,function(n){n.disconnect()}(t=this._observer),function(n,t){t.forEach((function(t){n.observe(t)}))}(t,o)):this.loadAll(r)},destroy:function(){this._observer&&this._observer.disconnect(),t&&window.removeEventListener("online",this._onlineHandler),mn(this._settings).forEach((function(n){U(n)})),delete this._observer,delete this._settings,delete this._onlineHandler,delete this.loadingCount,delete this.toLoadCount},loadAll:function(n){var t=this,e=this._settings;hn(n,e).forEach((function(n){T(n,t),ln(n,e,t)}))},restoreAll:function(){var n=this._settings;mn(n).forEach((function(t){fn(t,n)}))}},En.load=function(n,t){var e=c(t);ln(n,e)},En.resetStatus=function(n){A(n)},t&&function(n,t){if(t)if(t.length)for(var e,i=0;e=t[i];i+=1)l(n,e);else l(n,t)}(En,window.lazyLoadOptions),En}));
 
     let statusDefault = {
         autoPage: false,
@@ -75,7 +73,9 @@
             tool_magnetTip:'磁力',
             tool_downloadTip:'下载封面',
             tool_pictureTip:'视频截图(blogjav.net)需代理',
-            scrollerPlugin_end:'完'
+            scrollerPlugin_end:'完',
+            scrollerPlugin_error:'加载失败',
+            scrollerPlugin_retry:'重试'
         },
         en: {
             menuText :'Settings',
@@ -95,7 +95,9 @@
             tool_magnetTip:'Magnet',
             tool_downloadTip:'Download cover',
             tool_pictureTip:'Video screenshot from blogjav.net',
-            scrollerPlugin_end:'End'
+            scrollerPlugin_end:'End',
+            scrollerPlugin_error:'Load failed',
+            scrollerPlugin_retry:'Retry'
         }
     }
     let getlanguage = () => {
@@ -294,7 +296,172 @@
 
     let config = loadConfig();
     let configMigrationHintShown = false;
+// @@creamu-part:11-domain-utils
+    const TAG_CHAR_FOLD = {
+        '親': '亲', '姦': '奸', '義': '义', '継': '继', '繼': '继', '續': '续', '處': '处', '処': '处',
+        '戀': '恋', '慾': '欲', '婦': '妇', '專': '专', '屬': '属', '雙': '双', '單': '单', '體': '体',
+        '學': '学', '園': '园', '變': '变', '態': '态', '盜': '盗', '攝': '摄', '錄': '录', '寫': '写',
+        '癡': '痴', '實': '实', '戰': '战', '觸': '触', '發': '发', '調': '调', '產': '产', '業': '业',
+        '畫': '画', '龍': '龙', '豐': '丰'
+    };
 
+    function normalizeText(v) {
+        return String(v || '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function normalizeTagText(v) {
+        return normalizeText(v).replace(/./gu, ch => TAG_CHAR_FOLD[ch] || ch);
+    }
+
+    function normalizeCode(v) {
+        return normalizeText(v).replace(/[^a-z0-9]+/g, '');
+    }
+
+    function uniqueTextList(list) {
+        const seen = new Set();
+        return (Array.isArray(list) ? list : [])
+            .map(x => String(x || '').trim())
+            .filter(Boolean)
+            .filter(x => {
+                const key = normalizeTagText(x);
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+    }
+
+    function asTextList(v) {
+        if (Array.isArray(v)) return uniqueTextList(v.flatMap(x => asTextList(x)));
+        if (typeof v === 'string' || typeof v === 'number') {
+            return String(v).split(/[\n,，]/).map(x => x.trim()).filter(Boolean);
+        }
+        if (v && typeof v === 'object') {
+            const candidateKeys = ['name', 'title', 'label', 'text', 'value', 'genre', 'tag', 'category', 'type', 'display_name', 'displayName'];
+            for (const key of candidateKeys) {
+                if (key in v) {
+                    const list = asTextList(v[key]);
+                    if (list.length) return list;
+                }
+            }
+        }
+        return [];
+    }
+
+    function extractMetaTubeData(payload) {
+        const root = payload && typeof payload === 'object' && 'data' in payload ? payload.data : payload;
+        if (!root || typeof root !== 'object') return root;
+        if (Array.isArray(root)) return root;
+        const listCandidate = ['items', 'results', 'rows', 'list', 'movies', 'hits', 'records']
+            .map(key => root[key])
+            .find(Array.isArray);
+        return listCandidate || root;
+    }
+
+    function normalizeReleaseDate(value) {
+        if (value == null) return '';
+        const text = String(value).trim();
+        if (!text) return '';
+        const iso = text.match(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/);
+        if (iso) return iso[0].replace(/[/.]/g, '-');
+        const compact = text.match(/\d{8}/);
+        if (compact) return `${compact[0].slice(0, 4)}-${compact[0].slice(4, 6)}-${compact[0].slice(6, 8)}`;
+        return text;
+    }
+
+    function pickReleaseDate(source) {
+        if (!source || typeof source !== 'object') return '';
+        const candidates = [
+            source.release_date,
+            source.releaseDate,
+            source.premiered,
+            source.publish_date,
+            source.publishDate,
+            source.pub_date,
+            source.pubDate,
+            source.date,
+            source.air_date,
+            source.airDate,
+            source.issued_at,
+            source.issuedAt
+        ];
+        for (const value of candidates) {
+            const normalized = normalizeReleaseDate(value);
+            if (normalized) return normalized;
+        }
+        return '';
+    }
+
+    function normalizeMetaRecord(raw) {
+        if (!raw || typeof raw !== 'object') return raw;
+        const nested = [raw.movie, raw.item, raw.result, raw.video].find(v => v && typeof v === 'object') || null;
+        const merged = nested ? { ...raw, ...nested } : { ...raw };
+        const actors = uniqueTextList([
+            ...asTextList(merged.actors),
+            ...asTextList(merged.actor),
+            ...asTextList(merged.actresses),
+            ...asTextList(merged.cast),
+            ...asTextList(merged.performers),
+            ...asTextList(merged.performer),
+            ...asTextList(merged.stars),
+            ...asTextList(merged.persons)
+        ]);
+        const genres = uniqueTextList([
+            ...asTextList(merged.genres),
+            ...asTextList(merged.genre),
+            ...asTextList(merged.tags),
+            ...asTextList(merged.tag),
+            ...asTextList(merged.categories),
+            ...asTextList(merged.category),
+            ...asTextList(merged.labels),
+            ...asTextList(merged.label),
+            ...asTextList(merged.types),
+            ...asTextList(merged.type)
+        ]);
+        const number = merged.number || merged.code || merged.no || merged.movie_number || merged.movieNo || merged.movie_id || merged.id || '';
+        const releaseDate = pickReleaseDate(merged) || pickReleaseDate(raw);
+        return { ...merged, actors, genres, number, releaseDate };
+    }
+
+    function tagMatches(source, keyword) {
+        const src = normalizeText(source);
+        const key = normalizeText(keyword);
+        if (!src || !key) return false;
+        if (src.includes(key)) return true;
+        const foldedSrc = normalizeTagText(source);
+        const foldedKey = normalizeTagText(keyword);
+        return !!foldedSrc && !!foldedKey && foldedSrc.includes(foldedKey);
+    }
+
+    async function requestJSON(url, timeout = 15000) {
+        const requestTimeout = Math.max(250, Number(timeout) || 15000);
+        return new Promise(r => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url,
+                timeout: requestTimeout,
+                onload: (res) => {
+                    try {
+                        r(JSON.parse(res.responseText));
+                    } catch (e) {
+                        r(null);
+                    }
+                },
+                onerror: () => r(null),
+                ontimeout: () => r(null)
+            });
+        });
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>\"']/g, ch => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[ch]));
+    }
+// @@creamu-part:11-theme
     function initCommanderStyles() {
         GM_addStyle(`
         .jlc-resource-center {
@@ -570,11 +737,13 @@
         #grid-b .toolbar-b .jlc-tool-btn.active-hate { opacity: 1; color: #ff6666; text-shadow: 0 0 8px rgba(255,102,102,.4); }
         #grid-b .avid-link-b { display: inline-flex !important; align-items: center; gap: 8px; flex-wrap: wrap; }
         #grid-b .avid-line-b { display: inline-flex; align-items: center; gap: 2px; }
-        #grid-b .avid-date-badge {
+        #grid-b .avid-date-badge,
+        .avid-date-badge[data-jlc-detail-date="1"] {
             display: inline-block; padding: 1px 6px; border-radius: 999px;
             background: rgba(0,0,0,.08); border: 1px solid rgba(0,0,0,.12);
             color: #666; font-size: 11px; line-height: 1.4; white-space: nowrap;
         }
+        .avid-date-badge[data-jlc-detail-date="1"] { margin-left: 8px; }
         #grid-b .jlc-placeholder-cover {
             width: auto !important; max-width: 72% !important; max-height: 120px !important;
             height: auto !important; object-fit: contain; margin: 12px auto !important; opacity: .92;
@@ -603,33 +772,7 @@
             content: ''; flex: 1 1 auto; min-width: 24px; height: 1px;
             background: linear-gradient(90deg, rgba(255,95,86,.55), rgba(255,95,86,.08));
         }
-        .jlc-tracking-toolbar {
-            display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px;
-            flex-wrap: wrap;
-        }
-        .jlc-tracking-toolbar-summary { color: #aaa; font-size: 12px; line-height: 1.4; }
-        .jlc-tracking-toolbar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-        .jlc-tracking-group { border: 1px solid #333; border-radius: 10px; overflow: hidden; margin-bottom: 12px; background: #1f1f1f; }
-        .jlc-tracking-group-toggle {
-            width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            background: rgba(255,255,255,.04); color: #fff; border: 0; padding: 12px 14px; cursor: pointer;
-        }
-        .jlc-tracking-group-toggle small { color: #aaa; }
-        .jlc-tracking-group-body { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-        .jlc-tracking-group.collapsed .jlc-tracking-group-body { display: none; }
-        .jlc-tracking-item {
-            display: grid; grid-template-columns: minmax(0, 1fr) 84px; gap: 12px; padding: 12px;
-            border-radius: 10px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.05);
-        }
-        .jlc-tracking-main { min-width: 0; }
-        .jlc-tracking-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .jlc-tracking-title-text { font-size: 14px; font-weight: 600; color: #fff; }
         .jlc-tracking-pagehint { font-size: 11px; color: #f6c36b; font-weight: 600; opacity: .92; }
-        .jlc-tracking-meta {
-            margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; color: #9f9f9f; font-size: 12px; line-height: 1.5;
-        }
-        .jlc-tracking-meta span { display: inline-flex; align-items: center; gap: 4px; }
-        .jlc-tracking-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; justify-content: center; width: 84px; }
         .jlc-status-pill, .jlc-site-pill {
             display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px; font-size: 11px;
             border: 1px solid transparent;
@@ -639,9 +782,6 @@
         .jlc-status-pill.tone-green { background: rgba(34,197,94,.14); color: #86efac; border-color: rgba(34,197,94,.28); }
         .jlc-status-pill.tone-red { background: rgba(239,68,68,.16); color: #fca5a5; border-color: rgba(239,68,68,.3); }
         .jlc-status-pill.tone-yellow { background: rgba(250,204,21,.14); color: #fde68a; border-color: rgba(250,204,21,.28); }
-        .jlc-tracking-empty {
-            padding: 16px; border: 1px dashed #444; border-radius: 10px; color: #aaa; background: rgba(255,255,255,.02);
-        }
         #jlc-tracking-pagebar {
             display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
             margin: 10px 5px 14px; padding: 12px 14px; border-radius: 12px;
@@ -679,660 +819,12 @@
         #jlc-tracking-pagebar .jlc-bp-miss-hint {
             color: #ff9b95; font-weight: 700;
         }
-        /* 旧版右下角浮钮：彻底移除，避免残留节点挡操作 */
+        /* 防止断点浮钮残留节点挡住页面操作 */
         #jlc-tracking-breakpoint-finder { display: none !important; }
         @media (max-width: 820px) {
-            .jlc-tracking-item { grid-template-columns: 1fr; }
-            .jlc-tracking-actions { width: 100%; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
             #jlc-tracking-pagebar { align-items: flex-start; }
         }
         `);
-    }
-
-    async function initDB() {
-        return new Promise((resolve) => {
-            if (!window.indexedDB) {
-                console.warn('[Commander] 当前环境不支持 IndexedDB');
-                resolve();
-                return;
-            }
-
-            let settled = false;
-            let upgradeBlocked = false;
-            let fallbackStarted = false;
-            let timer = null;
-
-            const attachDb = (nextDb = null) => {
-                db = nextDb || null;
-                if (db) {
-                    db.onversionchange = () => {
-                        try { db.close(); } catch (e) {}
-                    };
-                    invalidateIdbStoreSnapshot('emby_data');
-                    invalidateIdbStoreSnapshot(TRACKING_STORE);
-                    try {
-                        if (typeof flushMetaCacheWrites === 'function') void flushMetaCacheWrites();
-                    } catch (_) { /* ignore */ }
-                }
-            };
-
-            const refreshAfterLateDb = () => {
-                window.setTimeout(() => {
-                    if (!db) return;
-                    Promise.resolve()
-                        .then(() => loadRadarData?.())
-                        .then(() => refreshLibraryUI?.())
-                        .then(() => refreshCommanderDecorations?.())
-                        .then(() => {
-                            renderTrackingUI?.();
-                            scheduleTrackingPageRefresh?.(true);
-                        })
-                        .catch(() => {});
-                }, 50);
-            };
-
-            const finish = (nextDb = null) => {
-                if (settled) return;
-                settled = true;
-                if (timer) clearTimeout(timer);
-                attachDb(nextDb);
-                resolve();
-            };
-
-            const adoptLateDb = (nextDb, reason) => {
-                if (!nextDb || db === nextDb) return;
-                attachDb(nextDb);
-                console.info('[Commander] ' + reason + '已在后台就绪');
-                refreshAfterLateDb();
-            };
-
-            const openFallback = () => {
-                if (fallbackStarted) return;
-                fallbackStarted = true;
-                try {
-                    const fallbackReq = indexedDB.open(DB_NAME);
-                    fallbackReq.onsuccess = (e) => {
-                        const fallbackDb = e.target.result;
-                        if (upgradeBlocked && !fallbackDb.objectStoreNames.contains(TRACKING_STORE)) {
-                            console.warn('[Commander] Tracking 存储升级被阻塞，本次先以兼容模式启动');
-                        }
-                        if (settled) {
-                            adoptLateDb(fallbackDb, '兼容数据库连接');
-                            return;
-                        }
-                        finish(fallbackDb);
-                    };
-                    fallbackReq.onerror = () => {
-                        console.error('[Commander] 数据库回退打开失败');
-                        if (!settled) finish(null);
-                    };
-                    fallbackReq.onblocked = () => {
-                        console.error('[Commander] 数据库回退打开仍被阻塞');
-                        if (!settled) finish(null);
-                    };
-                } catch (e) {
-                    console.error('[Commander] 数据库回退异常', e);
-                    if (!settled) finish(null);
-                }
-            };
-
-            try {
-                const req = indexedDB.open(DB_NAME, DB_VERSION);
-                const unblockStartup = (message) => {
-                    if (settled) return;
-                    upgradeBlocked = true;
-                    console.warn(message);
-                    finish(null);
-                    window.setTimeout(openFallback, 60);
-                };
-
-                timer = window.setTimeout(() => {
-                    unblockStartup('[Commander] 数据库升级等待超时，先跳过数据库启动');
-                }, 2500);
-
-                req.onupgradeneeded = (e) => {
-                    const d = e.target.result;
-                    if (!d.objectStoreNames.contains('videos')) d.createObjectStore('videos', { keyPath: 'avid' });
-                    if (!d.objectStoreNames.contains('emby_data')) d.createObjectStore('emby_data', { keyPath: 'id' });
-                    if (!d.objectStoreNames.contains('meta_cache')) d.createObjectStore('meta_cache', { keyPath: 'avid' });
-                    if (!d.objectStoreNames.contains(TRACKING_STORE)) d.createObjectStore(TRACKING_STORE, { keyPath: 'id' });
-                };
-                req.onsuccess = (e) => {
-                    const openedDb = e.target.result;
-                    if (settled) {
-                        adoptLateDb(openedDb, '数据库升级连接');
-                        return;
-                    }
-                    finish(openedDb);
-                };
-                req.onblocked = () => {
-                    unblockStartup('[Commander] 数据库升级被旧连接阻塞，先跳过数据库启动');
-                };
-                req.onerror = () => {
-                    console.error('[Commander] 数据库连接失败');
-                    if (!settled) {
-                        finish(null);
-                        window.setTimeout(openFallback, 60);
-                    }
-                };
-            } catch (e) {
-                console.error('[Commander] 数据库初始化异常', e);
-                finish(null);
-            }
-        });
-    }
-
-    async function getVal(store, key) {
-        if (!db) return null;
-        return new Promise(r => {
-            try {
-                const tx = db.transaction(store, 'readonly');
-                const req = tx.objectStore(store).get(key);
-                req.onsuccess = () => r(req.result);
-                req.onerror = () => r(null);
-            } catch (e) { r(null); }
-        });
-    }
-
-    async function getManyFromStore(store, keys) {
-        const uniqueKeys = Array.from(new Set(Array.from(keys || []).filter(key => key != null)));
-        if (!db || !uniqueKeys.length) return new Map();
-        return new Promise(resolve => {
-            const values = new Map();
-            let settled = false;
-            const finish = () => {
-                if (settled) return;
-                settled = true;
-                resolve(values);
-            };
-            try {
-                const tx = db.transaction(store, 'readonly');
-                const objectStore = tx.objectStore(store);
-                uniqueKeys.forEach(key => {
-                    const request = objectStore.get(key);
-                    request.onsuccess = () => {
-                        if (request.result !== undefined) values.set(key, request.result);
-                    };
-                });
-                tx.oncomplete = finish;
-                tx.onerror = finish;
-                tx.onabort = finish;
-            } catch (_) {
-                finish();
-            }
-        });
-    }
-
-    /** 会进 WebDAV vault 的 IDB 仓库（meta_cache 可再生，不同步） */
-    const SYNCABLE_IDB_STORES = new Set(['videos', 'emby_data', 'tracking_searches']);
-
-    function invalidateIdbStoreSnapshot(store) {
-        if (store === 'emby_data') embyDataSnapshot = null;
-        if (store === 'emby_data' || store === 'videos') libraryDataRevision += 1;
-        if (store === TRACKING_STORE) trackingDataRevision += 1;
-    }
-
-    function markIdbStoreDirty(store) {
-        invalidateIdbStoreSnapshot(store);
-        if (!SYNCABLE_IDB_STORES.has(store)) return;
-        try {
-            if (typeof markStatusPrefsDirty === 'function') markStatusPrefsDirty();
-            else if (typeof ensureCreamuSync === 'function') ensureCreamuSync()?.markLocalDirty();
-        } catch (_) { /* ignore */ }
-    }
-
-    async function setManyVals(store, values) {
-        const rows = Array.from(values || []).filter(value => value != null);
-        if (!rows.length) return true;
-        if (!db) return false;
-        return new Promise(r => {
-            try {
-                const tx = db.transaction(store, 'readwrite');
-                const objectStore = tx.objectStore(store);
-                rows.forEach(value => objectStore.put(value));
-                tx.oncomplete = () => {
-                    markIdbStoreDirty(store);
-                    r(true);
-                };
-                tx.onerror = () => r(false);
-                tx.onabort = () => r(false);
-            } catch (e) { r(false); }
-        });
-    }
-
-    async function setVal(store, val) {
-        return setManyVals(store, [val]);
-    }
-
-    async function deleteVal(store, key) {
-        if (!db) return;
-        return new Promise(r => {
-            try {
-                const tx = db.transaction(store, 'readwrite');
-                tx.objectStore(store).delete(key);
-                tx.oncomplete = () => {
-                    markIdbStoreDirty(store);
-                    r();
-                };
-                tx.onerror = () => r();
-            } catch (e) { r(); }
-        });
-    }
-
-    async function getAllFromStores(stores) {
-        const names = Array.from(new Set(Array.from(stores || []).filter(Boolean)));
-        const rowsByStore = new Map(names.map(name => [name, []]));
-        if (!db || !names.length) return rowsByStore;
-        const available = names.filter(name => db.objectStoreNames.contains(name));
-        if (!available.length) return rowsByStore;
-        return new Promise(resolve => {
-            let settled = false;
-            const finish = () => {
-                if (settled) return;
-                settled = true;
-                resolve(rowsByStore);
-            };
-            try {
-                const tx = db.transaction(available, 'readonly');
-                available.forEach(name => {
-                    const request = tx.objectStore(name).getAll();
-                    request.onsuccess = () => rowsByStore.set(name, request.result || []);
-                });
-                tx.oncomplete = finish;
-                tx.onerror = finish;
-                tx.onabort = finish;
-            } catch (e) { finish(); }
-        });
-    }
-
-    async function getAllFromStore(store) {
-        const rowsByStore = await getAllFromStores([store]);
-        return rowsByStore.get(store) || [];
-    }
-
-    function getEmbyDataSnapshot() {
-        return embyDataSnapshot;
-    }
-
-    function refreshKnownPersonsFromSnapshot() {
-        const embyPersons = Array.from(embyDataSnapshot?.personNames || []);
-        knownPersons = new Set([...(config.custom_persons || []), ...embyPersons]);
-        return knownPersons;
-    }
-
-    function getEmbyMovieRecordsFromSnapshot(avids) {
-        if (!embyDataSnapshot) return null;
-        const records = new Map();
-        Array.from(avids || []).forEach(avid => {
-            const normalized = String(avid || '').trim().toUpperCase();
-            if (!normalized) return;
-            const id = `vid_${normalized}`;
-            if (embyDataSnapshot.movieIds.has(id)) records.set(id, { id, type: 'movie' });
-        });
-        return records;
-    }
-
-    async function loadRadarData(preloadedItems) {
-        const items = Array.isArray(preloadedItems)
-            ? preloadedItems
-            : await getAllFromStore('emby_data');
-        const movieIds = new Set();
-        const personNames = [];
-        items.forEach(item => {
-            if (item?.type === 'movie' && item.id) movieIds.add(String(item.id));
-            if (item?.type === 'person') {
-                const name = String(item.name || '').trim();
-                if (name) personNames.push(name);
-            }
-        });
-        embyDataSnapshot = { movieIds, movieCount: movieIds.size, personNames };
-        refreshKnownPersonsFromSnapshot();
-        libraryDataRevision += 1;
-        return embyDataSnapshot;
-    }
-
-    /**
-     * 从 Emby 拉取影片番号 + 熟人到 emby_data。
-     * @param {{ silent?: boolean, buttons?: HTMLElement[] }} [options]
-     * @returns {Promise<{ ok: boolean, movieCount?: number, personCount?: number, skipped?: boolean, message?: string }>}
-     */
-    function syncEmby(options = {}) {
-        const silent = !!options.silent;
-        const extraButtons = Array.isArray(options.buttons) ? options.buttons.filter(Boolean) : [];
-        const btns = [
-            document.getElementById('jlc-btn-sync'),
-            document.getElementById('jlc-wb-btn-sync'),
-            ...extraButtons
-        ].filter(Boolean);
-        const setSyncButtons = (text, disabled) => {
-            btns.forEach(btn => {
-                if (text != null) btn.innerText = text;
-                btn.disabled = !!disabled;
-            });
-        };
-        const notify = (msg, force) => {
-            if (silent && !force) return;
-            if (typeof showAlert === 'function') showAlert(msg, !!force);
-            else alert(msg);
-        };
-
-        if (!config.emby_url || !config.emby_key) {
-            notify('请先配置 Emby 信息！', true);
-            return Promise.resolve({ ok: false, skipped: true, message: '未配置 Emby' });
-        }
-        if (!db) {
-            notify('数据库未就绪，请稍后重试。', true);
-            return Promise.resolve({ ok: false, message: '数据库未就绪' });
-        }
-
-        setSyncButtons('⏳ 正在拼命拉取数据...', true);
-
-        return new Promise((resolve) => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: `${config.emby_url}/Items?api_key=${config.emby_key}&IncludeItemTypes=Movie&Recursive=true&Fields=Path`,
-                timeout: 20000,
-                onload: async (res) => {
-                    if (res.status !== 200) {
-                        notify('同步失败：无法连接 Emby，请检查地址或 Key。', true);
-                        setSyncButtons('🔄 立即同步 Emby', false);
-                        resolve({ ok: false, message: 'Emby HTTP ' + res.status });
-                        return;
-                    }
-                    let movies = [];
-                    try {
-                        movies = JSON.parse(res.responseText).Items.map(i => {
-                            const m = (String(i.Name || '') + String(i.Path || '')).match(/[a-zA-Z0-9]{2,}-[0-9]{2,}/);
-                            return m ? { id: `vid_${m[0].toUpperCase()}`, type: 'movie' } : null;
-                        }).filter(Boolean);
-                    } catch (e) {
-                        notify('Emby 影片列表解析失败。', true);
-                        setSyncButtons('🔄 立即同步 Emby', false);
-                        resolve({ ok: false, message: '影片列表解析失败' });
-                        return;
-                    }
-
-                    try {
-                        const tx = db.transaction('emby_data', 'readwrite');
-                        movies.forEach(m => tx.objectStore('emby_data').put(m));
-                        await new Promise((resOk, resErr) => {
-                            tx.oncomplete = () => resOk();
-                            tx.onerror = () => resErr(tx.error || new Error('emby_data 写入失败'));
-                        });
-                        markIdbStoreDirty('emby_data');
-                    } catch (e) {
-                        notify('写入 Emby 影片失败：' + (e?.message || e), true);
-                        setSyncButtons('🔄 立即同步 Emby', false);
-                        resolve({ ok: false, message: String(e?.message || e) });
-                        return;
-                    }
-
-                    setSyncButtons('⏳ 正在加载熟人名单...', true);
-                    GM_xmlhttpRequest({
-                        method: 'GET',
-                        url: `${config.emby_url}/Persons?api_key=${config.emby_key}&Recursive=true`,
-                        timeout: 20000,
-                        onload: async (pres) => {
-                            try {
-                                const items = JSON.parse(pres.responseText).Items || [];
-                                const persons = items.map(p => ({ id: `p_${p.Name}`, name: p.Name, type: 'person' }));
-                                const ptx = db.transaction('emby_data', 'readwrite');
-                                persons.forEach(p => ptx.objectStore('emby_data').put(p));
-                                await new Promise((resOk, resErr) => {
-                                    ptx.oncomplete = () => resOk();
-                                    ptx.onerror = () => resErr(ptx.error || new Error('熟人写入失败'));
-                                });
-                                markIdbStoreDirty('emby_data');
-                                if (!silent) notify('Emby 同步完成！');
-                                setSyncButtons('🔄 立即同步 Emby', false);
-                                await loadRadarData();
-                                try { refreshLibraryUI(); } catch (_) { /* ignore */ }
-                                try { refreshCommanderDecorations(); } catch (_) { /* ignore */ }
-                                resolve({ ok: true, movieCount: movies.length, personCount: persons.length });
-                            } catch (e) {
-                                notify('同步熟人名单失败：' + (e?.message || e), true);
-                                setSyncButtons('🔄 立即同步 Emby', false);
-                                resolve({ ok: false, message: String(e?.message || e) });
-                            }
-                        },
-                        onerror: () => {
-                            notify('同步熟人名单失败！', true);
-                            setSyncButtons('🔄 立即同步 Emby', false);
-                            resolve({ ok: false, message: '熟人网络错误' });
-                        }
-                    });
-                },
-                onerror: () => {
-                    notify('网络错误！', true);
-                    setSyncButtons('🔄 立即同步 Emby', false);
-                    resolve({ ok: false, message: 'Emby 网络错误' });
-                }
-            });
-        });
-    }
-
-    /**
-     * 页脚「立即同步」：先 Emby 拉库，再 WebDAV 推送 vault（含点击过的 videos）。
-     * @param {{ button?: HTMLElement }} [options]
-     */
-    async function syncEmbyAndWebDav(options = {}) {
-        const btn = options.button || null;
-        const original = btn ? btn.textContent : '';
-        const setBtn = (text, disabled) => {
-            if (!btn) return;
-            if (text != null) btn.textContent = text;
-            btn.disabled = !!disabled;
-        };
-        const parts = [];
-        let embyOk = true;
-        let wdOk = true;
-        try {
-            setBtn('⏳ Emby…', true);
-            const embyConfigured = !!(config.emby_url && config.emby_key);
-            if (embyConfigured) {
-                const er = await syncEmby({ silent: true, buttons: btn ? [btn] : [] });
-                if (er.ok) {
-                    parts.push('Emby 影片 ' + (er.movieCount || 0) + ' · 熟人 ' + (er.personCount || 0));
-                } else {
-                    embyOk = false;
-                    parts.push('Emby 失败：' + (er.message || '未知'));
-                }
-            } else {
-                parts.push('Emby 未配置（跳过）');
-            }
-
-            setBtn('⏳ WebDAV…', true);
-            const sync = typeof ensureCreamuSync === 'function' ? ensureCreamuSync() : null;
-            if (!sync) {
-                wdOk = false;
-                parts.push('WebDAV 模块未加载');
-            } else if (typeof sync.isConfigured === 'function' && !sync.isConfigured()) {
-                wdOk = false;
-                parts.push('WebDAV 未配置（请到 设置 → 服务 填写）');
-            } else {
-                // 确保最新本地数据进 vault（含刚拉的 emby_data / 点击/心动）
-                try { sync.markLocalDirty(); } catch (_) { /* ignore */ }
-                try {
-                    await sync.syncNow({ force: 'push' });
-                    parts.push('WebDAV 已推送（含点击/心动/追更/屏蔽词）');
-                } catch (e) {
-                    wdOk = false;
-                    parts.push('WebDAV 失败：' + (e?.message || e));
-                }
-            }
-
-            const msg = parts.join('\n');
-            if (typeof showAlert === 'function') showAlert(msg, !(embyOk && wdOk));
-            else alert(msg);
-            return { ok: embyOk && wdOk, parts };
-        } finally {
-            setBtn(original || '☁ 立即同步', false);
-        }
-    }
-
-    const TAG_CHAR_FOLD = {
-        '親': '亲', '姦': '奸', '義': '义', '継': '继', '繼': '继', '續': '续', '處': '处', '処': '处',
-        '戀': '恋', '慾': '欲', '婦': '妇', '專': '专', '屬': '属', '雙': '双', '單': '单', '體': '体',
-        '學': '学', '園': '园', '變': '变', '態': '态', '盜': '盗', '攝': '摄', '錄': '录', '寫': '写',
-        '癡': '痴', '實': '实', '戰': '战', '觸': '触', '發': '发', '調': '调', '產': '产', '業': '业',
-        '畫': '画', '龍': '龙', '豐': '丰'
-    };
-
-    function normalizeText(v) {
-        return String(v || '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
-    }
-
-    function normalizeTagText(v) {
-        return normalizeText(v).replace(/./gu, ch => TAG_CHAR_FOLD[ch] || ch);
-    }
-
-    function normalizeCode(v) {
-        return normalizeText(v).replace(/[^a-z0-9]+/g, '');
-    }
-
-    function uniqueTextList(list) {
-        const seen = new Set();
-        return (Array.isArray(list) ? list : [])
-            .map(x => String(x || '').trim())
-            .filter(Boolean)
-            .filter(x => {
-                const key = normalizeTagText(x);
-                if (!key || seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            });
-    }
-
-    function asTextList(v) {
-        if (Array.isArray(v)) return uniqueTextList(v.flatMap(x => asTextList(x)));
-        if (typeof v === 'string' || typeof v === 'number') {
-            return String(v).split(/[\n,，]/).map(x => x.trim()).filter(Boolean);
-        }
-        if (v && typeof v === 'object') {
-            const candidateKeys = ['name', 'title', 'label', 'text', 'value', 'genre', 'tag', 'category', 'type', 'display_name', 'displayName'];
-            for (const key of candidateKeys) {
-                if (key in v) {
-                    const list = asTextList(v[key]);
-                    if (list.length) return list;
-                }
-            }
-        }
-        return [];
-    }
-
-    function extractMetaTubeData(payload) {
-        const root = payload && typeof payload === 'object' && 'data' in payload ? payload.data : payload;
-        if (!root || typeof root !== 'object') return root;
-        if (Array.isArray(root)) return root;
-        const listCandidate = ['items', 'results', 'rows', 'list', 'movies', 'hits', 'records']
-            .map(key => root[key])
-            .find(Array.isArray);
-        return listCandidate || root;
-    }
-
-    function normalizeReleaseDate(value) {
-        if (value == null) return '';
-        const text = String(value).trim();
-        if (!text) return '';
-        const iso = text.match(/\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/);
-        if (iso) return iso[0].replace(/[/.]/g, '-');
-        const compact = text.match(/\d{8}/);
-        if (compact) return `${compact[0].slice(0, 4)}-${compact[0].slice(4, 6)}-${compact[0].slice(6, 8)}`;
-        return text;
-    }
-
-    function pickReleaseDate(source) {
-        if (!source || typeof source !== 'object') return '';
-        const candidates = [
-            source.release_date,
-            source.releaseDate,
-            source.premiered,
-            source.publish_date,
-            source.publishDate,
-            source.pub_date,
-            source.pubDate,
-            source.date,
-            source.air_date,
-            source.airDate,
-            source.issued_at,
-            source.issuedAt
-        ];
-        for (const value of candidates) {
-            const normalized = normalizeReleaseDate(value);
-            if (normalized) return normalized;
-        }
-        return '';
-    }
-
-    function normalizeMetaRecord(raw) {
-        if (!raw || typeof raw !== 'object') return raw;
-        const nested = [raw.movie, raw.item, raw.result, raw.video].find(v => v && typeof v === 'object') || null;
-        const merged = nested ? { ...raw, ...nested } : { ...raw };
-        const actors = uniqueTextList([
-            ...asTextList(merged.actors),
-            ...asTextList(merged.actor),
-            ...asTextList(merged.actresses),
-            ...asTextList(merged.cast),
-            ...asTextList(merged.performers),
-            ...asTextList(merged.performer),
-            ...asTextList(merged.stars),
-            ...asTextList(merged.persons)
-        ]);
-        const genres = uniqueTextList([
-            ...asTextList(merged.genres),
-            ...asTextList(merged.genre),
-            ...asTextList(merged.tags),
-            ...asTextList(merged.tag),
-            ...asTextList(merged.categories),
-            ...asTextList(merged.category),
-            ...asTextList(merged.labels),
-            ...asTextList(merged.label),
-            ...asTextList(merged.types),
-            ...asTextList(merged.type)
-        ]);
-        const number = merged.number || merged.code || merged.no || merged.movie_number || merged.movieNo || merged.movie_id || merged.id || '';
-        const releaseDate = pickReleaseDate(merged) || pickReleaseDate(raw);
-        return { ...merged, actors, genres, number, releaseDate };
-    }
-
-    function tagMatches(source, keyword) {
-        const src = normalizeText(source);
-        const key = normalizeText(keyword);
-        if (!src || !key) return false;
-        if (src.includes(key)) return true;
-        const foldedSrc = normalizeTagText(source);
-        const foldedKey = normalizeTagText(keyword);
-        return !!foldedSrc && !!foldedKey && foldedSrc.includes(foldedKey);
-    }
-
-    async function requestJSON(url, timeout = 15000) {
-        const requestTimeout = Math.max(250, Number(timeout) || 15000);
-        return new Promise(r => {
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url,
-                timeout: requestTimeout,
-                onload: (res) => {
-                    try {
-                        r(JSON.parse(res.responseText));
-                    } catch (e) {
-                        r(null);
-                    }
-                },
-                onerror: () => r(null),
-                ontimeout: () => r(null)
-            });
-        });
-    }
-
-    function escapeHtml(value) {
-        return String(value ?? '').replace(/[&<>\"']/g, ch => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;'
-        }[ch]));
     }
 // @@creamu-part:12-resource-services
     function uniqueLinkObjects(list) {
@@ -1578,6 +1070,7 @@
         if (result.blockedByChallenge || result.error === 'challenge') return 'Cloudflare 验证';
         if (result.status) return 'HTTP ' + result.status;
         if (result.error === 'timeout') return '请求超时';
+        if (result.error === 'abort') return '请求已取消';
         if (result.error === 'network') return '网络失败';
         return fallback || '请求失败';
     }
@@ -1628,60 +1121,238 @@
             });
     }
 
-    function buildBlogJavSearchKeyword(avid) {
-        const code = normalizeResourceAvid(avid);
-        if (!code) return '';
-        let keyword = code.replace(/-/g, '+');
-        if (!/\s+/.test(keyword) && /^(?!\d+$)(?![A-Z]+$)[0-9A-Z+]+$/i.test(keyword)) {
-            const number = keyword.match(/\d+$/)?.[0] || '';
-            if (number) {
-                const prefix = keyword.slice(0, -number.length).replace(/\++$/g, '');
-                keyword = prefix ? (prefix + '+' + number) : number;
-            }
-        }
-        return keyword.replace(/\+{2,}/g, '+').trim();
+    const resourceTrailerCache = new Map();
+    const resourceScreenshotCache = new Map();
+    const resourceScreenshotInfoCache = new Map();
+    const resourceMagnetCache = new Map();
+    const resourceMissAVCache = new Map();
+    const resourceFalenoCache = new Map();
+    const resourceMgsCache = new Map();
+
+    function clearTrailerResourceCaches(avid) {
+        const key = normalizeResourceAvid(avid);
+        if (!key) return;
+        resourceTrailerCache.delete(`${key}::missav-status`);
+        resourceTrailerCache.delete(`${key}::dmm-only`);
+        resourceMissAVCache.delete(key);
+        resourceFalenoCache.delete(key);
+        resourceMgsCache.delete(key);
     }
 
-    function buildJavStoreSearchUrl(avid) {
-        const code = normalizeResourceAvid(avid);
-        if (!code) return '';
-        return 'https://javstore.net/search?q=' + encodeURIComponent(code);
+    function clearDetailResourceCaches(avid) {
+        const key = normalizeResourceAvid(avid);
+        if (!key) return;
+        clearTrailerResourceCaches(key);
+        resourceScreenshotCache.delete(key);
+        resourceScreenshotInfoCache.delete(key);
+        resourceMagnetCache.delete(key);
     }
 
-    function buildSiteBingSearchUrl(site, keyword, extra = '') {
-        const query = ('site:' + String(site || '').trim() + ' ' + String(keyword || '').trim()).trim();
-        if (!query || !site) return '';
-        return 'https://www.bing.com/search?q=' + encodeURIComponent(query) + (extra || '');
-    }
-
-    function buildJavStoreLookupUrl(avid) {
-        const code = normalizeResourceAvid(avid);
-        if (!code) return '';
-        return buildJavStoreSearchUrl(code);
-    }
-
-    function extractJavStoreSearchEntries(responseText, avid) {
-        const text = String(responseText || '');
-        if (!text) return [];
-        const entries = [];
-        const regex = /<a\b[^>]*href=["']([^"']+)["'][^>]*?(?:title=["']([^"']*)["'])?[^>]*>([\s\S]*?)<\/a>/ig;
-        let match;
-        while ((match = regex.exec(text))) {
-            const href = normalizeMediaUrl(match[1], 'https://javstore.net/');
-            const title = stripHtmlTags(match[2] || match[3]);
-            if (!href || !/javstore\.net/i.test(href) || !title || (avid && !isLikelyAvidMatch(title, avid))) continue;
-            entries.push({ title: 'JavStore · ' + title, href, provider: 'javstore', note: '站内搜索' });
-        }
-        const scoreEntry = (item) => {
-            const title = String(item?.title || '');
-            const hdScore = /\b(?:FHD|4K|UHD)\b/i.test(title) ? 40 : 0;
-            const variantScore = /\b(?:Uncensored|Mosaic)\b/i.test(title) ? 8 : 0;
-            const idScore = Number((String(item?.href || '').match(/(\d{4,})/) || [])[1] || 0) / 100000000;
-            return hdScore + variantScore + idScore;
+    function getResourceToggleStates(currentConfig = config) {
+        return {
+            resource_center: currentConfig.resource_center !== false,
+            resource_trailer: currentConfig.resource_trailer !== false,
+            resource_screenshot: currentConfig.resource_screenshot !== false,
+            resource_screenshot_auto: !!currentConfig.resource_screenshot_auto,
+            resource_magnet: currentConfig.resource_magnet !== false,
         };
-        return uniqueResourceEntries(entries).sort((a, b) => scoreEntry(b) - scoreEntry(a));
     }
 
+    function syncResourceSettingInputs(container = document.getElementById('jlc-resource-settings')) {
+        if (!container) return;
+        const toggles = getResourceToggleStates(config);
+        Object.entries(toggles).forEach(([key, value]) => {
+            const input = container.querySelector('[data-jlc-resource-key="' + key + '"]');
+            if (input) input.checked = !!value;
+        });
+    }
+// @@creamu-part:12-resource-transport
+    async function requestPage(url, extra = {}) {
+        return new Promise(resolve => {
+            let settled = false;
+            const finish = (result) => {
+                if (settled) return;
+                settled = true;
+                resolve(result);
+            };
+            const failed = (error) => ({
+                ok: false,
+                status: 0,
+                responseText: '',
+                finalUrl: url,
+                error
+            });
+            const options = Object.assign({}, extra, {
+                method: extra.method || 'GET',
+                url,
+                timeout: extra.timeout === undefined ? 15000 : extra.timeout,
+                onload: (res) => finish({
+                    ok: Number(res?.status || 0) >= 200 && Number(res?.status || 0) < 400,
+                    status: Number(res?.status || 0),
+                    responseText: String(res?.responseText || ''),
+                    finalUrl: res?.finalUrl || url,
+                    error: ''
+                }),
+                onerror: () => finish(failed('network')),
+                ontimeout: () => finish(failed('timeout')),
+                onabort: () => finish(failed('abort'))
+            });
+            try {
+                GM_xmlhttpRequest(options);
+            } catch (_) {
+                finish(failed('network'));
+            }
+        });
+    }
+
+    async function requestText(url, extra = {}) {
+        const result = await requestPage(url, extra);
+        return result.ok ? (result.responseText || '') : '';
+    }
+
+    function sanitizeBrowserFetchHeaders(headers = {}) {
+        const sanitized = Object.assign({}, headers || {});
+        const referrer = sanitized.Referer || sanitized.referer || '';
+        delete sanitized.Referer;
+        delete sanitized.referer;
+        return {
+            headers: Object.keys(sanitized).length ? sanitized : undefined,
+            referrer: compactText(referrer || '')
+        };
+    }
+
+    function isLikelyBotGuardResponse(text = '') {
+        const normalized = compactText(String(text || '')).toLowerCase();
+        if (!normalized) return false;
+        return /(performing security verification|enable javascript and cookies to continue|attention required|cf-browser-verification|just a moment|why have i been blocked|checking if the site connection is secure|\b403 forbidden\b)/i.test(normalized);
+    }
+
+    async function requestPageWithHiddenFrame(url, extra = {}) {
+        const target = parseTrackingUrl(url, location.href);
+        const current = parseTrackingUrl(location.href, location.href);
+        if (!target || !current || target.origin !== current.origin || String(extra.method || 'GET').toUpperCase() !== 'GET') {
+            return requestPage(url, extra);
+        }
+        const mountHost = document.body || document.documentElement;
+        if (!mountHost) return requestPage(url, extra);
+        const timeout = Number(extra.timeout || 0) || 15000;
+        return new Promise(resolve => {
+            let settled = false;
+            const iframe = document.createElement('iframe');
+            iframe.setAttribute('aria-hidden', 'true');
+            iframe.tabIndex = -1;
+            iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;border:0;';
+            const finalize = (result) => {
+                if (settled) return;
+                settled = true;
+                if (timer) window.clearTimeout(timer);
+                iframe.removeEventListener('load', onLoad);
+                iframe.removeEventListener('error', onError);
+                iframe.remove();
+                resolve(result);
+            };
+            const onLoad = () => {
+                try {
+                    const frameWindow = iframe.contentWindow;
+                    const frameDoc = iframe.contentDocument || frameWindow?.document;
+                    const finalUrl = compactText(frameWindow?.location?.href || iframe.src || target.href) || target.href;
+                    const responseText = frameDoc?.documentElement?.outerHTML || '';
+                    const blocked = isLikelyBotGuardResponse(responseText);
+                    finalize({
+                        ok: !!responseText && !blocked,
+                        status: blocked ? 403 : 200,
+                        responseText,
+                        finalUrl,
+                        error: blocked ? 'forbidden' : ''
+                    });
+                } catch (error) {
+                    finalize({ ok: false, status: 0, responseText: '', finalUrl: target.href, error: 'network' });
+                }
+            };
+            const onError = () => finalize({ ok: false, status: 0, responseText: '', finalUrl: target.href, error: 'network' });
+            const timer = window.setTimeout(() => {
+                finalize({ ok: false, status: 0, responseText: '', finalUrl: target.href, error: 'timeout' });
+            }, timeout);
+            iframe.addEventListener('load', onLoad);
+            iframe.addEventListener('error', onError);
+            mountHost.appendChild(iframe);
+            iframe.src = target.href;
+        });
+    }
+
+    async function requestPageWithBrowserFetch(url, extra = {}) {
+        const target = parseTrackingUrl(url, location.href);
+        const current = parseTrackingUrl(location.href, location.href);
+        if (!target || !current || target.origin !== current.origin || String(extra.method || 'GET').toUpperCase() !== 'GET') {
+            return requestPage(url, extra);
+        }
+        const timeout = Number(extra.timeout || 0) || 15000;
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = controller ? window.setTimeout(() => controller.abort(), timeout) : null;
+        const prepared = sanitizeBrowserFetchHeaders(extra.headers || {});
+        let fetchResult = null;
+        try {
+            const response = await fetch(target.href, {
+                method: 'GET',
+                credentials: 'include',
+                redirect: 'follow',
+                cache: 'no-store',
+                headers: prepared.headers,
+                referrer: prepared.referrer || undefined,
+                signal: controller?.signal
+            });
+            const responseText = await response.text();
+            fetchResult = {
+                ok: response.ok && !isLikelyBotGuardResponse(responseText),
+                status: response.status || 0,
+                responseText: responseText || '',
+                finalUrl: response.url || target.href,
+                error: ''
+            };
+        } catch (error) {
+            const message = String(error?.name || error?.message || '').toLowerCase();
+            fetchResult = {
+                ok: false,
+                status: 0,
+                responseText: '',
+                finalUrl: target.href,
+                error: message.includes('abort') ? 'timeout' : 'network'
+            };
+        } finally {
+            if (timer) window.clearTimeout(timer);
+        }
+        const shouldTryHiddenFrame = !fetchResult.ok
+            || !fetchResult.responseText
+            || fetchResult.status === 401
+            || fetchResult.status === 403
+            || isLikelyBotGuardResponse(fetchResult.responseText);
+        if (!shouldTryHiddenFrame) return fetchResult;
+        const frameResult = await requestPageWithHiddenFrame(target.href, extra);
+        if (frameResult.ok && frameResult.responseText) return frameResult;
+        const gmResult = await requestPage(url, extra);
+        if (gmResult.ok && gmResult.responseText && !isLikelyBotGuardResponse(gmResult.responseText)) return gmResult;
+        if (fetchResult.ok && fetchResult.responseText && !isLikelyBotGuardResponse(fetchResult.responseText)) return fetchResult;
+        return frameResult.status ? frameResult : (gmResult.status ? gmResult : fetchResult);
+    }
+
+    async function probeMediaUrl(url) {
+        const head = await requestPage(url, { method: 'HEAD', timeout: 7000 });
+        if (head.ok) {
+            return { ok: true, status: head.status || 200, state: 'ok', note: describeRequestStatus(head, 'HTTP 200') };
+        }
+        const range = await requestPage(url, { method: 'GET', timeout: 7000, headers: { Range: 'bytes=0-0' } });
+        if (range.ok || range.status === 206) {
+            return { ok: true, status: range.status || 206, state: 'ok', note: describeRequestStatus(range, 'HTTP 206') };
+        }
+        const failed = range.status ? range : head;
+        const state = failed.status === 403 ? 'blocked' : (failed.status === 404 ? 'empty' : 'error');
+        return { ok: false, status: failed.status || 0, state, note: describeRequestStatus(failed) };
+    }
+
+    async function headRequestOK(url) {
+        return (await probeMediaUrl(url)).ok;
+    }
+// @@creamu-part:12-resource-trailer-providers
     function buildMissAVPageCandidates(avid) {
         const code = normalizeResourceAvid(avid);
         if (!code) return [];
@@ -2111,6 +1782,153 @@
         ]);
     }
 
+    function extractMissAVSearchLinks(responseText, avid) {
+        const text = String(responseText || '');
+        const code = normalizeResourceAvid(avid);
+        if (!text || !code) return [];
+        const escaped = code.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+        const found = [];
+        const pushByRegex = (label, kind, regex, rejectPatterns = []) => {
+            let match;
+            while ((match = regex.exec(text))) {
+                const href = match[1];
+                if (!href || rejectPatterns.some(pattern => pattern.test(href)) || /\/search\//i.test(href)) continue;
+                found.push({ label, href, kind });
+            }
+        };
+        pushByRegex('MissAV 无码流出', 'uncensored', new RegExp("href=[\"']([^\"']*" + escaped + "[^\"']*uncensored-leak[^\"']*)[\"']", 'ig'));
+        pushByRegex(
+            'MissAV 有码',
+            'censored',
+            new RegExp("href=[\"']([^\"']*(?:\\/cn\\/)?[^\"']*" + escaped + "[^\"']*)[\"']", 'ig'),
+            [/uncensored-leak/i, /chinese-subtitle/i]
+        );
+        const uniqueByHref = new Set();
+        return uniqueLinkObjects(found.map(item => ({
+            label: item.label,
+            href: item.href.startsWith('http') ? item.href : new URL(item.href, 'https://missav.ws').href,
+            note: '',
+            kind: item.kind
+        }))).filter(item => {
+            const safeHref = sanitizeMissAVPageUrl(item.href, code, 'https://missav.ws/');
+            if (!safeHref) return false;
+            item.href = safeHref;
+            if (uniqueByHref.has(item.href)) return false;
+            uniqueByHref.add(item.href);
+            return true;
+        });
+    }
+
+    function extractMissAVEvalM3U8(responseText) {
+        const text = String(responseText || '');
+        if (!text) return '';
+        const snippets = text.match(/eval\(function\(p,a,c,k,e,[\s\S]*?\)\)/ig) || [];
+        const lineHits = text.split('\n').map(line => line.trim()).filter(line => line.startsWith('eval(function('));
+        for (const snippet of [...snippets, ...lineHits].slice(0, 5)) {
+            try {
+                const decoded = new Function('return ' + snippet.trim())();
+                const url = normalizeMediaUrl(decoded);
+                if (url && /\.(?:m3u8|mp4)(?:$|[?#])/i.test(url)) return url;
+            } catch (error) {}
+        }
+        return '';
+    }
+
+    function extractMissAVMediaCandidates(responseText) {
+        const text = String(responseText || '');
+        if (!text) return [];
+        const found = [];
+        const push = (href, note = '') => {
+            const normalized = normalizeMediaUrl(href);
+            if (!normalized) return;
+            const isM3U8 = /\.m3u8(?:$|[?#])/i.test(normalized);
+            found.push({
+                label: isM3U8 ? 'MissAV M3U8' : 'MissAV MP4',
+                href: normalized,
+                note,
+                kind: 'missav-media'
+            });
+        };
+        const evalUrl = extractMissAVEvalM3U8(text);
+        if (evalUrl) push(evalUrl, 'eval 解码');
+        const patterns = [
+            /<video[^>]+(?:data-src|src)=["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
+            /<source[^>]+src=["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
+            /["'](https?:\/\/[^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
+            /["'](\/\/[^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
+            /["'](\/[^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
+        ];
+        for (const pattern of patterns) {
+            let match;
+            while ((match = pattern.exec(text))) {
+                push(match[1], '页面提取');
+            }
+        }
+        const list = uniqueLinkObjects(found);
+        return list.sort((a, b) => {
+            const score = (item) => (/\.mp4(?:$|[?#])/i.test(item.href) ? 20 : 10) + (/eval/i.test(item.note) ? 3 : 0);
+            return score(b) - score(a);
+        });
+    }
+
+    function extractMissAVVideoUrl(responseText) {
+        return extractMissAVMediaCandidates(responseText)[0]?.href || '';
+    }
+// @@creamu-part:12-resource-link-providers
+    function buildBlogJavSearchKeyword(avid) {
+        const code = normalizeResourceAvid(avid);
+        if (!code) return '';
+        let keyword = code.replace(/-/g, '+');
+        if (!/\s+/.test(keyword) && /^(?!\d+$)(?![A-Z]+$)[0-9A-Z+]+$/i.test(keyword)) {
+            const number = keyword.match(/\d+$/)?.[0] || '';
+            if (number) {
+                const prefix = keyword.slice(0, -number.length).replace(/\++$/g, '');
+                keyword = prefix ? (prefix + '+' + number) : number;
+            }
+        }
+        return keyword.replace(/\+{2,}/g, '+').trim();
+    }
+
+    function buildJavStoreSearchUrl(avid) {
+        const code = normalizeResourceAvid(avid);
+        if (!code) return '';
+        return 'https://javstore.net/search?q=' + encodeURIComponent(code);
+    }
+
+    function buildSiteBingSearchUrl(site, keyword, extra = '') {
+        const query = ('site:' + String(site || '').trim() + ' ' + String(keyword || '').trim()).trim();
+        if (!query || !site) return '';
+        return 'https://www.bing.com/search?q=' + encodeURIComponent(query) + (extra || '');
+    }
+
+    function buildJavStoreLookupUrl(avid) {
+        const code = normalizeResourceAvid(avid);
+        if (!code) return '';
+        return buildJavStoreSearchUrl(code);
+    }
+
+    function extractJavStoreSearchEntries(responseText, avid) {
+        const text = String(responseText || '');
+        if (!text) return [];
+        const entries = [];
+        const regex = /<a\b[^>]*href=["']([^"']+)["'][^>]*?(?:title=["']([^"']*)["'])?[^>]*>([\s\S]*?)<\/a>/ig;
+        let match;
+        while ((match = regex.exec(text))) {
+            const href = normalizeMediaUrl(match[1], 'https://javstore.net/');
+            const title = stripHtmlTags(match[2] || match[3]);
+            if (!href || !/javstore\.net/i.test(href) || !title || (avid && !isLikelyAvidMatch(title, avid))) continue;
+            entries.push({ title: 'JavStore · ' + title, href, provider: 'javstore', note: '站内搜索' });
+        }
+        const scoreEntry = (item) => {
+            const title = String(item?.title || '');
+            const hdScore = /\b(?:FHD|4K|UHD)\b/i.test(title) ? 40 : 0;
+            const variantScore = /\b(?:Uncensored|Mosaic)\b/i.test(title) ? 8 : 0;
+            const idScore = Number((String(item?.href || '').match(/(\d{4,})/) || [])[1] || 0) / 100000000;
+            return hdScore + variantScore + idScore;
+        };
+        return uniqueResourceEntries(entries).sort((a, b) => scoreEntry(b) - scoreEntry(a));
+    }
+
     function buildExternalResourceLinks(avid, currentSite = '') {
         const code = normalizeResourceAvid(avid);
         if (!code) return [];
@@ -2147,6 +1965,123 @@
         ]);
     }
 
+    function extractBingSearchLinks(responseText, site) {
+        const text = String(responseText || '');
+        const host = normalizeText(site).replace(/^https?:\/\//, '').replace(/\/$/, '');
+        if (!text || !host) return [];
+        const links = [];
+        const regex = /<li\b[^>]*class=["'][^"']*\bb_algo\b[^"']*["'][^>]*>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/ig;
+        let match;
+        while ((match = regex.exec(text))) {
+            const href = normalizeMediaUrl(match[1], 'https://' + host + '/');
+            if (!href || !normalizeText(href).includes(host)) continue;
+            links.push({ label: stripHtmlTags(match[2]) || host, href, note: 'Bing' });
+        }
+        return uniqueLinkObjects(links);
+    }
+
+    function extractBlogJavSearchEntries(responseText, avid) {
+        const text = String(responseText || '');
+        if (!text) return [];
+        const entries = [];
+        const regex = /<[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/ig;
+        let match;
+        while ((match = regex.exec(text))) {
+            const title = stripHtmlTags(match[2]);
+            if (!title || (avid && !isLikelyAvidMatch(title, avid))) continue;
+            entries.push({ title: 'BlogJav · ' + title, href: match[1], provider: 'blogjav' });
+        }
+        return uniqueResourceEntries(entries).sort((a, b) => {
+            const score = (item) => (/\b(?:FHD|4K|UHD)\b/i.test(item.title) ? 20 : 0) + item.title.length;
+            return score(b) - score(a);
+        });
+    }
+
+    function extractBlogJavScreenshotCandidates(responseText) {
+        const text = String(responseText || '');
+        if (!text) return [];
+        const found = [];
+        const push = (href) => {
+            const normalized = normalizePreviewImageUrl(href, 'https://blogjav.net/');
+            if (!normalized || !/\.(?:jpe?g|png|webp)(?:$|[?#])/i.test(normalized)) return;
+            found.push(normalized);
+        };
+        const imgRegex = /<img\b[^>]*>/ig;
+        let match;
+        while ((match = imgRegex.exec(text))) {
+            const tag = match[0];
+            if (!/(pixhost|imagetwist|thumbs|images|\.th\.)/i.test(tag)) continue;
+            for (const attr of ['data-lazy-src', 'data-src', 'src']) {
+                const attrMatch = tag.match(new RegExp(attr + '=["\\\']([^"\\\']+)["\\\']', 'i'));
+                if (attrMatch?.[1]) push(attrMatch[1]);
+            }
+        }
+        const linkRegex = /<a\b[^>]*href=["']([^"']+\.(?:jpe?g|jpeg|png|webp)[^"']*)["'][^>]*>/ig;
+        while ((match = linkRegex.exec(text))) {
+            push(match[1]);
+        }
+        return Array.from(new Set(found));
+    }
+
+    function extractJavStoreScreenshotCandidates(responseText, avid = '') {
+        const text = String(responseText || '');
+        if (!text) return [];
+        const found = [];
+        const dmmIds = new Set();
+        const push = (href) => {
+            const normalized = normalizePreviewImageUrl(href, 'https://javstore.net/');
+            if (!normalized || !/\.(?:jpe?g|png|webp)(?:$|[?#])/i.test(normalized)) return;
+            found.push(normalized);
+            const dmmMatch = normalized.match(/https?:\/\/pics\.dmm\.co\.jp\/digital\/video\/([a-z0-9_]+)\/\1jp-(\d+)\.jpg/i);
+            if (dmmMatch?.[1]) dmmIds.add(dmmMatch[1].toLowerCase());
+        };
+        const pushDmmSequence = (id) => {
+            const token = String(id || '').trim().toLowerCase();
+            if (!token) return;
+            for (let i = 1; i <= 10; i += 1) {
+                push('https://pics.dmm.co.jp/digital/video/' + token + '/' + token + 'jp-' + i + '.jpg');
+            }
+        };
+        const anchorRegex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/ig;
+        let match;
+        while ((match = anchorRegex.exec(text))) {
+            const href = match[1];
+            const body = match[2];
+            if (/pixhost|imagetwist|pics\.dmm\.co\.jp|\.(?:jpe?g|png|webp)/i.test(href) || /<img[^>]+(?:src|data-src)=["'][^"']*(pixhost|imagetwist|pics\.dmm\.co\.jp|\.th\.)/i.test(body)) {
+                push(href);
+            }
+            const imgMatch = body.match(/<img[^>]+(?:data-src|src)=["']([^"']+)["']/i);
+            if (imgMatch?.[1]) push(imgMatch[1]);
+        }
+        const dmmDirectRegex = /https?:\/\/pics\.dmm\.co\.jp\/digital\/video\/([a-z0-9_]+)\/\1jp-(\d+)\.jpg/ig;
+        while ((match = dmmDirectRegex.exec(text))) {
+            push(match[0]);
+        }
+        const code = normalizeResourceAvid(avid);
+        const matchedCode = code.match(/^([A-Z0-9]{2,10})-(\d{2,6})$/);
+        if (matchedCode) {
+            const prefix = matchedCode[1].toLowerCase();
+            const number = String(parseInt(matchedCode[2], 10) || 0);
+            const tokenRegex = new RegExp('\\b(' + prefix + '0*' + number + ')(?![a-z])\\b', 'ig');
+            while ((match = tokenRegex.exec(text))) {
+                dmmIds.add(String(match[1] || '').toLowerCase());
+            }
+        }
+        Array.from(dmmIds).forEach(pushDmmSequence);
+        return Array.from(new Set(found));
+    }
+
+    async function searchSiteViaBing(site, keyword, extra = '') {
+        const query = ('site:' + site + ' ' + String(keyword || '').trim()).trim();
+        const searchUrl = 'https://www.bing.com/search?q=' + encodeURIComponent(query) + (extra || '');
+        const response = await requestPage(searchUrl);
+        return {
+            searchUrl,
+            response,
+            links: extractBingSearchLinks(response.responseText, site)
+        };
+    }
+// @@creamu-part:12-resource-magnet-providers
     function normalizeMagnetHref(href) {
         const decoded = decodeHtmlEntities(String(href || '').trim()).replace(/\s+/g, '');
         if (!/^magnet:\?/i.test(decoded)) return '';
@@ -2285,7 +2220,6 @@
             return scoreB - scoreA;
         });
     }
-
     function extractTorrentKittyMagnetEntries(responseText, avid) {
         const text = String(responseText || '');
         if (!text) return [];
@@ -2389,429 +2323,6 @@
             return scoreB - scoreA;
         });
     }
-
-    function extractMissAVSearchLinks(responseText, avid) {
-        const text = String(responseText || '');
-        const code = normalizeResourceAvid(avid);
-        if (!text || !code) return [];
-        const escaped = code.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
-        const found = [];
-        const pushByRegex = (label, kind, regex, rejectPatterns = []) => {
-            let match;
-            while ((match = regex.exec(text))) {
-                const href = match[1];
-                if (!href || rejectPatterns.some(pattern => pattern.test(href)) || /\/search\//i.test(href)) continue;
-                found.push({ label, href, kind });
-            }
-        };
-        pushByRegex('MissAV 无码流出', 'uncensored', new RegExp("href=[\"']([^\"']*" + escaped + "[^\"']*uncensored-leak[^\"']*)[\"']", 'ig'));
-        pushByRegex(
-            'MissAV 有码',
-            'censored',
-            new RegExp("href=[\"']([^\"']*(?:\\/cn\\/)?[^\"']*" + escaped + "[^\"']*)[\"']", 'ig'),
-            [/uncensored-leak/i, /chinese-subtitle/i]
-        );
-        const uniqueByHref = new Set();
-        return uniqueLinkObjects(found.map(item => ({
-            label: item.label,
-            href: item.href.startsWith('http') ? item.href : new URL(item.href, 'https://missav.ws').href,
-            note: '',
-            kind: item.kind
-        }))).filter(item => {
-            const safeHref = sanitizeMissAVPageUrl(item.href, code, 'https://missav.ws/');
-            if (!safeHref) return false;
-            item.href = safeHref;
-            if (uniqueByHref.has(item.href)) return false;
-            uniqueByHref.add(item.href);
-            return true;
-        });
-    }
-
-    function extractMissAVEvalM3U8(responseText) {
-        const text = String(responseText || '');
-        if (!text) return '';
-        const snippets = text.match(/eval\(function\(p,a,c,k,e,[\s\S]*?\)\)/ig) || [];
-        const lineHits = text.split('\n').map(line => line.trim()).filter(line => line.startsWith('eval(function('));
-        for (const snippet of [...snippets, ...lineHits].slice(0, 5)) {
-            try {
-                const decoded = new Function('return ' + snippet.trim())();
-                const url = normalizeMediaUrl(decoded);
-                if (url && /\.(?:m3u8|mp4)(?:$|[?#])/i.test(url)) return url;
-            } catch (error) {}
-        }
-        return '';
-    }
-
-    function extractMissAVMediaCandidates(responseText) {
-        const text = String(responseText || '');
-        if (!text) return [];
-        const found = [];
-        const push = (href, note = '') => {
-            const normalized = normalizeMediaUrl(href);
-            if (!normalized) return;
-            const isM3U8 = /\.m3u8(?:$|[?#])/i.test(normalized);
-            found.push({
-                label: isM3U8 ? 'MissAV M3U8' : 'MissAV MP4',
-                href: normalized,
-                note,
-                kind: 'missav-media'
-            });
-        };
-        const evalUrl = extractMissAVEvalM3U8(text);
-        if (evalUrl) push(evalUrl, 'eval 解码');
-        const patterns = [
-            /<video[^>]+(?:data-src|src)=["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
-            /<source[^>]+src=["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
-            /["'](https?:\/\/[^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
-            /["'](\/\/[^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
-            /["'](\/[^"']+\.(?:mp4|m3u8)[^"']*)["']/ig,
-        ];
-        for (const pattern of patterns) {
-            let match;
-            while ((match = pattern.exec(text))) {
-                push(match[1], '页面提取');
-            }
-        }
-        const list = uniqueLinkObjects(found);
-        return list.sort((a, b) => {
-            const score = (item) => (/\.mp4(?:$|[?#])/i.test(item.href) ? 20 : 10) + (/eval/i.test(item.note) ? 3 : 0);
-            return score(b) - score(a);
-        });
-    }
-
-    function extractMissAVVideoUrl(responseText) {
-        return extractMissAVMediaCandidates(responseText)[0]?.href || '';
-    }
-
-    function extractBingSearchLinks(responseText, site) {
-        const text = String(responseText || '');
-        const host = normalizeText(site).replace(/^https?:\/\//, '').replace(/\/$/, '');
-        if (!text || !host) return [];
-        const links = [];
-        const regex = /<li\b[^>]*class=["'][^"']*\bb_algo\b[^"']*["'][^>]*>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/ig;
-        let match;
-        while ((match = regex.exec(text))) {
-            const href = normalizeMediaUrl(match[1], 'https://' + host + '/');
-            if (!href || !normalizeText(href).includes(host)) continue;
-            links.push({ label: stripHtmlTags(match[2]) || host, href, note: 'Bing' });
-        }
-        return uniqueLinkObjects(links);
-    }
-
-    function extractBlogJavSearchEntries(responseText, avid) {
-        const text = String(responseText || '');
-        if (!text) return [];
-        const entries = [];
-        const regex = /<[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>\s*<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/ig;
-        let match;
-        while ((match = regex.exec(text))) {
-            const title = stripHtmlTags(match[2]);
-            if (!title || (avid && !isLikelyAvidMatch(title, avid))) continue;
-            entries.push({ title: 'BlogJav · ' + title, href: match[1], provider: 'blogjav' });
-        }
-        return uniqueResourceEntries(entries).sort((a, b) => {
-            const score = (item) => (/\b(?:FHD|4K|UHD)\b/i.test(item.title) ? 20 : 0) + item.title.length;
-            return score(b) - score(a);
-        });
-    }
-
-    function extractBlogJavScreenshotCandidates(responseText) {
-        const text = String(responseText || '');
-        if (!text) return [];
-        const found = [];
-        const push = (href) => {
-            const normalized = normalizePreviewImageUrl(href, 'https://blogjav.net/');
-            if (!normalized || !/\.(?:jpe?g|png|webp)(?:$|[?#])/i.test(normalized)) return;
-            found.push(normalized);
-        };
-        const imgRegex = /<img\b[^>]*>/ig;
-        let match;
-        while ((match = imgRegex.exec(text))) {
-            const tag = match[0];
-            if (!/(pixhost|imagetwist|thumbs|images|\.th\.)/i.test(tag)) continue;
-            for (const attr of ['data-lazy-src', 'data-src', 'src']) {
-                const attrMatch = tag.match(new RegExp(attr + '=["\\\']([^"\\\']+)["\\\']', 'i'));
-                if (attrMatch?.[1]) push(attrMatch[1]);
-            }
-        }
-        const linkRegex = /<a\b[^>]*href=["']([^"']+\.(?:jpe?g|jpeg|png|webp)[^"']*)["'][^>]*>/ig;
-        while ((match = linkRegex.exec(text))) {
-            push(match[1]);
-        }
-        return Array.from(new Set(found));
-    }
-
-    function extractJavStoreScreenshotCandidates(responseText, avid = '') {
-        const text = String(responseText || '');
-        if (!text) return [];
-        const found = [];
-        const dmmIds = new Set();
-        const push = (href) => {
-            const normalized = normalizePreviewImageUrl(href, 'https://javstore.net/');
-            if (!normalized || !/\.(?:jpe?g|png|webp)(?:$|[?#])/i.test(normalized)) return;
-            found.push(normalized);
-            const dmmMatch = normalized.match(/https?:\/\/pics\.dmm\.co\.jp\/digital\/video\/([a-z0-9_]+)\/\1jp-(\d+)\.jpg/i);
-            if (dmmMatch?.[1]) dmmIds.add(dmmMatch[1].toLowerCase());
-        };
-        const pushDmmSequence = (id) => {
-            const token = String(id || '').trim().toLowerCase();
-            if (!token) return;
-            for (let i = 1; i <= 10; i += 1) {
-                push('https://pics.dmm.co.jp/digital/video/' + token + '/' + token + 'jp-' + i + '.jpg');
-            }
-        };
-        const anchorRegex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/ig;
-        let match;
-        while ((match = anchorRegex.exec(text))) {
-            const href = match[1];
-            const body = match[2];
-            if (/pixhost|imagetwist|pics\.dmm\.co\.jp|\.(?:jpe?g|png|webp)/i.test(href) || /<img[^>]+(?:src|data-src)=["'][^"']*(pixhost|imagetwist|pics\.dmm\.co\.jp|\.th\.)/i.test(body)) {
-                push(href);
-            }
-            const imgMatch = body.match(/<img[^>]+(?:data-src|src)=["']([^"']+)["']/i);
-            if (imgMatch?.[1]) push(imgMatch[1]);
-        }
-        const dmmDirectRegex = /https?:\/\/pics\.dmm\.co\.jp\/digital\/video\/([a-z0-9_]+)\/\1jp-(\d+)\.jpg/ig;
-        while ((match = dmmDirectRegex.exec(text))) {
-            push(match[0]);
-        }
-        const code = normalizeResourceAvid(avid);
-        const matchedCode = code.match(/^([A-Z0-9]{2,10})-(\d{2,6})$/);
-        if (matchedCode) {
-            const prefix = matchedCode[1].toLowerCase();
-            const number = String(parseInt(matchedCode[2], 10) || 0);
-            const tokenRegex = new RegExp('\\b(' + prefix + '0*' + number + ')(?![a-z])\\b', 'ig');
-            while ((match = tokenRegex.exec(text))) {
-                dmmIds.add(String(match[1] || '').toLowerCase());
-            }
-        }
-        Array.from(dmmIds).forEach(pushDmmSequence);
-        return Array.from(new Set(found));
-    }
-
-    async function searchSiteViaBing(site, keyword, extra = '') {
-        const query = ('site:' + site + ' ' + String(keyword || '').trim()).trim();
-        const searchUrl = 'https://www.bing.com/search?q=' + encodeURIComponent(query) + (extra || '');
-        const response = await requestPage(searchUrl);
-        return {
-            searchUrl,
-            response,
-            links: extractBingSearchLinks(response.responseText, site)
-        };
-    }
-
-    async function requestPage(url, extra = {}) {
-        return new Promise(resolve => {
-            GM_xmlhttpRequest(Object.assign({
-                method: 'GET',
-                url,
-                timeout: 15000,
-                onload: (res) => resolve({
-                    ok: res.status >= 200 && res.status < 400,
-                    status: res.status || 0,
-                    responseText: res.responseText || '',
-                    finalUrl: res.finalUrl || url,
-                    error: ''
-                }),
-                onerror: () => resolve({ ok: false, status: 0, responseText: '', finalUrl: url, error: 'network' }),
-                ontimeout: () => resolve({ ok: false, status: 0, responseText: '', finalUrl: url, error: 'timeout' })
-            }, extra));
-        });
-    }
-
-    async function requestText(url, extra = {}) {
-        const result = await requestPage(url, extra);
-        return result.ok ? (result.responseText || '') : '';
-    }
-
-    function sanitizeBrowserFetchHeaders(headers = {}) {
-        const sanitized = Object.assign({}, headers || {});
-        const referrer = sanitized.Referer || sanitized.referer || '';
-        delete sanitized.Referer;
-        delete sanitized.referer;
-        return {
-            headers: Object.keys(sanitized).length ? sanitized : undefined,
-            referrer: compactText(referrer || '')
-        };
-    }
-
-    function isLikelyBotGuardResponse(text = '') {
-        const normalized = compactText(String(text || '')).toLowerCase();
-        if (!normalized) return false;
-        return /(performing security verification|enable javascript and cookies to continue|attention required|cf-browser-verification|just a moment|why have i been blocked|checking if the site connection is secure|\b403 forbidden\b)/i.test(normalized);
-    }
-
-    async function requestPageWithHiddenFrame(url, extra = {}) {
-        const target = parseTrackingUrl(url, location.href);
-        const current = parseTrackingUrl(location.href, location.href);
-        if (!target || !current || target.origin !== current.origin || String(extra.method || 'GET').toUpperCase() !== 'GET') {
-            return requestPage(url, extra);
-        }
-        const mountHost = document.body || document.documentElement;
-        if (!mountHost) return requestPage(url, extra);
-        const timeout = Number(extra.timeout || 0) || 15000;
-        return new Promise(resolve => {
-            let settled = false;
-            const iframe = document.createElement('iframe');
-            iframe.setAttribute('aria-hidden', 'true');
-            iframe.tabIndex = -1;
-            iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;border:0;';
-            const finalize = (result) => {
-                if (settled) return;
-                settled = true;
-                if (timer) window.clearTimeout(timer);
-                iframe.removeEventListener('load', onLoad);
-                iframe.removeEventListener('error', onError);
-                iframe.remove();
-                resolve(result);
-            };
-            const onLoad = () => {
-                try {
-                    const frameWindow = iframe.contentWindow;
-                    const frameDoc = iframe.contentDocument || frameWindow?.document;
-                    const finalUrl = compactText(frameWindow?.location?.href || iframe.src || target.href) || target.href;
-                    const responseText = frameDoc?.documentElement?.outerHTML || '';
-                    const blocked = isLikelyBotGuardResponse(responseText);
-                    finalize({
-                        ok: !!responseText && !blocked,
-                        status: blocked ? 403 : 200,
-                        responseText,
-                        finalUrl,
-                        error: blocked ? 'forbidden' : ''
-                    });
-                } catch (error) {
-                    finalize({ ok: false, status: 0, responseText: '', finalUrl: target.href, error: 'network' });
-                }
-            };
-            const onError = () => finalize({ ok: false, status: 0, responseText: '', finalUrl: target.href, error: 'network' });
-            const timer = window.setTimeout(() => {
-                finalize({ ok: false, status: 0, responseText: '', finalUrl: target.href, error: 'timeout' });
-            }, timeout);
-            iframe.addEventListener('load', onLoad);
-            iframe.addEventListener('error', onError);
-            mountHost.appendChild(iframe);
-            iframe.src = target.href;
-        });
-    }
-
-    async function requestPageWithBrowserFetch(url, extra = {}) {
-        const target = parseTrackingUrl(url, location.href);
-        const current = parseTrackingUrl(location.href, location.href);
-        if (!target || !current || target.origin !== current.origin || String(extra.method || 'GET').toUpperCase() !== 'GET') {
-            return requestPage(url, extra);
-        }
-        const timeout = Number(extra.timeout || 0) || 15000;
-        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const timer = controller ? window.setTimeout(() => controller.abort(), timeout) : null;
-        const prepared = sanitizeBrowserFetchHeaders(extra.headers || {});
-        let fetchResult = null;
-        try {
-            const response = await fetch(target.href, {
-                method: 'GET',
-                credentials: 'include',
-                redirect: 'follow',
-                cache: 'no-store',
-                headers: prepared.headers,
-                referrer: prepared.referrer || undefined,
-                signal: controller?.signal
-            });
-            const responseText = await response.text();
-            fetchResult = {
-                ok: response.ok && !isLikelyBotGuardResponse(responseText),
-                status: response.status || 0,
-                responseText: responseText || '',
-                finalUrl: response.url || target.href,
-                error: ''
-            };
-        } catch (error) {
-            const message = String(error?.name || error?.message || '').toLowerCase();
-            fetchResult = {
-                ok: false,
-                status: 0,
-                responseText: '',
-                finalUrl: target.href,
-                error: message.includes('abort') ? 'timeout' : 'network'
-            };
-        } finally {
-            if (timer) window.clearTimeout(timer);
-        }
-        const shouldTryHiddenFrame = !fetchResult.ok
-            || !fetchResult.responseText
-            || fetchResult.status === 401
-            || fetchResult.status === 403
-            || isLikelyBotGuardResponse(fetchResult.responseText);
-        if (!shouldTryHiddenFrame) return fetchResult;
-        const frameResult = await requestPageWithHiddenFrame(target.href, extra);
-        if (frameResult.ok && frameResult.responseText) return frameResult;
-        const gmResult = await requestPage(url, extra);
-        if (gmResult.ok && gmResult.responseText && !isLikelyBotGuardResponse(gmResult.responseText)) return gmResult;
-        if (fetchResult.ok && fetchResult.responseText && !isLikelyBotGuardResponse(fetchResult.responseText)) return fetchResult;
-        return frameResult.status ? frameResult : (gmResult.status ? gmResult : fetchResult);
-    }
-
-    async function probeMediaUrl(url) {
-        const head = await requestPage(url, { method: 'HEAD', timeout: 7000 });
-        if (head.ok) {
-            return { ok: true, status: head.status || 200, state: 'ok', note: describeRequestStatus(head, 'HTTP 200') };
-        }
-        const range = await requestPage(url, { method: 'GET', timeout: 7000, headers: { Range: 'bytes=0-0' } });
-        if (range.ok || range.status === 206) {
-            return { ok: true, status: range.status || 206, state: 'ok', note: describeRequestStatus(range, 'HTTP 206') };
-        }
-        const failed = range.status ? range : head;
-        const state = failed.status === 403 ? 'blocked' : (failed.status === 404 ? 'empty' : 'error');
-        return { ok: false, status: failed.status || 0, state, note: describeRequestStatus(failed) };
-    }
-
-    async function headRequestOK(url) {
-        return (await probeMediaUrl(url)).ok;
-    }
-
-    const resourceTrailerCache = new Map();
-    const resourceScreenshotCache = new Map();
-    const resourceScreenshotInfoCache = new Map();
-    const resourceMagnetCache = new Map();
-    const resourceMissAVCache = new Map();
-    const resourceFalenoCache = new Map();
-    const resourceMgsCache = new Map();
-
-    function clearTrailerResourceCaches(avid) {
-        const key = normalizeResourceAvid(avid);
-        if (!key) return;
-        resourceTrailerCache.delete(`${key}::missav-status`);
-        resourceTrailerCache.delete(`${key}::dmm-only`);
-        resourceMissAVCache.delete(key);
-        resourceFalenoCache.delete(key);
-        resourceMgsCache.delete(key);
-    }
-
-    function clearDetailResourceCaches(avid) {
-        const key = normalizeResourceAvid(avid);
-        if (!key) return;
-        clearTrailerResourceCaches(key);
-        resourceScreenshotCache.delete(key);
-        resourceScreenshotInfoCache.delete(key);
-        resourceMagnetCache.delete(key);
-    }
-
-    function getResourceToggleStates(currentConfig = config) {
-        return {
-            resource_center: currentConfig.resource_center !== false,
-            resource_trailer: currentConfig.resource_trailer !== false,
-            resource_screenshot: currentConfig.resource_screenshot !== false,
-            resource_screenshot_auto: !!currentConfig.resource_screenshot_auto,
-            resource_magnet: currentConfig.resource_magnet !== false,
-        };
-    }
-
-    function syncResourceSettingInputs(container = document.getElementById('jlc-resource-settings')) {
-        if (!container) return;
-        const toggles = getResourceToggleStates(config);
-        Object.entries(toggles).forEach(([key, value]) => {
-            const input = container.querySelector('[data-jlc-resource-key="' + key + '"]');
-            if (input) input.checked = !!value;
-        });
-    }
 // @@creamu-part:13-settings-bridge
     function syncCommanderConfigInputs() {
         const map = {
@@ -2856,7 +2367,7 @@
         toggleWorkbenchV3(tabId);
     }
 
-    function getLegacySettingsSchema() {
+    function getListSettingsSchema() {
         const items = [
             { type: 'toggle', key: 'autoPage', label: lang.menu_autoPage },
             { type: 'toggle', key: 'copyBtn', label: lang.menu_copyBtn },
@@ -2873,12 +2384,10 @@
         items.push({ type: 'range', key: 'columnNum', label: lang.menu_columnNum, value: Status.getColumnNum(), min: 1, max: 8 });
         items.push({ type: 'range', key: 'waterfallWidth', label: '%', value: Status.get('waterfallWidth'), min: 1, max: currentObj?.maxWidth ? currentObj.maxWidth : 100 });
         items.push({ type: 'range', key: 'uiBtnScale', label: lang.menu_uiBtnScale, value: Status.get('uiBtnScale'), min: 70, max: 110, step: 5 });
-        items.push({ type: 'button', key: 'downloadPanel', label: '批量下载封面' });
-        items.push({ type: 'button', key: 'addHiddenWords', label: '添加屏蔽词' });
         return items;
     }
 
-    const legacySettingHandlers = {
+    const listSettingHandlers = {
         autoPage() {
             if (scroller) {
                 scroller.destroy();
@@ -2922,12 +2431,7 @@
             if (typeof applyUiBtnScale === 'function') applyUiBtnScale(value);
         },
         downloadPanel() {
-            closeCommanderPanel();
-            TabPanel.getInstance().show(0);
-        },
-        addHiddenWords() {
-            closeCommanderPanel();
-            TabPanel.getInstance().show(1);
+            openCoverDownloadDialog();
         }
     };
     let libraryUiRenderState = { revision: -1, mEl: null, mElV3: null };
@@ -3170,18 +2674,22 @@
         let written = 0;
         for (let i = 0; i < rows.length; i += chunkSize) {
             const chunk = rows.slice(i, i + chunkSize);
-            await new Promise((resolve, reject) => {
+            const chunkWritten = await new Promise((resolve, reject) => {
                 let settled = false;
+                let enqueued = 0;
                 const tx = db.transaction(storeName, 'readwrite');
                 const store = tx.objectStore(storeName);
                 chunk.forEach(row => {
-                    try { store.put(row); } catch (e) { /* skip bad row */ }
+                    try {
+                        store.put(row);
+                        enqueued += 1;
+                    } catch (e) { /* skip bad row */ }
                 });
-                tx.oncomplete = () => { if (!settled) { settled = true; resolve(); } };
+                tx.oncomplete = () => { if (!settled) { settled = true; resolve(enqueued); } };
                 tx.onerror = () => { if (!settled) { settled = true; reject(tx.error || new Error(storeName + ' 写入失败')); } };
                 tx.onabort = () => { if (!settled) { settled = true; reject(tx.error || new Error(storeName + ' 写入中止')); } };
             });
-            written += chunk.length;
+            written += chunkWritten;
             // 让出主线程，避免 50MB 备份卡死页面
             await new Promise(r => setTimeout(r, 0));
         }
@@ -3246,13 +2754,13 @@
         }
         // 应用列表相关开关（若页面已初始化）；不含 uiBtnScale
         try {
-            if (typeof legacySettingHandlers !== 'undefined' && legacySettingHandlers) {
+            if (typeof listSettingHandlers !== 'undefined' && listSettingHandlers) {
                 ['autoPage', 'copyBtn', 'toolBar', 'halfImg', 'fullTitle', 'columnNum', 'waterfallWidth'].forEach((k) => {
-                    if (k === 'columnNum') legacySettingHandlers.columnNum?.(Status?.getColumnNum?.() ?? prefs.columnNumFull);
+                    if (k === 'columnNum') listSettingHandlers.columnNum?.(Status?.getColumnNum?.() ?? prefs.columnNumFull);
                     else if (k === 'waterfallWidth') {
                         const w = Status?.get?.('waterfallWidth');
-                        if (w != null) legacySettingHandlers.waterfallWidth?.(w);
-                    } else if (prefs[k] !== undefined) legacySettingHandlers[k]?.(prefs[k]);
+                        if (w != null) listSettingHandlers.waterfallWidth?.(w);
+                    } else if (prefs[k] !== undefined) listSettingHandlers[k]?.(prefs[k]);
                 });
             }
         } catch (_) { /* ignore */ }
@@ -3668,6 +3176,533 @@
         if (!hit) return fallback;
         const detailed = await fetchMetaDetail(base, hit, deadline);
         return mergeMetaRecords(fallback, detailed) || detailed || fallback;
+    }
+// @@creamu-part:16-indexeddb
+    async function initDB() {
+        return new Promise((resolve) => {
+            if (!window.indexedDB) {
+                console.warn('[Commander] 当前环境不支持 IndexedDB');
+                resolve();
+                return;
+            }
+
+            let settled = false;
+            let upgradeBlocked = false;
+            let fallbackStarted = false;
+            let timer = null;
+
+            const attachDb = (nextDb = null) => {
+                db = nextDb || null;
+                if (db) {
+                    db.onversionchange = () => {
+                        try { db.close(); } catch (e) {}
+                    };
+                    invalidateIdbStoreSnapshot('emby_data');
+                    invalidateIdbStoreSnapshot(TRACKING_STORE);
+                    try {
+                        if (typeof flushMetaCacheWrites === 'function') void flushMetaCacheWrites();
+                    } catch (_) { /* ignore */ }
+                }
+            };
+
+            const refreshAfterLateDb = () => {
+                window.setTimeout(() => {
+                    if (!db) return;
+                    Promise.resolve()
+                        .then(() => loadRadarData?.())
+                        .then(() => refreshLibraryUI?.())
+                        .then(() => refreshCommanderDecorations?.())
+                        .then(() => {
+                            renderTrackingUI?.();
+                            scheduleTrackingPageRefresh?.(true);
+                        })
+                        .catch(() => {});
+                }, 50);
+            };
+
+            const finish = (nextDb = null) => {
+                if (settled) return;
+                settled = true;
+                if (timer) clearTimeout(timer);
+                attachDb(nextDb);
+                resolve();
+            };
+
+            const adoptLateDb = (nextDb, reason) => {
+                if (!nextDb || db === nextDb) return;
+                attachDb(nextDb);
+                console.info('[Commander] ' + reason + '已在后台就绪');
+                refreshAfterLateDb();
+            };
+
+            const openFallback = () => {
+                if (fallbackStarted) return;
+                fallbackStarted = true;
+                try {
+                    const fallbackReq = indexedDB.open(DB_NAME);
+                    fallbackReq.onsuccess = (e) => {
+                        const fallbackDb = e.target.result;
+                        if (upgradeBlocked && !fallbackDb.objectStoreNames.contains(TRACKING_STORE)) {
+                            console.warn('[Commander] Tracking 存储升级被阻塞，本次先以兼容模式启动');
+                        }
+                        if (settled) {
+                            adoptLateDb(fallbackDb, '兼容数据库连接');
+                            return;
+                        }
+                        finish(fallbackDb);
+                    };
+                    fallbackReq.onerror = () => {
+                        console.error('[Commander] 数据库回退打开失败');
+                        if (!settled) finish(null);
+                    };
+                    fallbackReq.onblocked = () => {
+                        console.error('[Commander] 数据库回退打开仍被阻塞');
+                        if (!settled) finish(null);
+                    };
+                } catch (e) {
+                    console.error('[Commander] 数据库回退异常', e);
+                    if (!settled) finish(null);
+                }
+            };
+
+            try {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+                const unblockStartup = (message) => {
+                    if (settled) return;
+                    upgradeBlocked = true;
+                    console.warn(message);
+                    finish(null);
+                    window.setTimeout(openFallback, 60);
+                };
+
+                timer = window.setTimeout(() => {
+                    unblockStartup('[Commander] 数据库升级等待超时，先跳过数据库启动');
+                }, 2500);
+
+                req.onupgradeneeded = (e) => {
+                    const d = e.target.result;
+                    if (!d.objectStoreNames.contains('videos')) d.createObjectStore('videos', { keyPath: 'avid' });
+                    if (!d.objectStoreNames.contains('emby_data')) d.createObjectStore('emby_data', { keyPath: 'id' });
+                    if (!d.objectStoreNames.contains('meta_cache')) d.createObjectStore('meta_cache', { keyPath: 'avid' });
+                    if (!d.objectStoreNames.contains(TRACKING_STORE)) d.createObjectStore(TRACKING_STORE, { keyPath: 'id' });
+                };
+                req.onsuccess = (e) => {
+                    const openedDb = e.target.result;
+                    if (settled) {
+                        adoptLateDb(openedDb, '数据库升级连接');
+                        return;
+                    }
+                    finish(openedDb);
+                };
+                req.onblocked = () => {
+                    unblockStartup('[Commander] 数据库升级被旧连接阻塞，先跳过数据库启动');
+                };
+                req.onerror = () => {
+                    console.error('[Commander] 数据库连接失败');
+                    if (!settled) {
+                        finish(null);
+                        window.setTimeout(openFallback, 60);
+                    }
+                };
+            } catch (e) {
+                console.error('[Commander] 数据库初始化异常', e);
+                finish(null);
+            }
+        });
+    }
+
+    async function getVal(store, key) {
+        if (!db) return null;
+        return new Promise(resolve => {
+            let settled = false;
+            const finish = (value = null) => {
+                if (settled) return;
+                settled = true;
+                resolve(value);
+            };
+            try {
+                const tx = db.transaction(store, 'readonly');
+                const req = tx.objectStore(store).get(key);
+                req.onsuccess = () => finish(req.result);
+                req.onerror = () => finish(null);
+                tx.onabort = () => finish(null);
+            } catch (e) { finish(null); }
+        });
+    }
+
+    async function getManyFromStore(store, keys) {
+        const uniqueKeys = Array.from(new Set(Array.from(keys || []).filter(key => key != null)));
+        if (!db || !uniqueKeys.length) return new Map();
+        return new Promise(resolve => {
+            const values = new Map();
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                resolve(values);
+            };
+            try {
+                const tx = db.transaction(store, 'readonly');
+                const objectStore = tx.objectStore(store);
+                uniqueKeys.forEach(key => {
+                    const request = objectStore.get(key);
+                    request.onsuccess = () => {
+                        if (request.result !== undefined) values.set(key, request.result);
+                    };
+                });
+                tx.oncomplete = finish;
+                tx.onerror = finish;
+                tx.onabort = finish;
+            } catch (_) {
+                finish();
+            }
+        });
+    }
+
+    /** 会进 WebDAV vault 的 IDB 仓库（meta_cache 可再生，不同步） */
+    const SYNCABLE_IDB_STORES = new Set(['videos', 'emby_data', 'tracking_searches']);
+
+    function invalidateIdbStoreSnapshot(store) {
+        if (store === 'emby_data') embyDataSnapshot = null;
+        if (store === 'emby_data' || store === 'videos') libraryDataRevision += 1;
+        if (store === TRACKING_STORE) trackingDataRevision += 1;
+    }
+
+    function markIdbStoreDirty(store) {
+        invalidateIdbStoreSnapshot(store);
+        if (!SYNCABLE_IDB_STORES.has(store)) return;
+        try {
+            if (typeof markStatusPrefsDirty === 'function') markStatusPrefsDirty();
+            else if (typeof ensureCreamuSync === 'function') ensureCreamuSync()?.markLocalDirty();
+        } catch (_) { /* ignore */ }
+    }
+
+    async function setManyVals(store, values) {
+        const rows = Array.from(values || []).filter(value => value != null);
+        if (!rows.length) return true;
+        if (!db) return false;
+        return new Promise(resolve => {
+            let settled = false;
+            let tx = null;
+            const finish = (written) => {
+                if (settled) return;
+                settled = true;
+                resolve(written);
+            };
+            try {
+                tx = db.transaction(store, 'readwrite');
+                const objectStore = tx.objectStore(store);
+                tx.oncomplete = () => {
+                    markIdbStoreDirty(store);
+                    finish(true);
+                };
+                tx.onerror = () => finish(false);
+                tx.onabort = () => finish(false);
+                rows.forEach(value => objectStore.put(value));
+            } catch (e) {
+                try { tx?.abort(); } catch (_) { /* ignore */ }
+                finish(false);
+            }
+        });
+    }
+
+    async function setVal(store, val) {
+        return setManyVals(store, [val]);
+    }
+
+    async function deleteVal(store, key) {
+        if (!db) return false;
+        return new Promise(resolve => {
+            let settled = false;
+            const finish = (deleted) => {
+                if (settled) return;
+                settled = true;
+                resolve(deleted);
+            };
+            try {
+                const tx = db.transaction(store, 'readwrite');
+                tx.objectStore(store).delete(key);
+                tx.oncomplete = () => {
+                    markIdbStoreDirty(store);
+                    finish(true);
+                };
+                tx.onerror = () => finish(false);
+                tx.onabort = () => finish(false);
+            } catch (e) { finish(false); }
+        });
+    }
+
+    async function getAllFromStores(stores) {
+        const names = Array.from(new Set(Array.from(stores || []).filter(Boolean)));
+        const rowsByStore = new Map(names.map(name => [name, []]));
+        if (!db || !names.length) return rowsByStore;
+        const available = names.filter(name => db.objectStoreNames.contains(name));
+        if (!available.length) return rowsByStore;
+        return new Promise(resolve => {
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                resolve(rowsByStore);
+            };
+            try {
+                const tx = db.transaction(available, 'readonly');
+                available.forEach(name => {
+                    const request = tx.objectStore(name).getAll();
+                    request.onsuccess = () => rowsByStore.set(name, request.result || []);
+                });
+                tx.oncomplete = finish;
+                tx.onerror = finish;
+                tx.onabort = finish;
+            } catch (e) { finish(); }
+        });
+    }
+
+    async function getAllFromStore(store) {
+        const rowsByStore = await getAllFromStores([store]);
+        return rowsByStore.get(store) || [];
+    }
+// @@creamu-part:17-library-sync
+    function getEmbyDataSnapshot() {
+        return embyDataSnapshot;
+    }
+
+    function refreshKnownPersonsFromSnapshot() {
+        const embyPersons = Array.from(embyDataSnapshot?.personNames || []);
+        knownPersons = new Set([...(config.custom_persons || []), ...embyPersons]);
+        return knownPersons;
+    }
+
+    function getEmbyMovieRecordsFromSnapshot(avids) {
+        if (!embyDataSnapshot) return null;
+        const records = new Map();
+        Array.from(avids || []).forEach(avid => {
+            const normalized = String(avid || '').trim().toUpperCase();
+            if (!normalized) return;
+            const id = `vid_${normalized}`;
+            if (embyDataSnapshot.movieIds.has(id)) records.set(id, { id, type: 'movie' });
+        });
+        return records;
+    }
+
+    async function loadRadarData(preloadedItems) {
+        const items = Array.isArray(preloadedItems)
+            ? preloadedItems
+            : await getAllFromStore('emby_data');
+        const movieIds = new Set();
+        const personNames = [];
+        items.forEach(item => {
+            if (item?.type === 'movie' && item.id) movieIds.add(String(item.id));
+            if (item?.type === 'person') {
+                const name = String(item.name || '').trim();
+                if (name) personNames.push(name);
+            }
+        });
+        embyDataSnapshot = { movieIds, movieCount: movieIds.size, personNames };
+        refreshKnownPersonsFromSnapshot();
+        libraryDataRevision += 1;
+        return embyDataSnapshot;
+    }
+
+    function requestEmbyJson(pathname, label) {
+        const baseUrl = String(config.emby_url || '').replace(/\/+$/, '');
+        const separator = pathname.includes('?') ? '&' : '?';
+        const url = `${baseUrl}${pathname}${separator}api_key=${encodeURIComponent(config.emby_key || '')}`;
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url,
+                timeout: 20000,
+                onload: (response) => {
+                    const status = Number(response?.status || 0);
+                    if (status < 200 || status >= 300) {
+                        reject(new Error(`${label}请求失败（HTTP ${status || 'unknown'}）`));
+                        return;
+                    }
+                    try {
+                        resolve(JSON.parse(response.responseText));
+                    } catch (_) {
+                        reject(new Error(`${label}返回了无效 JSON`));
+                    }
+                },
+                onerror: () => reject(new Error(`${label}网络错误`)),
+                ontimeout: () => reject(new Error(`${label}请求超时`)),
+                onabort: () => reject(new Error(`${label}请求已取消`))
+            });
+        });
+    }
+
+    function parseEmbyMovieRecords(payload) {
+        const records = new Map();
+        const items = Array.isArray(payload?.Items) ? payload.Items : [];
+        items.forEach(item => {
+            const match = `${String(item?.Name || '')} ${String(item?.Path || '')}`
+                .match(/[a-zA-Z0-9]{2,}-[0-9]{2,}/);
+            if (!match) return;
+            const id = `vid_${match[0].toUpperCase()}`;
+            records.set(id, { id, type: 'movie' });
+        });
+        return Array.from(records.values());
+    }
+
+    function parseEmbyPersonRecords(payload) {
+        const records = new Map();
+        const items = Array.isArray(payload?.Items) ? payload.Items : [];
+        items.forEach(item => {
+            const name = String(item?.Name || '').trim();
+            if (!name) return;
+            const id = `p_${name}`;
+            records.set(id, { id, name, type: 'person' });
+        });
+        return Array.from(records.values());
+    }
+
+    function replaceEmbyData(records) {
+        if (!db) return Promise.reject(new Error('数据库未就绪'));
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            let tx = null;
+            const finish = (error = null) => {
+                if (settled) return;
+                settled = true;
+                if (error) reject(error);
+                else resolve(true);
+            };
+            try {
+                tx = db.transaction('emby_data', 'readwrite');
+                const store = tx.objectStore('emby_data');
+                tx.oncomplete = () => {
+                    markIdbStoreDirty('emby_data');
+                    finish();
+                };
+                tx.onerror = () => finish(tx.error || new Error('Emby 数据写入失败'));
+                tx.onabort = () => finish(tx.error || new Error('Emby 数据写入已中止'));
+                store.clear();
+                Array.from(records || []).forEach(record => store.put(record));
+            } catch (error) {
+                try { tx?.abort(); } catch (_) { /* ignore */ }
+                finish(error);
+            }
+        });
+    }
+
+    async function syncEmby(options = {}) {
+        const silent = !!options.silent;
+        const extraButtons = Array.isArray(options.buttons) ? options.buttons.filter(Boolean) : [];
+        const btns = Array.from(new Set([
+            document.getElementById('jlc-btn-sync'),
+            document.getElementById('jlc-wb-btn-sync'),
+            ...extraButtons
+        ].filter(Boolean)));
+        const originalLabels = new Map(btns.map(btn => [btn, btn.textContent]));
+        const setSyncButtons = (text, disabled) => {
+            btns.forEach(btn => {
+                if (text != null) btn.textContent = text;
+                btn.disabled = !!disabled;
+            });
+        };
+        const resetSyncButtons = () => {
+            btns.forEach(btn => {
+                btn.textContent = originalLabels.get(btn) || '立即同步 Emby';
+                btn.disabled = false;
+            });
+        };
+        const notify = (msg, force) => {
+            if (silent && !force) return;
+            if (typeof showAlert === 'function') showAlert(msg, !!force);
+            else alert(msg);
+        };
+
+        if (!config.emby_url || !config.emby_key) {
+            notify('请先配置 Emby 信息！', true);
+            return { ok: false, skipped: true, message: '未配置 Emby' };
+        }
+        if (!db) {
+            notify('数据库未就绪，请稍后重试。', true);
+            return { ok: false, message: '数据库未就绪' };
+        }
+
+        setSyncButtons('正在同步 Emby...', true);
+        try {
+            const [moviePayload, personPayload] = await Promise.all([
+                requestEmbyJson('/Items?IncludeItemTypes=Movie&Recursive=true&Fields=Path', '影片列表'),
+                requestEmbyJson('/Persons?Recursive=true', '人员列表')
+            ]);
+            const movies = parseEmbyMovieRecords(moviePayload);
+            const persons = parseEmbyPersonRecords(personPayload);
+            const records = [...movies, ...persons];
+            await replaceEmbyData(records);
+            await loadRadarData(records);
+            try { await refreshLibraryUI(); } catch (_) { /* ignore */ }
+            try { await refreshCommanderDecorations(); } catch (_) { /* ignore */ }
+            if (!silent) notify('Emby 同步完成！');
+            return { ok: true, movieCount: movies.length, personCount: persons.length };
+        } catch (error) {
+            const message = String(error?.message || error);
+            notify('Emby 同步失败：' + message, true);
+            return { ok: false, message };
+        } finally {
+            resetSyncButtons();
+        }
+    }
+
+    /**
+     * 页脚「立即同步」：先 Emby 拉库，再 WebDAV 推送 vault（含点击过的 videos）。
+     * @param {{ button?: HTMLElement }} [options]
+     */
+    async function syncEmbyAndWebDav(options = {}) {
+        const btn = options.button || null;
+        const original = btn ? btn.textContent : '';
+        const setBtn = (text, disabled) => {
+            if (!btn) return;
+            if (text != null) btn.textContent = text;
+            btn.disabled = !!disabled;
+        };
+        const parts = [];
+        let embyOk = true;
+        let wdOk = true;
+        try {
+            setBtn('⏳ Emby…', true);
+            const embyConfigured = !!(config.emby_url && config.emby_key);
+            if (embyConfigured) {
+                const er = await syncEmby({ silent: true, buttons: btn ? [btn] : [] });
+                if (er.ok) {
+                    parts.push('Emby 影片 ' + (er.movieCount || 0) + ' · 熟人 ' + (er.personCount || 0));
+                } else {
+                    embyOk = false;
+                    parts.push('Emby 失败：' + (er.message || '未知'));
+                }
+            } else {
+                parts.push('Emby 未配置（跳过）');
+            }
+
+            setBtn('⏳ WebDAV…', true);
+            const sync = typeof ensureCreamuSync === 'function' ? ensureCreamuSync() : null;
+            if (!sync) {
+                wdOk = false;
+                parts.push('WebDAV 模块未加载');
+            } else if (typeof sync.isConfigured === 'function' && !sync.isConfigured()) {
+                wdOk = false;
+                parts.push('WebDAV 未配置（请到 设置 → 服务 填写）');
+            } else {
+                // 确保最新本地数据进 vault（含刚拉的 emby_data / 点击/心动）
+                try { sync.markLocalDirty(); } catch (_) { /* ignore */ }
+                try {
+                    await sync.syncNow({ force: 'push' });
+                    parts.push('WebDAV 已推送（含点击/心动/追更/屏蔽词）');
+                } catch (e) {
+                    wdOk = false;
+                    parts.push('WebDAV 失败：' + (e?.message || e));
+                }
+            }
+
+            const msg = parts.join('\n');
+            if (typeof showAlert === 'function') showAlert(msg, !(embyOk && wdOk));
+            else alert(msg);
+            return { ok: embyOk && wdOk, parts };
+        } finally {
+            setBtn(original || '☁ 立即同步', false);
+        }
     }
 // @@creamu-part:18-commander-decoration
     const META_FETCH_CONCURRENCY = 8;
@@ -4311,7 +4346,7 @@
         const context = getCurrentDetailContext();
         if (!context?.avid) return null;
         const cachedMeta = normalizeMetaRecord(await getVal('meta_cache', context.avid));
-        syncDetailReleaseBadge(context, cachedMeta?.releaseDate || '');
+        syncDetailReleaseBadge(context, cachedMeta?.releaseDate || extractDetailReleaseDate(context));
         renderDetailCommanderBadges(context, buildCommanderDecorationModel(context.title, cachedMeta));
         if (!config.metatube_url) return cachedMeta;
         if (cachedMeta?.genres?.length) return cachedMeta;
@@ -4320,7 +4355,7 @@
         if (!freshMeta || normalizeResourceAvid(latestContext?.avid || '') !== normalizeResourceAvid(context.avid)) {
             return freshMeta || cachedMeta;
         }
-        syncDetailReleaseBadge(latestContext, freshMeta.releaseDate || '');
+        syncDetailReleaseBadge(latestContext, freshMeta.releaseDate || extractDetailReleaseDate(latestContext));
         renderDetailCommanderBadges(latestContext, buildCommanderDecorationModel(latestContext.title || context.title, freshMeta));
         return freshMeta;
     }
@@ -6149,6 +6184,87 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       settings,
     };
   }
+// @@creamu-part:19-cover-lazy-loader
+    class CoverLazyLoader {
+        constructor(options = {}) {
+            this.callbackLoaded = typeof options.callback_loaded === 'function'
+                ? options.callback_loaded
+                : null;
+            this.callbackError = typeof options.callback_error === 'function'
+                ? options.callback_error
+                : null;
+            this.boundImages = new WeakSet();
+        }
+
+        collectImages(root) {
+            const images = new Set();
+            const collect = (node) => {
+                if (!node) return;
+                if (node.matches?.('img.lazy[data-src]')) images.add(node);
+                node.querySelectorAll?.('img.lazy[data-src]').forEach(image => images.add(image));
+            };
+
+            if (!root) {
+                collect(document);
+            } else if (root.nodeType || root === document) {
+                collect(root);
+            } else if (typeof root.toArray === 'function') {
+                root.toArray().forEach(collect);
+            } else if (typeof root[Symbol.iterator] === 'function') {
+                Array.from(root).forEach(collect);
+            }
+            return Array.from(images);
+        }
+
+        bindImage(image) {
+            if (!image || this.boundImages.has(image)) return false;
+            const source = image.getAttribute('data-src');
+            if (!source) return false;
+
+            this.boundImages.add(image);
+            image.setAttribute('loading', 'lazy');
+            image.setAttribute('decoding', 'async');
+            image.classList.add('loading');
+
+            let settled = false;
+            const cleanup = () => {
+                image.removeEventListener('load', onLoad);
+                image.removeEventListener('error', onError);
+            };
+            const finish = (loaded) => {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                image.classList.remove('loading');
+                image.classList.toggle('loaded', loaded);
+                image.classList.toggle('error', !loaded);
+                if (loaded) this.callbackLoaded?.(image);
+                else this.callbackError?.(image);
+            };
+            const onLoad = () => finish(true);
+            const onError = () => finish(false);
+
+            image.addEventListener('load', onLoad);
+            image.addEventListener('error', onError);
+            const sourceSet = image.getAttribute('data-srcset');
+            const sizes = image.getAttribute('data-sizes');
+            if (sourceSet) image.setAttribute('srcset', sourceSet);
+            if (sizes) image.setAttribute('sizes', sizes);
+            image.setAttribute('src', source);
+
+            if (image.complete) {
+                queueMicrotask(() => finish(Number(image.naturalWidth || 0) > 0));
+            }
+            return true;
+        }
+
+        update(root = null) {
+            return this.collectImages(root).reduce(
+                (count, image) => count + (this.bindImage(image) ? 1 : 0),
+                0
+            );
+        }
+    }
 // @@creamu-part:workbench
 
     function ensureCreamuSync() {
@@ -6526,7 +6642,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
     }
 
-    /** 过滤页：本页内联编辑屏蔽词/番号（不跳 TabPanel） */
     function mountWorkbenchFilterEditors() {
         const hosts = [
             document.getElementById('jlc-wb-tags-hidden-word'),
@@ -6599,6 +6714,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     function closeWorkbenchV3() {
         const shell = getWorkbenchEl();
         if (!shell) return;
+        closeCoverDownloadDialog();
         captureWorkbenchScroll();
         shell.classList.remove('is-open');
         document.getElementById('jlc-wb-fab')?.classList.remove('is-panel-open');
@@ -6798,6 +6914,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     let workbenchTrackingRecordsState = { revision: -1, records: null };
     let workbenchTrackingRecordsLoad = null;
     let workbenchTrackingRenderState = { root: null, key: '' };
+    let workbenchTrackingRenderSequence = 0;
 
     function primeWorkbenchTrackingRecordsState(records) {
         if (!Array.isArray(records)) return workbenchTrackingRecordsState;
@@ -7379,6 +7496,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
 
     async function renderWorkbenchTrackingList(options = {}) {
+        const renderSequence = ++workbenchTrackingRenderSequence;
         const root = document.getElementById('jlc-wb-tracking-root');
         if (!root) return;
         // 整表 innerHTML 会把 scrollTop 清零；先记下当前滚动，渲染后再写回
@@ -7400,6 +7518,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             return;
         }
         const recordsState = await getWorkbenchTrackingRecordsState();
+        if (
+            renderSequence !== workbenchTrackingRenderSequence
+            || document.getElementById('jlc-wb-tracking-root') !== root
+        ) return;
         const allRecords = recordsState.records.filter(record => !record.archived);
         let list = allRecords.slice();
 
@@ -7717,7 +7839,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     function renderWorkbenchViewSettings() {
         const container = document.getElementById('jlc-wb-view-root');
         if (!container) return;
-        const items = getLegacySettingsSchema().filter(item => item.type !== 'button');
+        const items = getListSettingsSchema();
         const toggles = items.filter(item => item.type === 'toggle');
         const layoutRanges = items.filter(item => item.type === 'range' && (item.key === 'columnNum' || item.key === 'waterfallWidth'));
         const uiRanges = items.filter(item => item.type === 'range' && item.key === 'uiBtnScale');
@@ -7761,7 +7883,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             input.addEventListener('change', () => {
                 const key = input.getAttribute('data-jlc-wb-toggle');
                 Status.set(key, !!input.checked);
-                legacySettingHandlers[key]?.(!!input.checked);
+                listSettingHandlers[key]?.(!!input.checked);
             });
         });
         container.querySelectorAll('[data-jlc-wb-range]').forEach(input => {
@@ -7773,13 +7895,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 if (valueEl) valueEl.textContent = String(value);
                 if (key === 'columnNum') Status.set('columnNum', value);
                 else Status.set(key, value);
-                legacySettingHandlers[key]?.(value);
+                listSettingHandlers[key]?.(value);
             });
         });
         container.querySelectorAll('[data-jlc-wb-action]').forEach(button => {
             button.addEventListener('click', () => {
                 const key = button.getAttribute('data-jlc-wb-action');
-                legacySettingHandlers[key]?.();
+                listSettingHandlers[key]?.();
             });
         });
         container.querySelector('#jlc-wb-view-open-mode')?.addEventListener('change', (e) => {
@@ -7966,8 +8088,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             if (typeof showDataIntegrityReport === 'function') void showDataIntegrityReport();
             else showAlert('检查功能未就绪', true);
         });
-        // 屏蔽词已内联在「过滤」主 Tab，不再跳转 TabPanel
-
         const applyWdFormToConfig = () => {
             config.webdav_url = (shell.querySelector('#jlc-wb-wd-url')?.value || '').trim();
             config.webdav_user = (shell.querySelector('#jlc-wb-wd-user')?.value || '').trim();
@@ -8596,31 +8716,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
     }
 
-    class SettingMenu {
-        constructor() {
-            createWorkbenchV3();
-
-            let version = Status.get('version');
-            if (version != VERSION) {
-                if (!version) {
-                    setTimeout(() => openCommanderPanel('tracking'), 120);
-                }
-                showAlert(NOTICE, true);
-                Status.set('version', VERSION);
-            }
+    function showVersionNotice() {
+        const version = Status.get('version');
+        if (version === VERSION) return;
+        if (!version) {
+            window.setTimeout(() => openCommanderPanel('tracking'), 120);
         }
-    }
-
-
-    const notice = ($menu)=>{
-        let version = Status.get("version");
-        if(version != VERSION){
-            if(!version){
-                $menu.slideDown();
-            }
-            showAlert(NOTICE,true);
-            Status.set("version",VERSION);
-        }
+        showAlert(NOTICE, true);
+        Status.set('version', VERSION);
     }
     function showMagnetTable(itemID,avid,href,elem) {
         if ($(elem).hasClass("span-loading")) {return;}
@@ -9746,10 +9849,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     function normalizeJavLibraryComboOptionLabel(value) {
         return compactText(value || '')
             .replace(/[：:=]/g, '')
-            .replace(/[()（）[]【】]/g, '')
-            .replace(/[/／]/g, '')
+            .replace(/[()（）\[\]【】]/g, '')
+            .replace(/[\/／]/g, '')
             .replace(/[|｜]/g, '')
-            .replace(/s+/g, '')
+            .replace(/\s+/g, '')
             .toLowerCase();
     }
 
@@ -10082,1284 +10185,333 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         form.set('data', keyword);
         return form;
     }
+// @@creamu-part:41-javlibrary-combo-catalog
+    let javLibraryComboStaticValueMap = null;
 
-    // 基于 2026-04-08 search.php HAR 提取的类别映射，用于过期 combo searchid 重建。
-    const JAVLIBRARY_COMBO_GENRE_STATIC_ENTRIES = [
-            [
-                    "72",
-                    "69"
-            ],
-            [
-                    "190",
-                    "3D"
-            ],
-            [
-                    "88",
-                    "4小时以上作品"
-            ],
-            [
-                    "676",
-                    "AI生成作品"
-            ],
-            [
-                    "250",
-                    "COSPLAY服饰"
-            ],
-            [
-                    "279",
-                    "HD DVD"
-            ],
-            [
-                    "232",
-                    "MicroSD"
-            ],
-            [
-                    "590",
-                    "M女"
-            ],
-            [
-                    "513",
-                    "M男"
-            ],
-            [
-                    "2",
-                    "OL"
-            ],
-            [
-                    "298",
-                    "R-15"
-            ],
-            [
-                    "304",
-                    "R-18"
-            ],
-            [
-                    "4",
-                    "SM"
-            ],
-            [
-                    "220",
-                    "UMD"
-            ],
-            [
-                    "302",
-                    "VFT"
-            ],
-            [
-                    "311",
-                    "VHS"
-            ],
-            [
-                    "558",
-                    "VR"
-            ],
-            [
-                    "610",
-                    "下属・同事"
-            ],
-            [
-                    "36",
-                    "业余"
-            ],
-            [
-                    "12",
-                    "中出"
-            ],
-            [
-                    "631",
-                    "主妇之友"
-            ],
-            [
-                    "78",
-                    "主观视角"
-            ],
-            [
-                    "273",
-                    "主题工作"
-            ],
-            [
-                    "93",
-                    "乱伦"
-            ],
-            [
-                    "48",
-                    "乳交"
-            ],
-            [
-                    "70",
-                    "乳房"
-            ],
-            [
-                    "596",
-                    "乳房偷窺"
-            ],
-            [
-                    "123",
-                    "乳液"
-            ],
-            [
-                    "291",
-                    "亚洲"
-            ],
-            [
-                    "163",
-                    "亚洲女演员"
-            ],
-            [
-                    "199",
-                    "介绍影片"
-            ],
-            [
-                    "50",
-                    "企画"
-            ],
-            [
-                    "37",
-                    "伴侣"
-            ],
-            [
-                    "194",
-                    "修女"
-            ],
-            [
-                    "47",
-                    "倒追"
-            ],
-            [
-                    "626",
-                    "假阳具"
-            ],
-            [
-                    "52",
-                    "偶像"
-            ],
-            [
-                    "214",
-                    "偷窥"
-            ],
-            [
-                    "33",
-                    "偷窥"
-            ],
-            [
-                    "119",
-                    "催眠"
-            ],
-            [
-                    "111",
-                    "兔女郎"
-            ],
-            [
-                    "75",
-                    "全裸"
-            ],
-            [
-                    "283",
-                    "公主"
-            ],
-            [
-                    "120",
-                    "其他学生"
-            ],
-            [
-                    "31",
-                    "其他恋物癖"
-            ],
-            [
-                    "594",
-                    "养女"
-            ],
-            [
-                    "87",
-                    "内衣"
-            ],
-            [
-                    "32",
-                    "内衣"
-            ],
-            [
-                    "181",
-                    "冒险"
-            ],
-            [
-                    "284",
-                    "写真偶像"
-            ],
-            [
-                    "84",
-                    "凌辱"
-            ],
-            [
-                    "76",
-                    "出轨"
-            ],
-            [
-                    "26",
-                    "制服"
-            ],
-            [
-                    "154",
-                    "制服外套"
-            ],
-            [
-                    "209",
-                    "动画人物"
-            ],
-            [
-                    "18",
-                    "单体作品"
-            ],
-            [
-                    "173",
-                    "即兴性交"
-            ],
-            [
-                    "207",
-                    "历史剧"
-            ],
-            [
-                    "517",
-                    "原作改编"
-            ],
-            [
-                    "195",
-                    "去背影片"
-            ],
-            [
-                    "215",
-                    "及膝袜"
-            ],
-            [
-                    "293",
-                    "友谊"
-            ],
-            [
-                    "14",
-                    "双性人"
-            ],
-            [
-                    "616",
-                    "叔母"
-            ],
-            [
-                    "536",
-                    "受孕"
-            ],
-            [
-                    "5",
-                    "变性者"
-            ],
-            [
-                    "8",
-                    "口交"
-            ],
-            [
-                    "74",
-                    "各种职业"
-            ],
-            [
-                    "184",
-                    "后母"
-            ],
-            [
-                    "66",
-                    "吞精"
-            ],
-            [
-                    "313",
-                    "呕吐"
-            ],
-            [
-                    "128",
-                    "和服、丧服"
-            ],
-            [
-                    "289",
-                    "喜剧"
-            ],
-            [
-                    "170",
-                    "国外进口"
-            ],
-            [
-                    "188",
-                    "处女"
-            ],
-            [
-                    "183",
-                    "处男"
-            ],
-            [
-                    "13",
-                    "多P"
-            ],
-            [
-                    "51",
-                    "大小姐"
-            ],
-            [
-                    "244",
-                    "天赋"
-            ],
-            [
-                    "597",
-                    "夫妻交换"
-            ],
-            [
-                    "234",
-                    "奇异的"
-            ],
-            [
-                    "57",
-                    "女上位"
-            ],
-            [
-                    "592",
-                    "女上司"
-            ],
-            [
-                    "174",
-                    "女主播"
-            ],
-            [
-                    "62",
-                    "女优按摩棒"
-            ],
-            [
-                    "10",
-                    "女佣"
-            ],
-            [
-                    "175",
-                    "女儿"
-            ],
-            [
-                    "67",
-                    "女医生"
-            ],
-            [
-                    "15",
-                    "女同性恋"
-            ],
-            [
-                    "145",
-                    "女同接吻"
-            ],
-            [
-                    "91",
-                    "女大学生"
-            ],
-            [
-                    "208",
-                    "女忍者"
-            ],
-            [
-                    "200",
-                    "女战士"
-            ],
-            [
-                    "27",
-                    "女教师"
-            ],
-            [
-                    "249",
-                    "女检察官"
-            ],
-            [
-                    "219",
-                    "女祭司"
-            ],
-            [
-                    "151",
-                    "女装人妖"
-            ],
-            [
-                    "3",
-                    "奴隶"
-            ],
-            [
-                    "105",
-                    "妄想"
-            ],
-            [
-                    "71",
-                    "妓女"
-            ],
-            [
-                    "165",
-                    "妹妹"
-            ],
-            [
-                    "34",
-                    "姐姐"
-            ],
-            [
-                    "204",
-                    "娃娃"
-            ],
-            [
-                    "216",
-                    "子宫颈"
-            ],
-            [
-                    "133",
-                    "孕妇"
-            ],
-            [
-                    "65",
-                    "学校作品"
-            ],
-            [
-                    "82",
-                    "学校泳装"
-            ],
-            [
-                    "92",
-                    "家教"
-            ],
-            [
-                    "168",
-                    "寡妇"
-            ],
-            [
-                    "312",
-                    "导尿"
-            ],
-            [
-                    "157",
-                    "局部特写"
-            ],
-            [
-                    "103",
-                    "屁股"
-            ],
-            [
-                    "117",
-                    "展场女孩"
-            ],
-            [
-                    "44",
-                    "巨乳"
-            ],
-            [
-                    "515",
-                    "巨大屁股"
-            ],
-            [
-                    "516",
-                    "巨大阴茎"
-            ],
-            [
-                    "45",
-                    "已婚妇女"
-            ],
-            [
-                    "243",
-                    "帽型"
-            ],
-            [
-                    "149",
-                    "平胸"
-            ],
-            [
-                    "146",
-                    "年轻女孩"
-            ],
-            [
-                    "83",
-                    "强奸"
-            ],
-            [
-                    "90",
-                    "强奸"
-            ],
-            [
-                    "299",
-                    "形象俱乐部"
-            ],
-            [
-                    "263",
-                    "心理、惊悚片"
-            ],
-            [
-                    "206",
-                    "性感的"
-            ],
-            [
-                    "236",
-                    "性爱"
-            ],
-            [
-                    "554",
-                    "性转换・女体化"
-            ],
-            [
-                    "158",
-                    "性骚扰"
-            ],
-            [
-                    "99",
-                    "恋乳癖"
-            ],
-            [
-                    "197",
-                    "恋爱"
-            ],
-            [
-                    "35",
-                    "恋物癖"
-            ],
-            [
-                    "122",
-                    "恋腿癖"
-            ],
-            [
-                    "281",
-                    "恐怖"
-            ],
-            [
-                    "182",
-                    "恶作剧"
-            ],
-            [
-                    "248",
-                    "悬疑"
-            ],
-            [
-                    "115",
-                    "情侣"
-            ],
-            [
-                    "308",
-                    "感官作品"
-            ],
-            [
-                    "166",
-                    "戏剧"
-            ],
-            [
-                    "269",
-                    "成人动漫"
-            ],
-            [
-                    "189",
-                    "成人电影"
-            ],
-            [
-                    "104",
-                    "成熟的女人"
-            ],
-            [
-                    "196",
-                    "战斗行动"
-            ],
-            [
-                    "22",
-                    "户外"
-            ],
-            [
-                    "59",
-                    "手指插入"
-            ],
-            [
-                    "9",
-                    "打手枪"
-            ],
-            [
-                    "86",
-                    "投稿"
-            ],
-            [
-                    "95",
-                    "护士"
-            ],
-            [
-                    "16",
-                    "拘束"
-            ],
-            [
-                    "186",
-                    "拳交"
-            ],
-            [
-                    "77",
-                    "拷问"
-            ],
-            [
-                    "85",
-                    "按摩"
-            ],
-            [
-                    "17",
-                    "按摩棒"
-            ],
-            [
-                    "136",
-                    "排便"
-            ],
-            [
-                    "520",
-                    "接吻"
-            ],
-            [
-                    "602",
-                    "接待员"
-            ],
-            [
-                    "100",
-                    "插入异物"
-            ],
-            [
-                    "319",
-                    "搔痒"
-            ],
-            [
-                    "102",
-                    "放尿"
-            ],
-            [
-                    "218",
-                    "故事集"
-            ],
-            [
-                    "303",
-                    "教学"
-            ],
-            [
-                    "167",
-                    "数位马赛克"
-            ],
-            [
-                    "296",
-                    "文化"
-            ],
-            [
-                    "611",
-                    "新娘"
-            ],
-            [
-                    "73",
-                    "新娘、年轻妻子"
-            ],
-            [
-                    "595",
-                    "旅行"
-            ],
-            [
-                    "159",
-                    "旗袍"
-            ],
-            [
-                    "601",
-                    "无内裤"
-            ],
-            [
-                    "112",
-                    "无毛"
-            ],
-            [
-                    "608",
-                    "无胸罩"
-            ],
-            [
-                    "549",
-                    "时间停止"
-            ],
-            [
-                    "96",
-                    "明星脸"
-            ],
-            [
-                    "521",
-                    "晒黑"
-            ],
-            [
-                    "247",
-                    "暗黑系"
-            ],
-            [
-                    "288",
-                    "暴力"
-            ],
-            [
-                    "148",
-                    "服务生"
-            ],
-            [
-                    "586",
-                    "极致·性高潮"
-            ],
-            [
-                    "131",
-                    "校服"
-            ],
-            [
-                    "139",
-                    "格斗家"
-            ],
-            [
-                    "179",
-                    "模拟"
-            ],
-            [
-                    "107",
-                    "模特儿"
-            ],
-            [
-                    "185",
-                    "正太控"
-            ],
-            [
-                    "255",
-                    "正常"
-            ],
-            [
-                    "233",
-                    "残忍画面"
-            ],
-            [
-                    "46",
-                    "母乳"
-            ],
-            [
-                    "125",
-                    "母亲"
-            ],
-            [
-                    "11",
-                    "水手服"
-            ],
-            [
-                    "24",
-                    "汽车性爱"
-            ],
-            [
-                    "266",
-                    "法国"
-            ],
-            [
-                    "588",
-                    "泡沫浴"
-            ],
-            [
-                    "110",
-                    "泡泡袜"
-            ],
-            [
-                    "109",
-                    "泳装"
-            ],
-            [
-                    "618",
-                    "洗浴"
-            ],
-            [
-                    "609",
-                    "洽公服装"
-            ],
-            [
-                    "523",
-                    "流汗"
-            ],
-            [
-                    "60",
-                    "浴衣"
-            ],
-            [
-                    "280",
-                    "海外"
-            ],
-            [
-                    "251",
-                    "淋浴"
-            ],
-            [
-                    "56",
-                    "淫乱、真实"
-            ],
-            [
-                    "40",
-                    "淫语"
-            ],
-            [
-                    "113",
-                    "深喉"
-            ],
-            [
-                    "512",
-                    "温泉"
-            ],
-            [
-                    "210",
-                    "滑稽模仿"
-            ],
-            [
-                    "116",
-                    "滥交"
-            ],
-            [
-                    "64",
-                    "潮吹"
-            ],
-            [
-                    "25",
-                    "灌肠"
-            ],
-            [
-                    "106",
-                    "烂醉如泥的"
-            ],
-            [
-                    "294",
-                    "爱好、文化"
-            ],
-            [
-                    "264",
-                    "爱情故事"
-            ],
-            [
-                    "265",
-                    "爱情浪漫"
-            ],
-            [
-                    "212",
-                    "特效"
-            ],
-            [
-                    "224",
-                    "独立制作"
-            ],
-            [
-                    "79",
-                    "猎艳"
-            ],
-            [
-                    "217",
-                    "猥亵穿着"
-            ],
-            [
-                    "130",
-                    "猫耳女"
-            ],
-            [
-                    "126",
-                    "玩具"
-            ],
-            [
-                    "619",
-                    "瑜伽"
-            ],
-            [
-                    "134",
-                    "男同性恋"
-            ],
-            [
-                    "242",
-                    "男性"
-            ],
-            [
-                    "591",
-                    "男潮吹"
-            ],
-            [
-                    "147",
-                    "瘦小身型"
-            ],
-            [
-                    "152",
-                    "白人"
-            ],
-            [
-                    "187",
-                    "白天出轨"
-            ],
-            [
-                    "169",
-                    "监禁"
-            ],
-            [
-                    "81",
-                    "眼镜"
-            ],
-            [
-                    "114",
-                    "礼仪小姐"
-            ],
-            [
-                    "604",
-                    "社团・经理"
-            ],
-            [
-                    "211",
-                    "科幻"
-            ],
-            [
-                    "171",
-                    "秘书"
-            ],
-            [
-                    "101",
-                    "空中小姐"
-            ],
-            [
-                    "285",
-                    "童年朋友"
-            ],
-            [
-                    "53",
-                    "第一人称摄影"
-            ],
-            [
-                    "522",
-                    "粉丝感谢"
-            ],
-            [
-                    "132",
-                    "粪便"
-            ],
-            [
-                    "39",
-                    "精选、综合"
-            ],
-            [
-                    "140",
-                    "紧缚"
-            ],
-            [
-                    "63",
-                    "紧身衣"
-            ],
-            [
-                    "605",
-                    "约会"
-            ],
-            [
-                    "97",
-                    "纪录片"
-            ],
-            [
-                    "137",
-                    "经典"
-            ],
-            [
-                    "80",
-                    "绳缚"
-            ],
-            [
-                    "310",
-                    "给女性观众"
-            ],
-            [
-                    "292",
-                    "综合短篇"
-            ],
-            [
-                    "30",
-                    "美容院"
-            ],
-            [
-                    "55",
-                    "美少女"
-            ],
-            [
-                    "301",
-                    "美少女电影"
-            ],
-            [
-                    "23",
-                    "羞耻"
-            ],
-            [
-                    "632",
-                    "翻白眼・失神"
-            ],
-            [
-                    "124",
-                    "老板娘、女主人"
-            ],
-            [
-                    "198",
-                    "肌肉"
-            ],
-            [
-                    "6",
-                    "肛交"
-            ],
-            [
-                    "614",
-                    "背后"
-            ],
-            [
-                    "135",
-                    "胖女人"
-            ],
-            [
-                    "203",
-                    "脱衣"
-            ],
-            [
-                    "19",
-                    "自慰"
-            ],
-            [
-                    "603",
-                    "自慰辅助"
-            ],
-            [
-                    "42",
-                    "舔阴"
-            ],
-            [
-                    "202",
-                    "艺人"
-            ],
-            [
-                    "89",
-                    "苗条"
-            ],
-            [
-                    "68",
-                    "荡妇"
-            ],
-            [
-                    "155",
-                    "药物"
-            ],
-            [
-                    "20",
-                    "萝莉塔"
-            ],
-            [
-                    "231",
-                    "歌德萝莉"
-            ],
-            [
-                    "635",
-                    "蒙面・面具"
-            ],
-            [
-                    "129",
-                    "蓝光"
-            ],
-            [
-                    "222",
-                    "薄马赛克"
-            ],
-            [
-                    "600",
-                    "虐打"
-            ],
-            [
-                    "223",
-                    "蛮横娇羞"
-            ],
-            [
-                    "589",
-                    "蜡烛"
-            ],
-            [
-                    "201",
-                    "行动"
-            ],
-            [
-                    "49",
-                    "裸体围裙"
-            ],
-            [
-                    "177",
-                    "西洋片"
-            ],
-            [
-                    "7",
-                    "角色扮演"
-            ],
-            [
-                    "164",
-                    "角色扮演者"
-            ],
-            [
-                    "225",
-                    "触手"
-            ],
-            [
-                    "246",
-                    "触摸打字"
-            ],
-            [
-                    "191",
-                    "讲师"
-            ],
-            [
-                    "205",
-                    "访问"
-            ],
-            [
-                    "61",
-                    "调教"
-            ],
-            [
-                    "118",
-                    "赛车女郎"
-            ],
-            [
-                    "229",
-                    "超乳"
-            ],
-            [
-                    "282",
-                    "超短裙"
-            ],
-            [
-                    "98",
-                    "足交"
-            ],
-            [
-                    "153",
-                    "跳舞"
-            ],
-            [
-                    "156",
-                    "跳蛋"
-            ],
-            [
-                    "121",
-                    "身体意识"
-            ],
-            [
-                    "172",
-                    "车掌小姐"
-            ],
-            [
-                    "94",
-                    "轮奸"
-            ],
-            [
-                    "620",
-                    "软体"
-            ],
-            [
-                    "43",
-                    "辣妹"
-            ],
-            [
-                    "587",
-                    "辱骂"
-            ],
-            [
-                    "245",
-                    "运动"
-            ],
-            [
-                    "617",
-                    "运动员"
-            ],
-            [
-                    "127",
-                    "运动短裤"
-            ],
-            [
-                    "29",
-                    "连裤袜"
-            ],
-            [
-                    "38",
-                    "迷你裙"
-            ],
-            [
-                    "150",
-                    "迷你裙警察"
-            ],
-            [
-                    "622",
-                    "酒店"
-            ],
-            [
-                    "192",
-                    "重印版"
-            ],
-            [
-                    "666",
-                    "长靴"
-            ],
-            [
-                    "21",
-                    "露出"
-            ],
-            [
-                    "286",
-                    "青年"
-            ],
-            [
-                    "615",
-                    "面试"
-            ],
-            [
-                    "268",
-                    "韩国"
-            ],
-            [
-                    "69",
-                    "颜射"
-            ],
-            [
-                    "58",
-                    "颜射"
-            ],
-            [
-                    "144",
-                    "颜面骑乘"
-            ],
-            [
-                    "193",
-                    "飞特族"
-            ],
-            [
-                    "138",
-                    "食粪"
-            ],
-            [
-                    "141",
-                    "饮尿"
-            ],
-            [
-                    "606",
-                    "饮酒派对"
-            ],
-            [
-                    "54",
-                    "首次亮相"
-            ],
-            [
-                    "108",
-                    "高"
-            ],
-            [
-                    "28",
-                    "高中女生"
-            ],
-            [
-                    "607",
-                    "高龄男"
-            ],
-            [
-                    "178",
-                    "魔鬼系"
-            ],
-            [
-                    "162",
-                    "鸭嘴"
-            ],
-            [
-                    "160",
-                    "黑人演员"
-            ],
-            [
-                    "627",
-                    "鼻勾"
-            ]
-    ];
+    // 组合搜索失效时才建立本地类别索引，普通页面启动不分配目录数组。
+    function getJavLibraryComboStaticValueMap() {
+        if (javLibraryComboStaticValueMap) return javLibraryComboStaticValueMap;
+        const genreEntries = [
+            ["72", "69"],
+            ["190", "3D"],
+            ["88", "4小时以上作品"],
+            ["676", "AI生成作品"],
+            ["250", "COSPLAY服饰"],
+            ["279", "HD DVD"],
+            ["232", "MicroSD"],
+            ["590", "M女"],
+            ["513", "M男"],
+            ["2", "OL"],
+            ["298", "R-15"],
+            ["304", "R-18"],
+            ["4", "SM"],
+            ["220", "UMD"],
+            ["302", "VFT"],
+            ["311", "VHS"],
+            ["558", "VR"],
+            ["610", "下属・同事"],
+            ["36", "业余"],
+            ["12", "中出"],
+            ["631", "主妇之友"],
+            ["78", "主观视角"],
+            ["273", "主题工作"],
+            ["93", "乱伦"],
+            ["48", "乳交"],
+            ["70", "乳房"],
+            ["596", "乳房偷窺"],
+            ["123", "乳液"],
+            ["291", "亚洲"],
+            ["163", "亚洲女演员"],
+            ["199", "介绍影片"],
+            ["50", "企画"],
+            ["37", "伴侣"],
+            ["194", "修女"],
+            ["47", "倒追"],
+            ["626", "假阳具"],
+            ["52", "偶像"],
+            ["214", "偷窥"],
+            ["33", "偷窥"],
+            ["119", "催眠"],
+            ["111", "兔女郎"],
+            ["75", "全裸"],
+            ["283", "公主"],
+            ["120", "其他学生"],
+            ["31", "其他恋物癖"],
+            ["594", "养女"],
+            ["87", "内衣"],
+            ["32", "内衣"],
+            ["181", "冒险"],
+            ["284", "写真偶像"],
+            ["84", "凌辱"],
+            ["76", "出轨"],
+            ["26", "制服"],
+            ["154", "制服外套"],
+            ["209", "动画人物"],
+            ["18", "单体作品"],
+            ["173", "即兴性交"],
+            ["207", "历史剧"],
+            ["517", "原作改编"],
+            ["195", "去背影片"],
+            ["215", "及膝袜"],
+            ["293", "友谊"],
+            ["14", "双性人"],
+            ["616", "叔母"],
+            ["536", "受孕"],
+            ["5", "变性者"],
+            ["8", "口交"],
+            ["74", "各种职业"],
+            ["184", "后母"],
+            ["66", "吞精"],
+            ["313", "呕吐"],
+            ["128", "和服、丧服"],
+            ["289", "喜剧"],
+            ["170", "国外进口"],
+            ["188", "处女"],
+            ["183", "处男"],
+            ["13", "多P"],
+            ["51", "大小姐"],
+            ["244", "天赋"],
+            ["597", "夫妻交换"],
+            ["234", "奇异的"],
+            ["57", "女上位"],
+            ["592", "女上司"],
+            ["174", "女主播"],
+            ["62", "女优按摩棒"],
+            ["10", "女佣"],
+            ["175", "女儿"],
+            ["67", "女医生"],
+            ["15", "女同性恋"],
+            ["145", "女同接吻"],
+            ["91", "女大学生"],
+            ["208", "女忍者"],
+            ["200", "女战士"],
+            ["27", "女教师"],
+            ["249", "女检察官"],
+            ["219", "女祭司"],
+            ["151", "女装人妖"],
+            ["3", "奴隶"],
+            ["105", "妄想"],
+            ["71", "妓女"],
+            ["165", "妹妹"],
+            ["34", "姐姐"],
+            ["204", "娃娃"],
+            ["216", "子宫颈"],
+            ["133", "孕妇"],
+            ["65", "学校作品"],
+            ["82", "学校泳装"],
+            ["92", "家教"],
+            ["168", "寡妇"],
+            ["312", "导尿"],
+            ["157", "局部特写"],
+            ["103", "屁股"],
+            ["117", "展场女孩"],
+            ["44", "巨乳"],
+            ["515", "巨大屁股"],
+            ["516", "巨大阴茎"],
+            ["45", "已婚妇女"],
+            ["243", "帽型"],
+            ["149", "平胸"],
+            ["146", "年轻女孩"],
+            ["83", "强奸"],
+            ["90", "强奸"],
+            ["299", "形象俱乐部"],
+            ["263", "心理、惊悚片"],
+            ["206", "性感的"],
+            ["236", "性爱"],
+            ["554", "性转换・女体化"],
+            ["158", "性骚扰"],
+            ["99", "恋乳癖"],
+            ["197", "恋爱"],
+            ["35", "恋物癖"],
+            ["122", "恋腿癖"],
+            ["281", "恐怖"],
+            ["182", "恶作剧"],
+            ["248", "悬疑"],
+            ["115", "情侣"],
+            ["308", "感官作品"],
+            ["166", "戏剧"],
+            ["269", "成人动漫"],
+            ["189", "成人电影"],
+            ["104", "成熟的女人"],
+            ["196", "战斗行动"],
+            ["22", "户外"],
+            ["59", "手指插入"],
+            ["9", "打手枪"],
+            ["86", "投稿"],
+            ["95", "护士"],
+            ["16", "拘束"],
+            ["186", "拳交"],
+            ["77", "拷问"],
+            ["85", "按摩"],
+            ["17", "按摩棒"],
+            ["136", "排便"],
+            ["520", "接吻"],
+            ["602", "接待员"],
+            ["100", "插入异物"],
+            ["319", "搔痒"],
+            ["102", "放尿"],
+            ["218", "故事集"],
+            ["303", "教学"],
+            ["167", "数位马赛克"],
+            ["296", "文化"],
+            ["611", "新娘"],
+            ["73", "新娘、年轻妻子"],
+            ["595", "旅行"],
+            ["159", "旗袍"],
+            ["601", "无内裤"],
+            ["112", "无毛"],
+            ["608", "无胸罩"],
+            ["549", "时间停止"],
+            ["96", "明星脸"],
+            ["521", "晒黑"],
+            ["247", "暗黑系"],
+            ["288", "暴力"],
+            ["148", "服务生"],
+            ["586", "极致·性高潮"],
+            ["131", "校服"],
+            ["139", "格斗家"],
+            ["179", "模拟"],
+            ["107", "模特儿"],
+            ["185", "正太控"],
+            ["255", "正常"],
+            ["233", "残忍画面"],
+            ["46", "母乳"],
+            ["125", "母亲"],
+            ["11", "水手服"],
+            ["24", "汽车性爱"],
+            ["266", "法国"],
+            ["588", "泡沫浴"],
+            ["110", "泡泡袜"],
+            ["109", "泳装"],
+            ["618", "洗浴"],
+            ["609", "洽公服装"],
+            ["523", "流汗"],
+            ["60", "浴衣"],
+            ["280", "海外"],
+            ["251", "淋浴"],
+            ["56", "淫乱、真实"],
+            ["40", "淫语"],
+            ["113", "深喉"],
+            ["512", "温泉"],
+            ["210", "滑稽模仿"],
+            ["116", "滥交"],
+            ["64", "潮吹"],
+            ["25", "灌肠"],
+            ["106", "烂醉如泥的"],
+            ["294", "爱好、文化"],
+            ["264", "爱情故事"],
+            ["265", "爱情浪漫"],
+            ["212", "特效"],
+            ["224", "独立制作"],
+            ["79", "猎艳"],
+            ["217", "猥亵穿着"],
+            ["130", "猫耳女"],
+            ["126", "玩具"],
+            ["619", "瑜伽"],
+            ["134", "男同性恋"],
+            ["242", "男性"],
+            ["591", "男潮吹"],
+            ["147", "瘦小身型"],
+            ["152", "白人"],
+            ["187", "白天出轨"],
+            ["169", "监禁"],
+            ["81", "眼镜"],
+            ["114", "礼仪小姐"],
+            ["604", "社团・经理"],
+            ["211", "科幻"],
+            ["171", "秘书"],
+            ["101", "空中小姐"],
+            ["285", "童年朋友"],
+            ["53", "第一人称摄影"],
+            ["522", "粉丝感谢"],
+            ["132", "粪便"],
+            ["39", "精选、综合"],
+            ["140", "紧缚"],
+            ["63", "紧身衣"],
+            ["605", "约会"],
+            ["97", "纪录片"],
+            ["137", "经典"],
+            ["80", "绳缚"],
+            ["310", "给女性观众"],
+            ["292", "综合短篇"],
+            ["30", "美容院"],
+            ["55", "美少女"],
+            ["301", "美少女电影"],
+            ["23", "羞耻"],
+            ["632", "翻白眼・失神"],
+            ["124", "老板娘、女主人"],
+            ["198", "肌肉"],
+            ["6", "肛交"],
+            ["614", "背后"],
+            ["135", "胖女人"],
+            ["203", "脱衣"],
+            ["19", "自慰"],
+            ["603", "自慰辅助"],
+            ["42", "舔阴"],
+            ["202", "艺人"],
+            ["89", "苗条"],
+            ["68", "荡妇"],
+            ["155", "药物"],
+            ["20", "萝莉塔"],
+            ["231", "歌德萝莉"],
+            ["635", "蒙面・面具"],
+            ["129", "蓝光"],
+            ["222", "薄马赛克"],
+            ["600", "虐打"],
+            ["223", "蛮横娇羞"],
+            ["589", "蜡烛"],
+            ["201", "行动"],
+            ["49", "裸体围裙"],
+            ["177", "西洋片"],
+            ["7", "角色扮演"],
+            ["164", "角色扮演者"],
+            ["225", "触手"],
+            ["246", "触摸打字"],
+            ["191", "讲师"],
+            ["205", "访问"],
+            ["61", "调教"],
+            ["118", "赛车女郎"],
+            ["229", "超乳"],
+            ["282", "超短裙"],
+            ["98", "足交"],
+            ["153", "跳舞"],
+            ["156", "跳蛋"],
+            ["121", "身体意识"],
+            ["172", "车掌小姐"],
+            ["94", "轮奸"],
+            ["620", "软体"],
+            ["43", "辣妹"],
+            ["587", "辱骂"],
+            ["245", "运动"],
+            ["617", "运动员"],
+            ["127", "运动短裤"],
+            ["29", "连裤袜"],
+            ["38", "迷你裙"],
+            ["150", "迷你裙警察"],
+            ["622", "酒店"],
+            ["192", "重印版"],
+            ["666", "长靴"],
+            ["21", "露出"],
+            ["286", "青年"],
+            ["615", "面试"],
+            ["268", "韩国"],
+            ["69", "颜射"],
+            ["58", "颜射"],
+            ["144", "颜面骑乘"],
+            ["193", "飞特族"],
+            ["138", "食粪"],
+            ["141", "饮尿"],
+            ["606", "饮酒派对"],
+            ["54", "首次亮相"],
+            ["108", "高"],
+            ["28", "高中女生"],
+            ["607", "高龄男"],
+            ["178", "魔鬼系"],
+            ["162", "鸭嘴"],
+            ["160", "黑人演员"],
+            ["627", "鼻勾"],
+        ];
 
-    const JAVLIBRARY_COMBO_STATIC_VALUE_MAP = (() => {
         const map = Object.create(null);
         const define = (fieldAlias, value, labels) => {
             if (!fieldAlias || !value || !Array.isArray(labels)) return;
@@ -11369,18 +10521,19 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 if (normalized && !bucket[normalized]) bucket[normalized] = compactText(value);
             });
         };
-        JAVLIBRARY_COMBO_GENRE_STATIC_ENTRIES.forEach(([value, label]) => define('genre', value, [label]));
+        genreEntries.forEach(([value, label]) => define('genre', value, [label]));
         define('genre', '15', ['女同性恋', '女同性戀', '女同', 'レズ', 'レズビアン', 'lesbian']);
         define('genre', '12', ['中出', '中出し', '内射', '內射']);
         define('genre', '93', ['乱伦', '亂倫', '近親相姦', '近亲相奸', 'incest']);
         define('genre', '34', ['姐姐', '姉', 'お姉さん', '姉系']);
-        return map;
-    })();
-
+        javLibraryComboStaticValueMap = map;
+        return javLibraryComboStaticValueMap;
+    }
+// @@creamu-part:42-javlibrary-search-runtime
     function resolveJavLibraryComboStaticValue(fieldAlias, rawValue) {
         const normalized = normalizeJavLibraryComboOptionLabel(rawValue);
         if (!normalized) return '';
-        const bucket = JAVLIBRARY_COMBO_STATIC_VALUE_MAP[fieldAlias] || null;
+        const bucket = getJavLibraryComboStaticValueMap()[fieldAlias] || null;
         return compactText(bucket?.[normalized] || '');
     }
 
@@ -11766,7 +10919,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         return true;
     }
 
-function isTrackingResolvableOpenUrl(url) {
+    function isTrackingResolvableOpenUrl(url) {
         const parsed = parseTrackingUrl(url || '');
         if (!parsed) return false;
         if (isJavLibraryResolvableSearchUrl(parsed.href)) {
@@ -11775,8 +10928,7 @@ function isTrackingResolvableOpenUrl(url) {
         }
         return true;
     }
-
-// @@creamu-part:45-tracking-state
+// @@creamu-part:43-tracking-page-context
     function buildTrackingNavigationUrl(record) {
         const normalizedUrl = buildTrackingOpenUrl(record?.site, record?.open_url || record?.page_url || '', record || {}) || '';
         const fallbackUrl = record?.page_url || record?.open_url || normalizedUrl || '';
@@ -12360,7 +11512,7 @@ function isTrackingResolvableOpenUrl(url) {
         context.query_signature = buildTrackingSignature(context);
         return context;
     }
-
+// @@creamu-part:45-tracking-state
     function formatRelativeTime(value) {
         if (!value) return '未记录';
         const time = new Date(value).getTime();
@@ -12525,6 +11677,14 @@ function isTrackingResolvableOpenUrl(url) {
         const value = String(note || '');
         if (!value) return false;
         return /(请求超时|网络失败|HTTP 403|HTTP 429|HTTP 503|Cloudflare|暂时限制刷新|返回的不是 JSON|未拿到新的 searchid|列表检查失败|尾页检查失败|重建搜索失败)/i.test(value);
+    }
+
+    function deriveTrackingStatusFromSnapshot(record) {
+        const topCode = normalizeCode(record?.top_avid || '');
+        const seenCode = normalizeCode(record?.last_seen_avid || '');
+        if (topCode && seenCode) return topCode === seenCode ? 'latest' : 'updated';
+        if (topCode) return 'checked';
+        return 'unchecked';
     }
 
     function normalizeTrackingRuntimeRecord(record) {
@@ -12760,7 +11920,7 @@ function isTrackingResolvableOpenUrl(url) {
         }
         return record;
     }
-
+// @@creamu-part:46-tracking-refresh
     function isTrackingVerificationRequired(record, response) {
         if (!response) return false;
         if (String(record?.site || '').toLowerCase() !== 'javlibrary') return false;
@@ -12777,14 +11937,6 @@ function isTrackingResolvableOpenUrl(url) {
             || record?.open_url
             || record?.page_url
             || '';
-    }
-
-    function deriveTrackingStatusFromSnapshot(record) {
-        const topCode = normalizeCode(record?.top_avid || '');
-        const seenCode = normalizeCode(record?.last_seen_avid || '');
-        if (topCode && seenCode) return topCode === seenCode ? 'latest' : 'updated';
-        if (topCode) return 'checked';
-        return 'unchecked';
     }
 
     function clearTrackingVerificationRequired(record, options = {}) {
@@ -13185,327 +12337,10 @@ function isTrackingResolvableOpenUrl(url) {
             renderTrackingUI();
         }
     }
-
 // @@creamu-part:47-tracking-ui
     async function renderTrackingUI() {
-        if (typeof scheduleRenderWorkbenchTrackingList === 'function') {
-            // 后台刷新/滚动中勿立刻整表重绘，避免滚动被打断
-            scheduleRenderWorkbenchTrackingList({}, workbenchListScrolling ? 0 : 220);
-            return;
-        }
-        if (typeof renderWorkbenchTrackingList === 'function') {
-            await renderWorkbenchTrackingList();
-            return;
-        }
-        const root = document.getElementById('jlc-tracking-root');
-        if (!root) return;
-        const context = getCurrentTrackingPageContext();
-        const list = (await getTrackingSearches()).filter(record => !record.archived);
-        const updateCount = list.filter(record => normalizeCode(record.top_avid || '') && normalizeCode(record.top_avid || '') !== normalizeCode(record.last_seen_avid || '')).length;
-        const refreshResume = getTrackingRefreshResumeState();
-        const refreshRuntime = getTrackingRefreshRuntimeState();
-        const runtimeSummary = buildTrackingRefreshRuntimeSummary(refreshRuntime);
-        const runtimeButtonText = buildTrackingRefreshRuntimeButtonText(refreshRuntime);
-        const resumePendingIds = Array.isArray(refreshResume?.pending_ids)
-            ? refreshResume.pending_ids.filter(id => list.some(record => record.id === id))
-            : [];
-        const resumePendingCount = resumePendingIds.length;
-        const collapsedState = getTrackingUiState().collapsed || {};
-        const groups = new Map();
-        list.forEach(record => {
-            const key = getTrackingEffectiveGroupType(record);
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key).push(record);
-        });
-
-        const groupMarkup = Array.from(groups.entries())
-            .sort((a, b) => {
-                const aIndex = TRACKING_GROUP_ORDER.indexOf(a[0]);
-                const bIndex = TRACKING_GROUP_ORDER.indexOf(b[0]);
-                const normalizedA = aIndex === -1 ? TRACKING_GROUP_ORDER.length : aIndex;
-                const normalizedB = bIndex === -1 ? TRACKING_GROUP_ORDER.length : bIndex;
-                return normalizedA - normalizedB || String(a[0]).localeCompare(String(b[0]));
-            })
-            .map(([groupType, records]) => {
-            const groupKey = 'group_' + groupType;
-            const collapsed = !!collapsedState[groupKey];
-            const hasUpdate = records.filter(record => normalizeCode(record.top_avid || '') && normalizeCode(record.top_avid || '') !== normalizeCode(record.last_seen_avid || '')).length;
-            const rows = records.map(record => {
-                const status = buildTrackingStatus(record);
-                const displayTitle = getTrackingDisplayTitle(record);
-                const pageHints = buildTrackingPageHintSummary(record);
-                const pageSummary = pageHints.length ? (' · ' + pageHints.join(' · ')) : '';
-                const metaParts = [];
-                if (record.top_avid) metaParts.push('<span>最新：' + escapeHtml(record.top_avid) + '</span>');
-                if (record.last_seen_avid) metaParts.push('<span>断点：' + escapeHtml(record.last_seen_avid) + '</span>');
-                const browseOnly = buildTrackingPageHintSummary(record, { includeBrowsed: true }).find(item => item.startsWith('浏览第'));
-                if (browseOnly) metaParts.push('<span>' + escapeHtml(browseOnly) + '</span>');
-                metaParts.push('<span title="' + escapeHtml(formatDateTime(record.last_browsed_at)) + '">最后浏览：' + escapeHtml(formatRelativeTime(record.last_browsed_at)) + '</span>');
-                metaParts.push('<span title="' + escapeHtml(formatDateTime(record.last_check_at)) + '">最后检查：' + escapeHtml(formatRelativeTime(record.last_check_at)) + '</span>');
-                return ''
-                    + '<div class="jlc-tracking-item" data-jlc-tracking-id="' + escapeHtml(record.id) + '">'
-                    + '  <div class="jlc-tracking-main">'
-                    + '    <div class="jlc-tracking-title-row">'
-                    + '      <span class="jlc-status-pill tone-' + escapeHtml(status.tone) + '" title="' + escapeHtml(status.note || '') + '">' + escapeHtml(status.text) + '</span>'
-                    + '      <span class="jlc-site-pill">' + escapeHtml(getSiteLabel(record.site)) + '</span>'
-                    + '      <span class="jlc-tracking-title-text">' + escapeHtml(displayTitle) + '</span>'
-                    + (pageSummary ? '      <span class="jlc-tracking-pagehint">' + escapeHtml(pageSummary) + '</span>' : '')
-                    + '    </div>'
-                    + '    <div class="jlc-tracking-meta">' + metaParts.join('') + '</div>'
-                    + '  </div>'
-                    + '  <div class="jlc-tracking-actions">'
-                    + '    <button type="button" data-jlc-tracking-open="' + escapeHtml(record.id) + '">打开</button>'
-                    + (isJavLibraryResolvableSearchUrl(record.page_url || record.open_url || '')
-                        ? '    <button type="button" data-jlc-tracking-query="' + escapeHtml(record.id) + '" style="background:#3f5368;">改词</button>'
-                        : '')
-                    + '    <button type="button" data-jlc-tracking-label="' + escapeHtml(record.id) + '" style="background:#555;">改名</button>'
-                    + (hasPendingTrackingVerification(record)
-                        ? '    <button type="button" data-jlc-tracking-verify="' + escapeHtml(record.id) + '" style="background:#6b4f1d;">验证</button>'
-                        : '')
-                    + '    <button type="button" data-jlc-tracking-refresh="' + escapeHtml(record.id) + '" style="background:#444;">刷新</button>'
-                    + '    <button type="button" data-jlc-tracking-delete="' + escapeHtml(record.id) + '" style="background:#5b2d2d;">删除</button>'
-                    + '  </div>'
-                    + '</div>';
-            }).join('');
-            return ''
-                + '<section class="jlc-tracking-group' + (collapsed ? ' collapsed' : '') + '" data-jlc-group="' + escapeHtml(groupKey) + '">'
-                + '  <button type="button" class="jlc-tracking-group-toggle" data-jlc-toggle-group="' + escapeHtml(groupKey) + '">'
-                + '    <span>' + escapeHtml(getTrackingGroupLabel(groupType)) + (hasUpdate ? '（' + hasUpdate + ' 项有更新）' : '') + '</span>'
-                + '    <small>' + records.length + ' 项</small>'
-                + '  </button>'
-                + '  <div class="jlc-tracking-group-body">' + rows + '</div>'
-                + '</section>';
-        }).join('');
-
-        root.innerHTML = ''
-            + '<div class="jlc-tracking-toolbar">'
-            + '  <div class="jlc-tracking-toolbar-summary">共 ' + list.length + ' 项 · ' + updateCount + ' 项有更新</div>'
-            + (runtimeSummary
-                ? '  <div class="jlc-tracking-toolbar-summary" style="color:#93c5fd;">' + escapeHtml(runtimeSummary) + '</div>'
-                : '')
-            + (resumePendingCount
-                ? '  <div class="jlc-tracking-toolbar-summary" style="color:#fde68a;">刷新已暂停 · 待验证后继续 ' + resumePendingCount + ' 项</div>'
-                : '')
-            + '  <div class="jlc-tracking-toolbar-actions">'
-            + '    ' + (context ? '<button type="button" data-jlc-tracking-save-current' + (refreshRuntime ? ' disabled' : '') + '>⭐ 收藏当前搜索</button>' : '')
-            + '    <button type="button" data-jlc-tracking-refresh-all style="background:#444;"' + (refreshRuntime ? ' disabled' : '') + '>' + escapeHtml(runtimeButtonText) + '</button>'
-            + (resumePendingCount
-                ? '    <button type="button" data-jlc-tracking-open-verify style="background:#6b4f1d;">去验证</button>'
-                    + '    <button type="button" data-jlc-tracking-resume style="background:#3f5368;">验证后继续</button>'
-                : '')
-            + '  </div>'
-            + '</div>'
-            + (groupMarkup || '<div class="jlc-tracking-empty">' + (context ? '当前页可收藏为追更项，点击上方“收藏当前搜索”即可开始记录。' : '当前还没有追更项，先在列表页点击“收藏当前搜索”吧。') + '</div>');
-
-        root.querySelector('[data-jlc-tracking-save-current]')?.addEventListener('click', async () => {
-            const currentContext = getCurrentTrackingPageContext();
-            if (!currentContext) {
-                showAlert('当前页面还不是可收藏的列表页。');
-                return;
-            }
-            const customLabel = promptTrackingCustomLabel(null, currentContext);
-            if (customLabel === null) return;
-            const record = await createOrUpdateTrackingFromContext(currentContext, {
-                createIfMissing: true,
-                touchBrowse: true,
-                checkTop: true,
-                updateCheck: true,
-                seedSeen: true,
-                customLabel
-            });
-            trackingPageState.record = record;
-            trackingPageState.context = currentContext;
-            trackingPageState.signature = currentContext.query_signature;
-            trackingPageTouchSignature = currentContext.query_signature;
-            applyTrackingPageDecorations(record);
-            ensureTrackingPageBar({ context: currentContext, record });
-            refreshTrackingToolbarButtons();
-            renderTrackingUI();
-            showAlert('当前搜索已加入追更！');
-        });
-
-        root.querySelector('[data-jlc-tracking-refresh-all]')?.addEventListener('click', (event) => {
-            if (getTrackingRefreshRuntimeState()) return;
-            void refreshAllTrackingSearches(event.currentTarget);
-        });
-
-        root.querySelector('[data-jlc-tracking-open-verify]')?.addEventListener('click', () => {
-            const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                || list.find(record => resumePendingIds.includes(record.id));
-            const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
-            if (!verifyUrl) {
-                showAlert('当前没有可打开的验证页面。');
-                return;
-            }
-            openTrackingVerificationUrl(verifyUrl, { fallbackToNavigate: true });
-        });
-
-        root.querySelector('[data-jlc-tracking-resume]')?.addEventListener('click', async (event) => {
-            if (!resumePendingIds.length) {
-                clearTrackingRefreshResumeState();
-                renderTrackingUI();
-                return;
-            }
-            const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                || list.find(record => resumePendingIds.includes(record.id));
-            const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
-            const probe = await probeTrackingVerificationReady(verifyRecord, verifyUrl);
-            if (!probe.ok) {
-                if (verifyUrl) openTrackingVerificationUrl(verifyUrl);
-                showAlert((probe.note || '验证尚未生效') + '，请在打开的 JavLibrary 页面完成验证后再点继续。');
-                return;
-            }
-            clearTrackingRefreshResumeState();
-            if (verifyRecord) {
-                clearTrackingVerificationRequired(verifyRecord, { restoreStatus: true });
-                await saveTrackingRecord(verifyRecord);
-            }
-            void refreshAllTrackingSearches(event.currentTarget, {
-                recordIds: resumePendingIds,
-                total: Number(refreshResume?.total || 0) || resumePendingIds.length,
-                completedBase: Number(refreshResume?.completed || 0) || 0,
-                resumeVerified: true
-            });
-        });
-
-        root.querySelectorAll('[data-jlc-toggle-group]').forEach(button => {
-            button.addEventListener('click', () => {
-                const groupKey = button.getAttribute('data-jlc-toggle-group') || '';
-                const section = root.querySelector('[data-jlc-group="' + CSS.escape(groupKey) + '"]');
-                const collapsed = !section?.classList.contains('collapsed');
-                setTrackingGroupCollapsed(groupKey, collapsed);
-                section?.classList.toggle('collapsed', collapsed);
-            });
-        });
-
-        root.querySelectorAll('[data-jlc-tracking-open]').forEach(button => {
-            button.addEventListener('click', async () => {
-                const record = list.find(item => item.id === button.getAttribute('data-jlc-tracking-open'));
-                if (!record) return;
-                const targetUrl = buildTrackingNavigationUrl(record) || record.open_url;
-                const targetMode = resolveTrackingSearchMode(record, parseTrackingUrl(targetUrl || record.open_url || ''));
-                const targetPageHint = targetMode === 'backfill'
-                    ? (Number(record.last_seen_page_hint || record.top_page_hint || record.last_browsed_page_hint || 0) || 1)
-                    : (Number(getCurrentListPageHint(targetUrl) || 0) || 1);
-                record.last_browsed_at = new Date().toISOString();
-                record.last_browsed_page_hint = targetPageHint;
-
-                if (isJavLibraryResolvableSearchUrl(record.page_url || record.open_url || targetUrl || '')) {
-                    let searchQuery = getTrackingSearchQuery(record);
-                    if (!searchQuery) {
-                        searchQuery = promptTrackingSearchQuery(record);
-                        if (searchQuery == null) return;
-                    }
-                    searchQuery = compactText(searchQuery || '');
-                    if (!searchQuery) {
-                        showAlert('原搜索词不能为空。');
-                        return;
-                    }
-                    applyTrackingSearchQuery(record, searchQuery);
-                    const resolved = await resolveJavLibrarySearchUrl(record, {
-                        keyword: searchQuery,
-                        pageHint: targetPageHint
-                    });
-                    if (!resolved.ok || !resolved.url) {
-                        await saveTrackingRecord(record);
-                        showAlert('重新生成 JavLibrary 搜索失败：' + (resolved.error || '未知错误'));
-                        return;
-                    }
-                    record.open_url = resolved.url;
-                    await saveTrackingRecord(record);
-                    location.href = resolved.url;
-                    return;
-                }
-
-                await saveTrackingRecord(record);
-                location.href = targetUrl;
-            });
-        });
-
-        root.querySelectorAll('[data-jlc-tracking-verify]').forEach(button => {
-            button.addEventListener('click', () => {
-                const record = list.find(item => item.id === button.getAttribute('data-jlc-tracking-verify'));
-                if (!record) return;
-                const verifyUrl = buildTrackingVerifyUrl(record);
-                if (!verifyUrl) {
-                    showAlert('当前没有可打开的验证页面。');
-                    return;
-                }
-                openTrackingVerificationUrl(verifyUrl, { fallbackToNavigate: true });
-            });
-        });
-
-        root.querySelectorAll('[data-jlc-tracking-refresh]').forEach(button => {
-            button.addEventListener('click', async () => {
-                const recordId = button.getAttribute('data-jlc-tracking-refresh');
-                button.disabled = true;
-                button.textContent = '刷新中...';
-                try {
-                    await refreshSingleTrackingRecord(recordId);
-                } finally {
-                    renderTrackingUI();
-                }
-            });
-        });
-
-        root.querySelectorAll('[data-jlc-tracking-query]').forEach(button => {
-            button.addEventListener('click', async () => {
-                const recordId = button.getAttribute('data-jlc-tracking-query');
-                const record = list.find(item => item.id === recordId);
-                if (!record) return;
-                const searchQuery = promptTrackingSearchQuery(record, context);
-                if (searchQuery == null) return;
-                if (!compactText(searchQuery || '')) {
-                    showAlert('原搜索词不能为空。');
-                    return;
-                }
-                applyTrackingSearchQuery(record, searchQuery);
-                await saveTrackingRecord(record);
-                if (trackingPageState.record?.id === record.id) {
-                    trackingPageState.record = record;
-                    ensureTrackingPageBar({ context: trackingPageState.context, record });
-                }
-                renderTrackingUI();
-            });
-        });
-
-        root.querySelectorAll('[data-jlc-tracking-label]').forEach(button => {
-            button.addEventListener('click', async () => {
-                const recordId = button.getAttribute('data-jlc-tracking-label');
-                const record = list.find(item => item.id === recordId);
-                if (!record) return;
-                const customLabel = promptTrackingCustomLabel(record, context);
-                if (customLabel === null) return;
-                record.custom_label = compactText(customLabel || '');
-                await saveTrackingRecord(record);
-                if (trackingPageState.record?.id === record.id) {
-                    trackingPageState.record = record;
-                    ensureTrackingPageBar({ context: trackingPageState.context, record });
-                }
-                renderTrackingUI();
-            });
-        });
-
-        root.querySelectorAll('[data-jlc-tracking-delete]').forEach(button => {
-            button.addEventListener('click', async () => {
-                const recordId = button.getAttribute('data-jlc-tracking-delete');
-                const record = list.find(item => item.id === recordId);
-                if (!record) return;
-                if (!window.confirm('确定删除追更项“' + getTrackingDisplayTitle(record) + '”吗？')) return;
-                await deleteVal(TRACKING_STORE, recordId);
-                if (trackingPageState.record?.id === recordId) {
-                    trackingPageState.record = null;
-                    trackingPageState.signature = '';
-                    trackingPageState.lastSeenFound = false;
-                    clearTrackingPageDecorations();
-                    ensureTrackingPageBar({ context: trackingPageState.context, record: null });
-                    refreshTrackingToolbarButtons();
-                }
-                renderTrackingUI();
-            });
-        });
+        scheduleRenderWorkbenchTrackingList({}, workbenchListScrolling ? 0 : 220);
     }
-
     function clearTrackingPageDecorations() {
         document.querySelectorAll('.jlc-tracking-divider').forEach(node => node.remove());
         getTrackingItemNodesFromRoot(document).forEach(item => {
@@ -13980,7 +12815,7 @@ function isTrackingResolvableOpenUrl(url) {
                     if (appendedItems.length) {
                         if (direction === 'prev') grid.prepend(...appendedItems);
                         else grid.append(...appendedItems);
-                        lazyLoad?.update?.();
+                        lazyLoad?.update?.(appendedItems);
                         runCommanderScanner(appendedItems, true);
                         window.setTimeout(() => runCommanderScanner(appendedItems, true), 120);
                         window.setTimeout(() => runCommanderScanner(appendedItems, true), 620);
@@ -14141,7 +12976,10 @@ function isTrackingResolvableOpenUrl(url) {
     }
 
     function removeDetailResourceCenter() {
-        document.getElementById('jlc-resource-center')?.remove();
+        const container = document.getElementById('jlc-resource-center');
+        if (!container) return;
+        cancelResourceSectionLoads(container);
+        container.remove();
     }
 
     function ensureDetailResourceCenter(context) {
@@ -14204,13 +13042,74 @@ function isTrackingResolvableOpenUrl(url) {
             badge = document.createElement('span');
             badge.className = 'avid-date-badge';
             badge.dataset.jlcDetailDate = '1';
-            badge.style.marginLeft = '8px';
             node.insertAdjacentElement('afterend', badge);
         }
         badge.textContent = value;
         badge.title = value;
     }
+    function isResourceCenterTokenAlive(token) {
+        return document.getElementById('jlc-resource-center')?.dataset.renderToken === token;
+    }
 
+    const resourceSectionLoadObservers = new Map();
+
+    function cancelResourceSectionLoads(root = null) {
+        resourceSectionLoadObservers.forEach((observer, card) => {
+            if (root && card !== root && !root.contains?.(card)) return;
+            observer.disconnect();
+            resourceSectionLoadObservers.delete(card);
+        });
+    }
+
+    function scheduleResourceSectionLoad(card, token, load) {
+        if (!card || typeof load !== 'function') return () => false;
+        let started = false;
+        let observer = null;
+        const stopObserving = () => {
+            if (!observer) return;
+            observer.disconnect();
+            resourceSectionLoadObservers.delete(card);
+            observer = null;
+        };
+        const start = () => {
+            if (started) return false;
+            if (!isResourceCenterTokenAlive(token)) {
+                stopObserving();
+                return false;
+            }
+            started = true;
+            stopObserving();
+            void Promise.resolve().then(load).catch(error => {
+                console.warn('[JLC] 资源区块加载失败', error);
+            });
+            return true;
+        };
+        if (typeof IntersectionObserver !== 'function') {
+            window.setTimeout(start, 0);
+            return start;
+        }
+        observer = new IntersectionObserver((entries) => {
+            if (entries.some(entry => entry.isIntersecting || entry.intersectionRatio > 0)) start();
+        }, { root: null, rootMargin: '240px 0px' });
+        resourceSectionLoadObservers.set(card, observer);
+        observer.observe(card);
+        return start;
+    }
+
+    function buildDetailResourceRenderSignature(context, releaseDate = '') {
+        return JSON.stringify([
+            compactText(context?.site || ''),
+            normalizeResourceAvid(context?.avid || ''),
+            compactText(context?.title || ''),
+            normalizeReleaseDate(releaseDate),
+            config.resource_trailer !== false,
+            config.resource_screenshot !== false,
+            !!config.resource_screenshot_auto,
+            config.resource_magnet !== false,
+            config.resource_links !== false
+        ]);
+    }
+// @@creamu-part:51-resource-trailer
     function uniqueTrailerLinks(list) {
         const normalized = uniqueLinkObjects(list);
         const seen = new Set();
@@ -14437,11 +13336,6 @@ function isTrackingResolvableOpenUrl(url) {
         overlay.classList.add('is-open');
         document.documentElement.classList.add('scrollBarHide');
     }
-
-    function isResourceCenterTokenAlive(token) {
-        return document.getElementById('jlc-resource-center')?.dataset.renderToken === token;
-    }
-
     async function fetchDmmSearchTrailerInfo(context) {
         const key = context?.avid;
         const searchUrl = buildDmmSearchUrl(key);
@@ -14735,91 +13629,6 @@ function isTrackingResolvableOpenUrl(url) {
         resourceMgsCache.set(key, promise);
         return promise;
     }
-
-    async function fetchSupplementalMagnetInfo(avid) {
-        const key = normalizeResourceAvid(avid);
-        const emptyMessage = '未搜索到补充磁力';
-        if (!key) return { magnets: [], statuses: [], sources: [], message: emptyMessage };
-        if (resourceMagnetCache.has(key)) return resourceMagnetCache.get(key);
-        const providers = [
-            { key: 'sukebei', label: 'Sukebei', url: buildSukebeiSearchUrl(key), extract: extractSukebeiMagnetEntries, fetch: (url) => requestPage(url, { timeout: 12000 }) },
-            { key: 'torrentkitty', label: 'Torkitty', url: buildTorrentKittySearchUrl(key), extract: extractTorrentKittyMagnetEntries, fetch: (url) => requestPage(url, { timeout: 12000 }) },
-            { key: 'btsow', label: 'BTSOW', url: buildBtsowSearchUrl(key), extract: extractBtsowMagnetEntries, fetch: (url) => requestBtsowSearchPage(url) }
-        ];
-        const promise = (async () => {
-            const results = await Promise.all(providers.map(async provider => {
-                try {
-                    if (!provider.url) {
-                        return { key: provider.key, label: provider.label, href: provider.url, state: 'empty', note: '缺少番号', entries: [] };
-                    }
-                    const response = await provider.fetch(provider.url);
-                    if (!response.ok || response.blockedByChallenge) {
-                        const state = response.blockedByChallenge
-                            ? 'blocked'
-                            : ([403, 429, 503].includes(response.status) ? 'blocked' : (response.status === 404 ? 'empty' : 'error'));
-                        return {
-                            key: provider.key,
-                            label: provider.label,
-                            href: provider.url,
-                            state,
-                            note: response.blockedByChallenge ? 'JS challenge' : describeRequestStatus(response, '检索失败'),
-                            entries: []
-                        };
-                    }
-                    const entries = provider.extract(response.responseText, key);
-                    return {
-                        key: provider.key,
-                        label: provider.label,
-                        href: provider.url,
-                        state: entries.length ? 'ok' : 'empty',
-                        note: entries.length ? (entries.length + ' 条') : '未命中',
-                        entries
-                    };
-                } catch (error) {
-                    console.warn('[JLC] 磁力 provider 解析失败', provider.label, error);
-                    return { key: provider.key, label: provider.label, href: provider.url, state: 'error', note: '解析异常', entries: [] };
-                }
-            }));
-            const statuses = results.map(result => ({
-                key: result.key,
-                label: result.label,
-                state: result.state,
-                note: result.note,
-                href: result.href
-            }));
-            const magnets = uniqueMagnetEntries(results.flatMap(result => result.entries));
-            const sources = results.map(result => ({
-                key: result.key,
-                label: result.label,
-                href: result.href,
-                state: result.state,
-                note: result.note,
-                magnets: uniqueMagnetEntries(result.entries)
-            }));
-            return {
-                magnets,
-                statuses,
-                sources,
-                message: magnets.length ? '' : emptyMessage
-            };
-        })().catch(error => {
-            console.warn('[JLC] 磁力补充搜索失败', error);
-            resourceMagnetCache.delete(key);
-            return {
-                magnets: [],
-                statuses: [
-                    { key: 'sukebei', label: 'Sukebei', state: 'error', note: '解析异常', href: buildSukebeiSearchUrl(key) },
-                    { key: 'torrentkitty', label: 'Torkitty', state: 'error', note: '解析异常', href: buildTorrentKittySearchUrl(key) },
-                    { key: 'btsow', label: 'BTSOW', state: 'error', note: '解析异常', href: buildBtsowSearchUrl(key) }
-                ],
-                sources: [],
-                message: emptyMessage
-            };
-        });
-        resourceMagnetCache.set(key, promise);
-        return promise;
-    }
-
     async function resolveTrailerSources(context, options = {}) {
         const key = context?.avid;
         if (!key) return { videoSources: [], linkSources: [], statuses: [], trailerNote: '' };
@@ -14951,35 +13760,90 @@ function isTrackingResolvableOpenUrl(url) {
         resourceTrailerCache.set(cacheKey, promise);
         return promise;
     }
-
-    async function buildInlineScreenshotPanel(context) {
-        const key = context?.avid;
-        if (!key) throw new Error('missing avid');
-        let promise = resourceScreenshotCache.get(key);
-        if (!promise) {
-            promise = getAvImg(key, `jlc-resource-${key}`).catch(err => {
-                resourceScreenshotCache.delete(key);
-                throw err;
-            });
-            resourceScreenshotCache.set(key, promise);
-        }
-        const originalPanel = await promise;
-        const $panel = originalPanel.clone(true, true);
-        $panel.removeAttr('name').removeClass('pop-up-tag').addClass('jlc-inline-screenshot-panel').show();
-        $panel.css({ minHeight: '0', width: '100%' });
-        $panel.find('ul').remove();
-        $panel.find('img[name="screenshot"]').each((index, img) => {
-            if (index === 0) {
-                img.style.display = 'block';
-            } else {
-                $(img).remove();
-            }
+// @@creamu-part:52-resource-magnets
+    async function fetchSupplementalMagnetInfo(avid) {
+        const key = normalizeResourceAvid(avid);
+        const emptyMessage = '未搜索到补充磁力';
+        if (!key) return { magnets: [], statuses: [], sources: [], message: emptyMessage };
+        if (resourceMagnetCache.has(key)) return resourceMagnetCache.get(key);
+        const providers = [
+            { key: 'sukebei', label: 'Sukebei', url: buildSukebeiSearchUrl(key), extract: extractSukebeiMagnetEntries, fetch: (url) => requestPage(url, { timeout: 12000 }) },
+            { key: 'torrentkitty', label: 'Torkitty', url: buildTorrentKittySearchUrl(key), extract: extractTorrentKittyMagnetEntries, fetch: (url) => requestPage(url, { timeout: 12000 }) },
+            { key: 'btsow', label: 'BTSOW', url: buildBtsowSearchUrl(key), extract: extractBtsowMagnetEntries, fetch: (url) => requestBtsowSearchPage(url) }
+        ];
+        const promise = (async () => {
+            const results = await Promise.all(providers.map(async provider => {
+                try {
+                    if (!provider.url) {
+                        return { key: provider.key, label: provider.label, href: provider.url, state: 'empty', note: '缺少番号', entries: [] };
+                    }
+                    const response = await provider.fetch(provider.url);
+                    if (!response.ok || response.blockedByChallenge) {
+                        const state = response.blockedByChallenge
+                            ? 'blocked'
+                            : ([403, 429, 503].includes(response.status) ? 'blocked' : (response.status === 404 ? 'empty' : 'error'));
+                        return {
+                            key: provider.key,
+                            label: provider.label,
+                            href: provider.url,
+                            state,
+                            note: response.blockedByChallenge ? 'JS challenge' : describeRequestStatus(response, '检索失败'),
+                            entries: []
+                        };
+                    }
+                    const entries = provider.extract(response.responseText, key);
+                    return {
+                        key: provider.key,
+                        label: provider.label,
+                        href: provider.url,
+                        state: entries.length ? 'ok' : 'empty',
+                        note: entries.length ? (entries.length + ' 条') : '未命中',
+                        entries
+                    };
+                } catch (error) {
+                    console.warn('[JLC] 磁力 provider 解析失败', provider.label, error);
+                    return { key: provider.key, label: provider.label, href: provider.url, state: 'error', note: '解析异常', entries: [] };
+                }
+            }));
+            const statuses = results.map(result => ({
+                key: result.key,
+                label: result.label,
+                state: result.state,
+                note: result.note,
+                href: result.href
+            }));
+            const magnets = uniqueMagnetEntries(results.flatMap(result => result.entries));
+            const sources = results.map(result => ({
+                key: result.key,
+                label: result.label,
+                href: result.href,
+                state: result.state,
+                note: result.note,
+                magnets: uniqueMagnetEntries(result.entries)
+            }));
+            return {
+                magnets,
+                statuses,
+                sources,
+                message: magnets.length ? '' : emptyMessage
+            };
+        })().catch(error => {
+            console.warn('[JLC] 磁力补充搜索失败', error);
+            resourceMagnetCache.delete(key);
+            return {
+                magnets: [],
+                statuses: [
+                    { key: 'sukebei', label: 'Sukebei', state: 'error', note: '解析异常', href: buildSukebeiSearchUrl(key) },
+                    { key: 'torrentkitty', label: 'Torkitty', state: 'error', note: '解析异常', href: buildTorrentKittySearchUrl(key) },
+                    { key: 'btsow', label: 'BTSOW', state: 'error', note: '解析异常', href: buildBtsowSearchUrl(key) }
+                ],
+                sources: [],
+                message: emptyMessage
+            };
         });
-        $panel.find('li.imgResult-li').removeClass('imgResult-loading');
-        $panel.find('li.imgResult-li').eq(0).addClass('imgResult-Current').siblings().removeClass('imgResult-Current');
-        return $panel.get(0);
+        resourceMagnetCache.set(key, promise);
+        return promise;
     }
-
     function extractCurrentPageMagnets() {
         const anchors = Array.from(document.querySelectorAll('a[href^="magnet:"]'));
         return uniqueMagnetEntries(anchors.map((anchor, index) => {
@@ -15089,7 +13953,173 @@ function isTrackingResolvableOpenUrl(url) {
             });
         });
     }
+    function renderMagnetSection(card, context, token) {
+        const body = card.querySelector('.jlc-resource-body');
+        const titleNode = card.querySelector('h3');
+        let titleBar = card.querySelector('.jlc-resource-card-titlebar');
+        if (titleNode && !titleBar) {
+            titleBar = document.createElement('div');
+            titleBar.className = 'jlc-resource-card-titlebar';
+            titleNode.parentNode.insertBefore(titleBar, titleNode);
+            titleBar.appendChild(titleNode);
+        }
+        let titleTools = card.querySelector('.jlc-resource-card-tools');
+        if (titleBar && !titleTools) {
+            titleTools = document.createElement('div');
+            titleTools.className = 'jlc-resource-card-tools';
+            titleBar.appendChild(titleTools);
+        }
 
+        const pageMagnets = extractCurrentPageMagnets();
+        const pendingStatuses = [
+            { key: 'all', label: '全部', state: pageMagnets.length ? 'ok' : 'pending', note: pageMagnets.length ? `去重 ${pageMagnets.length} 条` : '准备搜索' },
+            { key: 'page', label: '当前页', state: pageMagnets.length ? 'ok' : 'empty', note: pageMagnets.length ? `${pageMagnets.length} 条` : '无直出' },
+            { key: 'sukebei', label: 'Sukebei', state: 'pending', note: '自动检测中', href: buildSukebeiSearchUrl(context.avid) },
+            { key: 'torrentkitty', label: 'Torkitty', state: 'pending', note: '自动检测中', href: buildTorrentKittySearchUrl(context.avid) },
+            { key: 'btsow', label: 'BTSOW', state: 'pending', note: '自动检测中', href: buildBtsowSearchUrl(context.avid) },
+            { key: 'sehuatang', label: '色花堂', state: 'ok', note: '番号搜索', href: buildSehuatangSearchUrl(context.avid) }
+        ];
+        let supplementalInfo = { magnets: [], statuses: pendingStatuses.slice(2, 5), sources: [], message: '' };
+        let loading = false;
+        let searched = false;
+        let activeProvider = 'all';
+        let lastMessage = pageMagnets.length ? '' : '当前页暂无可直接抽取的磁力。';
+        let startDeferredLoad = () => false;
+
+        const getSourceMagnets = () => {
+            const key = normalizeMagnetProviderKey(activeProvider);
+            const sourceMap = new Map((supplementalInfo.sources || []).map(item => [normalizeMagnetProviderKey(item.key), item]));
+            if (key === 'page') return pageMagnets;
+            if (key === 'all') return uniqueMagnetEntries([...pageMagnets, ...((supplementalInfo.sources || []).flatMap(item => item.magnets || []))]);
+            return sourceMap.get(key)?.magnets || [];
+        };
+
+        const buildStatuses = () => {
+            const sourceMap = new Map((supplementalInfo.sources || []).map(item => [normalizeMagnetProviderKey(item.key), item]));
+            const totalMagnets = uniqueMagnetEntries([...pageMagnets, ...((supplementalInfo.sources || []).flatMap(item => item.magnets || []))]);
+            const list = [
+                {
+                    key: 'all',
+                    label: '全部',
+                    state: loading ? (totalMagnets.length ? 'ok' : 'pending') : (totalMagnets.length ? 'ok' : (searched ? 'empty' : (pageMagnets.length ? 'ok' : 'pending'))),
+                    note: loading ? `去重 ${totalMagnets.length} 条 · 搜索中` : `去重 ${totalMagnets.length} 条`
+                },
+                { key: 'page', label: '当前页', state: pageMagnets.length ? 'ok' : 'empty', note: pageMagnets.length ? `${pageMagnets.length} 条` : '无直出' }
+            ];
+            ['sukebei', 'torrentkitty', 'btsow', 'sehuatang'].forEach(providerKey => {
+                const source = sourceMap.get(providerKey);
+                const fallback = pendingStatuses.find(item => item.key === providerKey) || { key: providerKey, label: providerKey.toUpperCase(), state: 'pending', note: '自动检测中' };
+                const sourceMagnets = source?.magnets || [];
+                const sourceNoteParts = [];
+                if (sourceMagnets.length) sourceNoteParts.push(sourceMagnets.length + ' 条');
+                if (source?.note && source.note !== '未命中' && source.note !== (sourceMagnets.length + ' 条')) sourceNoteParts.push(source.note);
+                list.push({
+                    key: providerKey,
+                    label: source?.label || fallback.label,
+                    state: source?.state || fallback.state,
+                    note: sourceNoteParts.join(' · ') || source?.note || fallback.note,
+                    href: source?.href || fallback.href
+                });
+            });
+            return list.map(item => Object.assign({}, item, {
+                count: normalizeMagnetProviderKey(item.key) === 'all' ? totalMagnets.length
+                    : (normalizeMagnetProviderKey(item.key) === 'page' ? pageMagnets.length : (sourceMap.get(normalizeMagnetProviderKey(item.key))?.magnets || []).length),
+                active: normalizeMagnetProviderKey(activeProvider) === normalizeMagnetProviderKey(item.key)
+            }));
+        };
+
+        const renderTitleTools = () => {
+            if (!titleTools) return;
+            titleTools.innerHTML = '<button type="button" class="jlc-title-inline-button" data-jlc-load-magnet' + (loading ? ' disabled' : '') + '>' + (loading ? '刷新中...' : '刷新磁力') + '</button>';
+            titleTools.querySelector('[data-jlc-load-magnet]')?.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+                if (startDeferredLoad()) return;
+                resourceMagnetCache.delete(normalizeResourceAvid(context.avid));
+                void loadMagnets();
+            }, { capture: true });
+        };
+
+        const render = () => {
+            const magnets = getSourceMagnets();
+            const statuses = buildStatuses();
+            const totalCount = statuses.find(item => normalizeMagnetProviderKey(item.key) === 'all')?.count || 0;
+            const summaryParts = [`去重聚合 ${totalCount} 条`, `当前页 ${pageMagnets.length} 条`];
+            if (activeProvider !== 'all') {
+                const activeStatus = statuses.find(item => normalizeMagnetProviderKey(item.key) === normalizeMagnetProviderKey(activeProvider));
+                if (activeStatus?.label) summaryParts.push('筛选 ' + activeStatus.label);
+            }
+            let emptyText = lastMessage || '当前还没有可用磁力。';
+            if (searched && activeProvider !== 'all' && !magnets.length) {
+                const activeStatus = statuses.find(item => normalizeMagnetProviderKey(item.key) === normalizeMagnetProviderKey(activeProvider));
+                emptyText = (activeStatus?.label || '当前来源') + ' 暂无磁力';
+            }
+            const contentMarkup = magnets.length ? makeMagnetListMarkup(magnets) : `<div class="jlc-resource-empty">${escapeHtml(emptyText)}</div>`;
+            renderTitleTools();
+            body.innerHTML = makeMagnetProviderStatusMarkup(statuses, activeProvider)
+                + `<div class="jlc-resource-note">${escapeHtml(summaryParts.join(' · '))}</div>`
+                + (loading ? '<div class="jlc-resource-loading">正在搜索 Sukebei / Torkitty / BTSOW...</div>' : '')
+                + contentMarkup;
+            body.querySelectorAll('[data-jlc-magnet-provider]').forEach(button => {
+                const key = normalizeMagnetProviderKey(button.dataset.jlcMagnetProvider || 'all');
+                const status = statuses.find(item => normalizeMagnetProviderKey(item.key) === key);
+                button.dataset.jlcProviderCount = String(status?.count || 0);
+                button.dataset.jlcProviderActive = status?.active ? '1' : '0';
+            });
+            bindMagnetProviderButtons(body, {
+                onSwitch: (providerKey) => {
+                    activeProvider = normalizeMagnetProviderKey(providerKey);
+                    render();
+                }
+            });
+            bindMagnetActionButtons(body, magnets);
+        };
+
+        const loadMagnets = async () => {
+            if (loading) return;
+            loading = true;
+            render();
+            const info = await fetchSupplementalMagnetInfo(context.avid);
+            if (!isResourceCenterTokenAlive(token)) return;
+            supplementalInfo = info || { magnets: [], statuses: [], sources: [], message: '' };
+            lastMessage = info?.message || (pageMagnets.length ? '' : '未搜索到补充磁力');
+            searched = true;
+            loading = false;
+            render();
+        };
+
+        render();
+        startDeferredLoad = scheduleResourceSectionLoad(card, token, loadMagnets);
+    }
+// @@creamu-part:53-resource-sections
+    async function buildInlineScreenshotPanel(context) {
+        const key = context?.avid;
+        if (!key) throw new Error('missing avid');
+        let promise = resourceScreenshotCache.get(key);
+        if (!promise) {
+            promise = getAvImg(key, `jlc-resource-${key}`).catch(err => {
+                resourceScreenshotCache.delete(key);
+                throw err;
+            });
+            resourceScreenshotCache.set(key, promise);
+        }
+        const originalPanel = await promise;
+        const $panel = originalPanel.clone(true, true);
+        $panel.removeAttr('name').removeClass('pop-up-tag').addClass('jlc-inline-screenshot-panel').show();
+        $panel.css({ minHeight: '0', width: '100%' });
+        $panel.find('ul').remove();
+        $panel.find('img[name="screenshot"]').each((index, img) => {
+            if (index === 0) {
+                img.loading = 'eager';
+            } else {
+                $(img).remove();
+            }
+        });
+        $panel.find('li.imgResult-li').removeClass('imgResult-loading');
+        $panel.find('li.imgResult-li').eq(0).addClass('imgResult-Current').siblings().removeClass('imgResult-Current');
+        return $panel.get(0);
+    }
     function renderResourceLinksSection(card, context) {
         const body = card.querySelector('.jlc-resource-body');
         const markup = makeResourceLinksMarkup(buildExternalResourceLinks(context.avid, context.site));
@@ -15222,10 +14252,7 @@ function isTrackingResolvableOpenUrl(url) {
         };
 
         renderLoading();
-        window.setTimeout(() => {
-            if (!isResourceCenterTokenAlive(token)) return;
-            void loadTrailer();
-        }, 0);
+        scheduleResourceSectionLoad(card, token, loadTrailer);
     }
 
     function renderScreenshotSection(card, context, token) {
@@ -15254,7 +14281,9 @@ function isTrackingResolvableOpenUrl(url) {
         };
 
         if (config.resource_screenshot_auto) {
-            loadScreenshots();
+            body.innerHTML = makeResourceStatusMarkup(pendingStatuses)
+                + '<div class="jlc-resource-loading">正在加载截图...</div>';
+            scheduleResourceSectionLoad(card, token, loadScreenshots);
             return;
         }
         body.innerHTML = makeResourceStatusMarkup(pendingStatuses)
@@ -15262,148 +14291,8 @@ function isTrackingResolvableOpenUrl(url) {
             + '<div class="jlc-resource-inline-actions"><button type="button" data-jlc-load-screenshot>加载截图</button></div>';
         body.querySelector('[data-jlc-load-screenshot]')?.addEventListener('click', loadScreenshots, { once: true });
     }
-
-    function renderMagnetSection(card, context, token) {
-        const body = card.querySelector('.jlc-resource-body');
-        const titleNode = card.querySelector('h3');
-        let titleBar = card.querySelector('.jlc-resource-card-titlebar');
-        if (titleNode && !titleBar) {
-            titleBar = document.createElement('div');
-            titleBar.className = 'jlc-resource-card-titlebar';
-            titleNode.parentNode.insertBefore(titleBar, titleNode);
-            titleBar.appendChild(titleNode);
-        }
-        let titleTools = card.querySelector('.jlc-resource-card-tools');
-        if (titleBar && !titleTools) {
-            titleTools = document.createElement('div');
-            titleTools.className = 'jlc-resource-card-tools';
-            titleBar.appendChild(titleTools);
-        }
-
-        const pageMagnets = extractCurrentPageMagnets();
-        const pendingStatuses = [
-            { key: 'all', label: '全部', state: pageMagnets.length ? 'ok' : 'pending', note: pageMagnets.length ? `去重 ${pageMagnets.length} 条` : '准备搜索' },
-            { key: 'page', label: '当前页', state: pageMagnets.length ? 'ok' : 'empty', note: pageMagnets.length ? `${pageMagnets.length} 条` : '无直出' },
-            { key: 'sukebei', label: 'Sukebei', state: 'pending', note: '自动检测中', href: buildSukebeiSearchUrl(context.avid) },
-            { key: 'torrentkitty', label: 'Torkitty', state: 'pending', note: '自动检测中', href: buildTorrentKittySearchUrl(context.avid) },
-            { key: 'btsow', label: 'BTSOW', state: 'pending', note: '自动检测中', href: buildBtsowSearchUrl(context.avid) },
-            { key: 'sehuatang', label: '色花堂', state: 'ok', note: '番号搜索', href: buildSehuatangSearchUrl(context.avid) }
-        ];
-        let supplementalInfo = { magnets: [], statuses: pendingStatuses.slice(2, 5), sources: [], message: '' };
-        let loading = false;
-        let searched = false;
-        let activeProvider = 'all';
-        let lastMessage = pageMagnets.length ? '' : '当前页暂无可直接抽取的磁力。';
-
-        const getSourceMagnets = () => {
-            const key = normalizeMagnetProviderKey(activeProvider);
-            const sourceMap = new Map((supplementalInfo.sources || []).map(item => [normalizeMagnetProviderKey(item.key), item]));
-            if (key === 'page') return pageMagnets;
-            if (key === 'all') return uniqueMagnetEntries([...pageMagnets, ...((supplementalInfo.sources || []).flatMap(item => item.magnets || []))]);
-            return sourceMap.get(key)?.magnets || [];
-        };
-
-        const buildStatuses = () => {
-            const sourceMap = new Map((supplementalInfo.sources || []).map(item => [normalizeMagnetProviderKey(item.key), item]));
-            const totalMagnets = uniqueMagnetEntries([...pageMagnets, ...((supplementalInfo.sources || []).flatMap(item => item.magnets || []))]);
-            const list = [
-                {
-                    key: 'all',
-                    label: '全部',
-                    state: loading ? (totalMagnets.length ? 'ok' : 'pending') : (totalMagnets.length ? 'ok' : (searched ? 'empty' : (pageMagnets.length ? 'ok' : 'pending'))),
-                    note: loading ? `去重 ${totalMagnets.length} 条 · 搜索中` : `去重 ${totalMagnets.length} 条`
-                },
-                { key: 'page', label: '当前页', state: pageMagnets.length ? 'ok' : 'empty', note: pageMagnets.length ? `${pageMagnets.length} 条` : '无直出' }
-            ];
-            ['sukebei', 'torrentkitty', 'btsow', 'sehuatang'].forEach(providerKey => {
-                const source = sourceMap.get(providerKey);
-                const fallback = pendingStatuses.find(item => item.key === providerKey) || { key: providerKey, label: providerKey.toUpperCase(), state: 'pending', note: '自动检测中' };
-                const sourceMagnets = source?.magnets || [];
-                const sourceNoteParts = [];
-                if (sourceMagnets.length) sourceNoteParts.push(sourceMagnets.length + ' 条');
-                if (source?.note && source.note !== '未命中' && source.note !== (sourceMagnets.length + ' 条')) sourceNoteParts.push(source.note);
-                list.push({
-                    key: providerKey,
-                    label: source?.label || fallback.label,
-                    state: source?.state || fallback.state,
-                    note: sourceNoteParts.join(' · ') || source?.note || fallback.note,
-                    href: source?.href || fallback.href
-                });
-            });
-            return list.map(item => Object.assign({}, item, {
-                count: normalizeMagnetProviderKey(item.key) === 'all' ? totalMagnets.length
-                    : (normalizeMagnetProviderKey(item.key) === 'page' ? pageMagnets.length : (sourceMap.get(normalizeMagnetProviderKey(item.key))?.magnets || []).length),
-                active: normalizeMagnetProviderKey(activeProvider) === normalizeMagnetProviderKey(item.key)
-            }));
-        };
-
-        const renderTitleTools = () => {
-            if (!titleTools) return;
-            titleTools.innerHTML = '<button type="button" class="jlc-title-inline-button" data-jlc-load-magnet' + (loading ? ' disabled' : '') + '>' + (loading ? '刷新中...' : '刷新磁力') + '</button>';
-            titleTools.querySelector('[data-jlc-load-magnet]')?.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
-                void loadMagnets();
-            }, { capture: true });
-        };
-
-        const render = () => {
-            const magnets = getSourceMagnets();
-            const statuses = buildStatuses();
-            const totalCount = statuses.find(item => normalizeMagnetProviderKey(item.key) === 'all')?.count || 0;
-            const summaryParts = [`去重聚合 ${totalCount} 条`, `当前页 ${pageMagnets.length} 条`];
-            if (activeProvider !== 'all') {
-                const activeStatus = statuses.find(item => normalizeMagnetProviderKey(item.key) === normalizeMagnetProviderKey(activeProvider));
-                if (activeStatus?.label) summaryParts.push('筛选 ' + activeStatus.label);
-            }
-            let emptyText = lastMessage || '当前还没有可用磁力。';
-            if (searched && activeProvider !== 'all' && !magnets.length) {
-                const activeStatus = statuses.find(item => normalizeMagnetProviderKey(item.key) === normalizeMagnetProviderKey(activeProvider));
-                emptyText = (activeStatus?.label || '当前来源') + ' 暂无磁力';
-            }
-            const contentMarkup = magnets.length ? makeMagnetListMarkup(magnets) : `<div class="jlc-resource-empty">${escapeHtml(emptyText)}</div>`;
-            renderTitleTools();
-            body.innerHTML = makeMagnetProviderStatusMarkup(statuses, activeProvider)
-                + `<div class="jlc-resource-note">${escapeHtml(summaryParts.join(' · '))}</div>`
-                + (loading ? '<div class="jlc-resource-loading">正在搜索 Sukebei / Torkitty / BTSOW...</div>' : '')
-                + contentMarkup;
-            body.querySelectorAll('[data-jlc-magnet-provider]').forEach(button => {
-                const key = normalizeMagnetProviderKey(button.dataset.jlcMagnetProvider || 'all');
-                const status = statuses.find(item => normalizeMagnetProviderKey(item.key) === key);
-                button.dataset.jlcProviderCount = String(status?.count || 0);
-                button.dataset.jlcProviderActive = status?.active ? '1' : '0';
-            });
-            bindMagnetProviderButtons(body, {
-                onSwitch: (providerKey) => {
-                    activeProvider = normalizeMagnetProviderKey(providerKey);
-                    render();
-                }
-            });
-            bindMagnetActionButtons(body, magnets);
-        };
-
-        const loadMagnets = async () => {
-            if (loading) return;
-            loading = true;
-            render();
-            const info = await fetchSupplementalMagnetInfo(context.avid);
-            if (!isResourceCenterTokenAlive(token)) return;
-            supplementalInfo = info || { magnets: [], statuses: [], sources: [], message: '' };
-            lastMessage = info?.message || (pageMagnets.length ? '' : '未搜索到补充磁力');
-            searched = true;
-            loading = false;
-            render();
-        };
-
-        render();
-        window.setTimeout(() => {
-            if (!isResourceCenterTokenAlive(token)) return;
-            void loadMagnets();
-        }, 0);
-    }
-
-        function renderDetailResourceCenter(force = false) {
+// @@creamu-part:54-resource-runtime
+    function renderDetailResourceCenter(force = false) {
         applyJavlibraryMenuTopStyle();
         const context = getCurrentDetailContext();
         if (context) {
@@ -15423,6 +14312,10 @@ function isTrackingResolvableOpenUrl(url) {
         syncDetailReleaseBadge(context, releaseDate);
         const container = ensureDetailResourceCenter(context);
         if (!container) return;
+        const renderSignature = buildDetailResourceRenderSignature(context, releaseDate);
+        if (!force && container.dataset.renderSignature === renderSignature) return;
+        cancelResourceSectionLoads(container);
+        container.dataset.renderSignature = renderSignature;
         const token = Date.now() + '-' + Math.random().toString(36).slice(2);
         container.dataset.renderToken = token;
         const subtitle = [context.siteLabel, context.avid, releaseDate ? ('发行 ' + releaseDate) : ''].filter(Boolean).join(' · ');
@@ -15435,6 +14328,9 @@ function isTrackingResolvableOpenUrl(url) {
         }
         if (config.resource_magnet !== false) {
             cards.push('<section class="jlc-resource-card" data-jlc-resource="magnet"><h3>磁力</h3><div class="jlc-resource-body"></div></section>');
+        }
+        if (config.resource_links !== false) {
+            cards.push('<section class="jlc-resource-card" data-jlc-resource="links"><h3>站外链接</h3><div class="jlc-resource-body"></div></section>');
         }
         container.innerHTML = ''
             + '<div class="jlc-resource-header">'
@@ -15457,10 +14353,10 @@ function isTrackingResolvableOpenUrl(url) {
         if (screenshotCard) renderScreenshotSection(screenshotCard, context, token);
         const magnetCard = container.querySelector('[data-jlc-resource="magnet"]');
         if (magnetCard) renderMagnetSection(magnetCard, context, token);
+        const linksCard = container.querySelector('[data-jlc-resource="links"]');
+        if (linksCard) renderResourceLinksSection(linksCard, context);
     }
-
-
-
+// @@creamu-part:55-site-registry
     let lazyLoad;
     let scroller;
     let myModal;//弹窗插件实例
@@ -15582,8 +14478,284 @@ function isTrackingResolvableOpenUrl(url) {
             },
         }
     };
+// @@creamu-part:59-cover-download
+    const COVER_DOWNLOAD_LIBRARY_URLS = [
+        'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+        'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js',
+        'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    ];
+    let coverDownloadLibraryPromise = null;
+    let coverDownloadDialogInstance = null;
+    let coverDownloadStylesReady = false;
 
-// @@creamu-part:60-legacy-ui
+    function hasCoverDownloadLibrary() {
+        return typeof globalThis.JSZip === 'function';
+    }
+
+    async function ensureCoverDownloadLibrary() {
+        if (hasCoverDownloadLibrary()) return true;
+        if (coverDownloadLibraryPromise) return coverDownloadLibraryPromise;
+
+        coverDownloadLibraryPromise = (async () => {
+            const savedIndex = Math.max(0, Number(GM_getValue('downloadPanel_url', 0)) || 0)
+                % COVER_DOWNLOAD_LIBRARY_URLS.length;
+            let lastError = null;
+            for (let offset = 0; offset < COVER_DOWNLOAD_LIBRARY_URLS.length; offset += 1) {
+                const index = (savedIndex + offset) % COVER_DOWNLOAD_LIBRARY_URLS.length;
+                const url = COVER_DOWNLOAD_LIBRARY_URLS[index];
+                try {
+                    const response = await getRequest(url, { timeout: 10000, responseType: 'text' });
+                    const status = Number(response?.status || 0);
+                    if (status < 200 || status >= 300 || !response?.responseText) {
+                        throw new Error(`HTTP ${status || 'unknown'}`);
+                    }
+                    (0, eval)(response.responseText);
+                    if (!hasCoverDownloadLibrary()) throw new Error('JSZip did not initialize');
+                    GM_setValue('downloadPanel_url', index);
+                    return true;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            throw new Error(`下载组件加载失败：${lastError?.message || '所有镜像均不可用'}`);
+        })();
+
+        try {
+            return await coverDownloadLibraryPromise;
+        } catch (error) {
+            coverDownloadLibraryPromise = null;
+            throw error;
+        }
+    }
+
+    function sanitizeCoverFilename(value) {
+        const normalized = String(value || '')
+            .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/[. ]+$/g, '')
+            .slice(0, 180);
+        return normalized || 'cover';
+    }
+
+    function saveCoverArchive(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.hidden = true;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function initCoverDownloadStyles() {
+        if (coverDownloadStylesReady) return;
+        coverDownloadStylesReady = true;
+        GM_addStyle(`
+        #jlc-wb #jlc-cover-download-dialog[hidden]{display:none!important}
+        #jlc-wb #jlc-cover-download-dialog{position:absolute;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(74,55,40,.32);font-family:inherit}
+        #jlc-wb .jlc-cover-download-surface{width:min(460px,100%);max-height:calc(100% - 20px);display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--creamu-wb-border);border-radius:8px;background:var(--creamu-wb-surface);box-shadow:0 18px 40px rgba(74,55,40,.25);color:var(--creamu-wb-text)}
+        #jlc-wb .jlc-cover-download-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid var(--creamu-wb-divider)}
+        #jlc-wb .jlc-cover-download-head h2{margin:0;font-size:16px;letter-spacing:0;color:var(--creamu-wb-title)}
+        #jlc-wb .jlc-cover-download-body{min-height:0;overflow:auto;padding:14px}
+        #jlc-wb .jlc-cover-download-form{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center}
+        #jlc-wb .jlc-cover-download-form label{font-weight:650;white-space:nowrap}
+        #jlc-wb .jlc-cover-download-form input{width:100%;min-width:0;height:36px;padding:6px 9px;border:1px solid var(--creamu-wb-border-strong);border-radius:6px;background:var(--creamu-wb-surface-raised);color:var(--creamu-wb-text);font:inherit}
+        #jlc-wb .jlc-cover-download-message{min-height:20px;margin-top:10px;color:var(--creamu-wb-text-muted);font-size:12px}
+        #jlc-wb .jlc-cover-download-files{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 12px;margin-top:8px}
+        #jlc-wb .jlc-cover-download-file{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;min-width:0;font-size:12px}
+        #jlc-wb .jlc-cover-download-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        #jlc-wb .jlc-cover-download-file-state[data-state="error"]{color:var(--creamu-wb-danger)}
+        @media(max-width:520px){#jlc-wb .jlc-cover-download-form{grid-template-columns:1fr}#jlc-wb .jlc-cover-download-files{grid-template-columns:1fr}}
+        `);
+    }
+
+    class CoverDownloadPanel {
+        constructor() {
+            this.element = $(`
+                <div class="jlc-cover-download-panel">
+                    <div class="jlc-cover-download-form">
+                        <label for="jlc-cover-download-key">番号</label>
+                        <input id="jlc-cover-download-key" placeholder="SSNI, ABP" autocomplete="off" name="key">
+                        <button type="button" class="jlc-wb-btn primary" name="download">下载 ZIP</button>
+                    </div>
+                    <div class="jlc-cover-download-message" role="status" aria-live="polite"></div>
+                    <div class="jlc-cover-download-files"></div>
+                </div>
+            `);
+            this.element.find('button[name="download"]').on('click', (event) => {
+                void this.startDownload(event.currentTarget);
+            });
+        }
+
+        setMessage(message) {
+            this.element.find('.jlc-cover-download-message').text(message || '');
+        }
+
+        getResultList() {
+            const keys = String(this.element.find('input[name="key"]').val() || '')
+                .replace(/，/g, ',')
+                .split(',')
+                .map(key => key.trim().toUpperCase())
+                .filter(Boolean);
+            const list = [];
+            $('div.box-b').each(function () {
+                const box = $(this);
+                const avid = String(box.find('date[name="avid"]').text() || '').trim();
+                if (!avid || (keys.length && !keys.some(key => avid.toUpperCase().includes(key)))) return;
+                const image = box.find('img.lazy').first();
+                const url = String(image.attr('data-src') || image.attr('src') || '').trim();
+                if (!url) return;
+                const title = String(box.find('a[name="av-title"]').attr('title') || '').trim();
+                list.push({
+                    avid,
+                    url,
+                    filename: `${sanitizeCoverFilename(`${avid} ${title}`)}.jpg`
+                });
+            });
+            return list;
+        }
+
+        async startDownload(button) {
+            const items = this.getResultList();
+            this.resetInfo();
+            if (!items.length) {
+                this.setMessage('当前列表没有匹配的封面');
+                return;
+            }
+
+            button.disabled = true;
+            const originalText = button.textContent;
+            button.textContent = '准备中...';
+            this.setMessage(`正在准备 ${items.length} 张封面`);
+            try {
+                await ensureCoverDownloadLibrary();
+                button.textContent = '下载中...';
+                const result = await this.downloadZip(3, items);
+                this.setMessage(`已打包 ${result.succeeded} 张${result.failed ? `，失败 ${result.failed} 张` : ''}`);
+            } catch (error) {
+                this.setMessage(error?.message || String(error));
+            } finally {
+                button.disabled = false;
+                button.textContent = originalText;
+            }
+        }
+
+        async downloadZip(poolLimit, items) {
+            const zip = new globalThis.JSZip();
+            let completed = 0;
+            let succeeded = 0;
+            let failed = 0;
+            await this.asyncPool(poolLimit, items, async (item) => {
+                const state = this.addFileInfo(item.avid);
+                try {
+                    const response = await this.getImgResource(item.url);
+                    const status = Number(response?.status || 0);
+                    if (status < 200 || status >= 300 || !response?.response) {
+                        throw new Error(`HTTP ${status || 'unknown'}`);
+                    }
+                    zip.file(item.filename, response.response);
+                    succeeded += 1;
+                    state.text('完成').attr('data-state', 'done');
+                } catch (_) {
+                    failed += 1;
+                    state.text('失败').attr('data-state', 'error');
+                } finally {
+                    completed += 1;
+                    this.setMessage(`正在下载 ${completed}/${items.length}`);
+                }
+            });
+            if (!succeeded) throw new Error('所有封面均下载失败');
+            const blob = await zip.generateAsync({ type: 'blob' });
+            saveCoverArchive(blob, 'covers.zip');
+            return { succeeded, failed };
+        }
+
+        getImgResource(url) {
+            return getRequest(url, { responseType: 'blob', headers: { Referer: url } });
+        }
+
+        async asyncPool(poolLimit, array, iteratorFn) {
+            let cursor = 0;
+            const workerCount = Math.max(1, Math.min(Number(poolLimit) || 1, array.length));
+            const workers = Array.from({ length: workerCount }, async () => {
+                while (cursor < array.length) {
+                    const index = cursor;
+                    cursor += 1;
+                    await iteratorFn(array[index], index);
+                }
+            });
+            await Promise.all(workers);
+        }
+
+        addFileInfo(avid) {
+            const row = $('<div class="jlc-cover-download-file"></div>');
+            row.append($('<span class="jlc-cover-download-file-name"></span>').text(avid));
+            const state = $('<span class="jlc-cover-download-file-state">等待</span>');
+            row.append(state);
+            this.element.find('.jlc-cover-download-files').append(row);
+            return state;
+        }
+
+        resetInfo() {
+            this.setMessage('');
+            this.element.find('.jlc-cover-download-files').empty();
+        }
+    }
+
+    class CoverDownloadDialog {
+        constructor() {
+            initCoverDownloadStyles();
+            this.panel = new CoverDownloadPanel();
+            this.element = $(`
+                <div id="jlc-cover-download-dialog" role="dialog" aria-modal="true" aria-labelledby="jlc-cover-download-title" tabindex="-1" hidden>
+                    <section class="jlc-cover-download-surface">
+                        <header class="jlc-cover-download-head">
+                            <h2 id="jlc-cover-download-title">批量下载封面</h2>
+                            <button type="button" class="jlc-wb-icon-btn" name="close" title="关闭" aria-label="关闭">&#215;</button>
+                        </header>
+                        <div class="jlc-cover-download-body"></div>
+                    </section>
+                </div>
+            `);
+            this.element.find('.jlc-cover-download-body').append(this.panel.element);
+            this.element.on('click', (event) => {
+                if (event.target === this.element.get(0)) this.hide();
+            });
+            this.element.on('keydown', (event) => {
+                if (event.key === 'Escape') this.hide();
+            });
+            this.element.find('button[name="close"]').on('click', () => this.hide());
+        }
+
+        mount() {
+            const shell = getWorkbenchEl();
+            if (shell && this.element.parent().get(0) !== shell) $(shell).append(this.element);
+            return shell;
+        }
+
+        show() {
+            if (!this.mount()) return;
+            this.element.prop('hidden', false);
+            this.element.trigger('focus');
+        }
+
+        hide() {
+            this.element.prop('hidden', true);
+        }
+    }
+
+    function openCoverDownloadDialog() {
+        if (!coverDownloadDialogInstance) coverDownloadDialogInstance = new CoverDownloadDialog();
+        coverDownloadDialogInstance.show();
+    }
+
+    function closeCoverDownloadDialog() {
+        coverDownloadDialogInstance?.hide();
+    }
+// @@creamu-part:60-list-runtime
     /** 用于屏蔽老司机脚本的代码*/
     function oldDriverBlock(){
         if(['javbus','avmoo'].includes(currentWeb)){ //屏蔽老司机脚本,改写id
@@ -15631,14 +14803,11 @@ function isTrackingResolvableOpenUrl(url) {
                 }
             }
             currentObj = ConstCode[currentWeb];
-            //排除页面的判断
             if (currentObj.excludePages) {
                 for (let page of currentObj.excludePages) {
                     if (location.pathname.includes(page)) return;
                 }
             }
-            //调用初始化方法 未使用  if (currentObj.init) { currentObj.init();}
-            //屏蔽竖图模式的页面判断
             if (currentObj.halfImg_block_Pages) {
                 for (let blockPage of currentObj.halfImg_block_Pages) {
                     if (location.href.includes(blockPage)) {
@@ -15655,16 +14824,14 @@ function isTrackingResolvableOpenUrl(url) {
             oldDriverBlock();
             addStyle();
             currentObj.init_Style?.();
-            let menu = new SettingMenu();
-            //加载图片懒加载插件
-            lazyLoad = new LazyLoad({
+            showVersionNotice();
+            lazyLoad = new CoverLazyLoader({
                 callback_loaded: function (img) {
                     applyLoadedCoverStyle(img);
                 }
             });
             let gridPanel = new GridPanel($items,lazyLoad);
             myModal = new Popover();//弹出插件
-            //加载滚动翻页插件
             if(Status.get("autoPage") && $(currentObj.pageSelector).length ){
                 scroller=new ScrollerPlugin(gridPanel.$dom,lazyLoad);
             }
@@ -15676,7 +14843,7 @@ function isTrackingResolvableOpenUrl(url) {
             $(currentObj.gridSelector).hide().eq(0).before(this.$dom);
             let $elems = this.constructor.parseItems($items);
             this.$dom.append($elems);
-            lazyLoad.update();
+            lazyLoad.update(this.$dom);
         }
         static parseItems(elems){
             let elemsHtml = "";
@@ -15701,7 +14868,7 @@ function isTrackingResolvableOpenUrl(url) {
                     html = `<div class='item-b'>${tag.html()}</div>`;
                 }else{
                     let AvItem = getAvItem(tag);
-                    if (!(hiddenWords.find((v, i) => AvItem.title.includes(v)) || 
+                    if (!(hiddenWords.find((v, i) => AvItem.title.includes(v)) ||
                         hiddenAvids.find((v, i) => AvItem.AVID.toUpperCase().startsWith(v.toUpperCase()+"-")|| AvItem.AVID.toUpperCase()==v.toUpperCase() ))) {
                         const releaseDate = String(AvItem.date || '').trim();
                         const releaseDateHtml = releaseDate ? `<span class="avid-date-badge">${releaseDate}</span>` : '';
@@ -15761,50 +14928,92 @@ function isTrackingResolvableOpenUrl(url) {
             me.lazyLoad=lazyLoad;
             let $pageNext=$(currentObj.pageNext);
             me.nextURL = $pageNext.attr('href');
-            me.scroller_status=$(`<div class = "scroller-status"  style="text-align:center;display:none"><div class="scroll-request"><span></span><span></span><span></span><span></span></div><h2 class="scroll-last">${lang.scrollerPlugin_end}</h2></div>`);
+            me.scroller_status=$(`<div class="scroller-status"><div class="scroll-request"><span></span><span></span><span></span><span></span></div><h2 class="scroll-last">${lang.scrollerPlugin_end}</h2><div class="scroll-error"><span>${lang.scrollerPlugin_error}</span><button type="button" class="scroll-retry">${lang.scrollerPlugin_retry}</button></div></div>`);
             me.waterfall.after(me.scroller_status);
             me.locked=false;
             me.canLoad=true;
+            me.destroyed=false;
+            me.scrollFrame=null;
+            me.abortController=null;
             me.$page=$(currentObj.pageSelector);
             me.domWatch_func=me.domWatch.bind(me);
-            document.addEventListener('scroll',me.domWatch_func);
+            me.scroller_status.on('click', '.scroll-retry', () => {
+                if (!me.locked && me.canLoad && me.nextURL) void me.loadNextPage(me.nextURL);
+            });
+            document.addEventListener('scroll',me.domWatch_func,{passive:true});
             if (history.scrollRestoration) {
-               history.scrollRestoration = 'manual';//防止自动恢复页面位置
+               me.previousScrollRestoration = history.scrollRestoration;
+               history.scrollRestoration = 'manual';
             }
+            me.domWatch();
         }
         domWatch (){
-            let me = this;
-            if (me.$page.get(0).getBoundingClientRect().top - $(window).height() < 300 && (!me.locked) && (me.canLoad)) {
-                me.locked=true;
-                me.loadNextPage(me.nextURL).then(()=>{me.locked=false});
-            }
+            if (this.destroyed || this.scrollFrame !== null) return;
+            this.scrollFrame = window.requestAnimationFrame(() => {
+                this.scrollFrame = null;
+                const page = this.$page.get(0);
+                if (!page || this.locked || !this.canLoad || !this.nextURL) return;
+                if (page.getBoundingClientRect().top - window.innerHeight < 300) {
+                    void this.loadNextPage(this.nextURL);
+                }
+            });
         }
         async loadNextPage(url){
+            if (!url || this.destroyed || this.locked || !this.canLoad) return false;
+            this.locked = true;
             this.showStatus('request');
-            let responseText = await fetch(url, { credentials: 'same-origin' }).then(respond=>respond.text());
-            let $body = $(new DOMParser().parseFromString(responseText, 'text/html'));
-            let elems = GridPanel.parseItems($body.find(currentObj.itemSelector));
-            if (currentWeb != "javdb" && location.pathname.includes('/star/') && elems) {
-                elems=elems.slice(1);
-            }
-            const appendedItems = collectCommanderItems(elems);
-            this.scroller_status.hide();
-            this.waterfall.append(elems);
-            this.lazyLoad.update();
-            if (typeof runCommanderScanner === 'function') {
-                if (appendedItems.length) {
-                    runCommanderScanner(appendedItems, true);
-                    window.setTimeout(() => runCommanderScanner(appendedItems, true), 120);
-                    window.setTimeout(() => runCommanderScanner(appendedItems, true), 700);
-                } else {
-                    runCommanderScanner(this.waterfall?.get?.(0) || this.waterfall?.[0] || document, true);
+            const controller = typeof AbortController === 'function' ? new AbortController() : null;
+            this.abortController = controller;
+            const timeout = controller
+                ? window.setTimeout(() => controller.abort(), 20000)
+                : null;
+            let loaded = false;
+            try {
+                const response = await fetch(url, {
+                    credentials: 'same-origin',
+                    signal: controller?.signal
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const responseText = await response.text();
+                if (!responseText) throw new Error('Empty response');
+                if (this.destroyed) return false;
+
+                let $body = $(new DOMParser().parseFromString(responseText, 'text/html'));
+                let elems = GridPanel.parseItems($body.find(currentObj.itemSelector));
+                if (currentWeb != "javdb" && location.pathname.includes('/star/') && elems) {
+                    elems=elems.slice(1);
                 }
-            }
-            //history.pushState({}, "", url);
-            this.nextURL = $body.find(currentObj.pageNext).attr('href');
-            if(!this.nextURL){
-                this.canLoad=false;
-                this.showStatus("last");
+                const appendedItems = collectCommanderItems(elems);
+                this.scroller_status.hide();
+                this.waterfall.append(elems);
+                this.lazyLoad.update(elems);
+                if (typeof runCommanderScanner === 'function') {
+                    if (appendedItems.length) {
+                        runCommanderScanner(appendedItems, true);
+                        window.setTimeout(() => runCommanderScanner(appendedItems, true), 120);
+                        window.setTimeout(() => runCommanderScanner(appendedItems, true), 700);
+                    } else {
+                        runCommanderScanner(this.waterfall?.get?.(0) || this.waterfall?.[0] || document, true);
+                    }
+                }
+                this.nextURL = $body.find(currentObj.pageNext).attr('href');
+                if(!this.nextURL){
+                    this.canLoad=false;
+                    this.showStatus("last");
+                }
+                loaded = true;
+                return true;
+            } catch (error) {
+                if (!this.destroyed) {
+                    console.warn('[Creamu] auto page', error);
+                    this.showStatus('error');
+                }
+                return false;
+            } finally {
+                if (timeout !== null) window.clearTimeout(timeout);
+                if (this.abortController === controller) this.abortController = null;
+                this.locked = false;
+                if (loaded && this.canLoad && !this.destroyed) this.domWatch();
             }
         }
         showStatus(status){
@@ -15813,8 +15022,18 @@ function isTrackingResolvableOpenUrl(url) {
             this.scroller_status.show();
         }
         destroy (){
+            this.destroyed=true;
+            this.abortController?.abort();
+            this.abortController=null;
+            if (this.scrollFrame !== null) {
+                window.cancelAnimationFrame(this.scrollFrame);
+                this.scrollFrame=null;
+            }
             this.scroller_status.remove();
             document.removeEventListener('scroll',this.domWatch_func);
+            if (this.previousScrollRestoration && history.scrollRestoration === 'manual') {
+                history.scrollRestoration = this.previousScrollRestoration;
+            }
         }
     }
 
@@ -15857,13 +15076,6 @@ span.span-loading{display:inline-block;animation:span-loading 2s infinite}
 #modal-div .avatar-box-zdy img{height:120px}
 #modal-div .avatar-box-zdy span{font-weight:bold;text-align:center;word-wrap:break-word;display:flex;justify-content:center;align-items:center;padding:5px;line-height:22px;color:#333;background-color:#fafafa;border-top:1px solid #f2f2f2}
 
-#menu-div{white-space:nowrap;background-color:white;color:black;display:none;min-width:200px;border-radius:5px;padding:10px;box-shadow:0 10px 20px 0 rgb(0 0 0 / 50%)}
-#menu-div>div:hover{background-color:gainsboro}
-#menu-div .switch-div{display:flex;align-items:center;font-size:large;font-weight:bold}
-#menu-div .switch-div *{margin:0;padding:4px}
-#menu-div .switch-div label{flex-grow:1}
-#menu-div .range-div{display:flex;flex-direction:row;flex-wrap:nowrap}
-#menu-div .range-div input{cursor:pointer;width:80%;max-width:200px}
 .alert-zdy{position:fixed;top:50%;left:50%;padding:12px 20px;font-size:20px;color:white;background-color:rgb(0,0,0,.75);border-radius:4px;animation:itemShow .3s;z-index:1051}
 .titleNowrap{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .download-icon{position:absolute;right:0;z-index:2;cursor:pointer}
@@ -15872,12 +15084,15 @@ span.span-loading{display:inline-block;animation:span-loading 2s infinite}
 @keyframes fadeInDown{0%{transform:translate3d(0,-100%,0);opacity:0}100%{transform:none;opacity:1}}
 @keyframes itemShow{0%{transform:scale(0)}100%{transform:scale(1)}}
 @keyframes span-loading{0%{transform:scale(1);opacity:1}50%{transform:scale(1.2);opacity:1}100%{transform:scale(1);opacity:1}}
+.scroller-status{text-align:center;display:none}
 .scroll-request{text-align:center;height:15px;margin:15px auto}
 .scroll-request span{display:inline-block;width:15px;height:100%;margin-right:8px;border-radius:50%;background:rgb(16,19,16);animation:scroll-load 1s ease infinite}
 @keyframes scroll-load{0%,100%{transform:scale(1)} 50%{transform:scale(0)}}
 .scroll-request span:nth-child(2){animation-delay:0.125s}
 .scroll-request span:nth-child(3){animation-delay:0.25s}
 .scroll-request span:nth-child(4){animation-delay:0.375s}
+.scroll-error{display:flex;gap:8px;align-items:center;justify-content:center;margin:14px auto;color:#b42318}
+.scroll-retry{border:1px solid currentColor;border-radius:4px;padding:4px 10px;background:transparent;color:inherit;cursor:pointer}
 .imgResult-li{color:rgb(255,255,255,50%);font-size:20px}
 .imgResult-li.imgResult-Current{color:white}
 .imgResult-loading{animation:changeTextColor 1s  ease-in  infinite}
@@ -15886,226 +15101,5 @@ span.span-loading{display:inline-block;animation:span-loading 2s infinite}
         GM_addStyle(css_waterfall);
     }
 
-    class DownloadPanel{
-        constructor(){
-            this.addPanel();
-        }
-        async loadJS(){
-            let me =this;
-            const urlList = [['https://unpkg.com/jszip@3.6.0/dist/jszip.min.js','https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js'],
-                            ['https://cdn.jsdelivr.net/npm/jszip@3.6.0/dist/jszip.min.js','https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js'],
-                            ['https://cdnjs.cloudflare.com/ajax/libs/jszip/3.6.0/jszip.min.js','https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js']];
-            const getJSFile = url => {
-                console.log(url);
-                return getRequest(url,{timeout: 10000,responseType: 'text'})
-            }
-            let index = GM_getValue('downloadPanel_url',0);
-            for (let k = 0; k < urlList.length; k++) {
-                const values = await Promise.all([getJSFile(urlList[index][0]), getJSFile(urlList[index][1])])
-                                     .catch(reason => {console.log(reason); return false});
-                if(values) {
-                    values.forEach(v=> eval(v.responseText));
-                    me.element.find("button[name=download]").attr("disabled",false);
-                    GM_setValue('downloadPanel_url',index);
-                    break;
-                }else{
-                    index++;
-                    if(index>=urlList.length){ index = urlList.length-index; }
-                    continue;
-                }
-            }
-        }
-        addPanel(){
-            let me=this;
-            GM_addStyle(`#downloadPanel{margin:5px;}#downloadPanel button[name="download"]{height:38px;border:1px solid #ce9c9c;padding:0 9px;border-radius:4px;font-size:20px;}#downloadPanel input{height:30px;padding:4px;border-radius:4px;border:1px solid #ce9c9c;font-size:20px;}#downloadPanel input:focus{outline:0px;}#downloadPanel button[disabled]{color:#0006;cursor:not-allowed !important}.downloadform{font-size:20px;display:flex;height:40px;align-items:center;}#file-Info div[name=filename]{width:70%;display:inline-block;text-align:right}#file-Info div[name=state]{width:30%;display:inline}`)
-            me.element = $(`<div  id="downloadPanel">
-                          <div class="downloadform">
-                            <button name="download"  disabled="true">下载</button>
-                            <span style="margin-left:10px;">番号: </span><input  placeholder="ssni,abp" autocomplete="off" name="key"></input>
-                            <span style="display:none">线程数</span><input style="display:none" name="poolLimit" value="3"></input>
-                            <span class="progress-Info" style="margin-left:10px;">
-                                <span name="sum"></span><span name="total"></span><span name="msg"></span>
-                            </span>
-                          </div>
-                          <div id="file-Info"></div>
-                       </div>`);
-            me.loadJS();
-            me.element.find("button[name=download]").on("click", function () {
-                let button = this;
-                button.disabled= true;
-                me.resetInfo();
-                let arrayList = me.getResultList();
-                if(arrayList.length){
-                    me.element.find("span[name=total]").text(arrayList.length);
-                    let poolLimit = me.element.find("input[name=poolLimit]").val();
-                    me.downloadZip(poolLimit?poolLimit:5,arrayList).then(()=>(button.disabled=false));
-                }else{
-                    me.element.find("span[name=msg]").text("无过滤结果");button.disabled=false;
-                }
-            });
-        }
-        getResultList(){
-            let list =[];
-            let key = this.element.find("input[name=key]").val().toUpperCase();
-            let keyArray = key.replace("，",",").split(",").filter(k=> k && k.trim());
-            $("div.box-b").each(function () {
-                let avid = $(this).find("date[name=avid]").text();
-                if(keyArray.length && (! keyArray.find(k=> avid.toUpperCase().indexOf(k)>-1)) ){
-                    return ;
-                }
-                let url = $(this).find("img.lazy").attr("data-src");
-                let title = $(this).find("a[name='av-title']").attr("title");
-                let filename = `${avid} ${title.replace(/\//g,'_')}.jpg`;//标题中含有斜杠时，压缩包创建文件夹
-                list.push({avid:avid,url:url,filename:filename});
-            });
-            return list;
-        }
-        downloadZip(poolLimit,arrayList){
-            let me=this;
-            let sum = 0;
-            let zip = new JSZip();
-            return me.asyncPool(poolLimit,arrayList,function(item,array){
-                let $state=me.addFileInfo(item.avid);
-                return me.getImgResource(item.url).then(r =>{
-                    if (r.status == '200') {
-                        zip.file(item.filename, r.response);
-                        $state.text(`✔`);
-                        me.element.find(`span[name="sum"]`).text(`${++sum}/`);
-                    } else {
-                        $state.text(`❎`);
-                    }
-                }).catch(err =>$state.text(`❎`));
-            }).then(() => zip.generateAsync({type:"blob"}).then(blob => saveAs(blob, "download.zip") ))
-        }
-        getImgResource(url){
-            return getRequest(url,{responseType: 'blob',headers : {Referer : url}})
-        }
-        //https://blog.csdn.net/ghostlpx/article/details/106431837
-        async asyncPool(poolLimit, array, iteratorFn) {
-            const ret = []
-            const executing = []
-            for (const item of array) {
-                const p = Promise.resolve().then(() => iteratorFn(item, array));
-                ret.push(p)
-                const e = p.then(() => executing.splice(executing.indexOf(e), 1))
-                executing.push(e)
-                if (executing.length >= poolLimit) {
-                    await Promise.race(executing)
-                }
-            }
-            return Promise.all(ret)
-        }
-        addFileInfo(avid){
-            let $fileInfo=$(`<div style="width:50%;display:inline-block;float:left;"><div name="filename">${avid}:</div><div name="state">--></div></div>`);
-            this.element.find("#file-Info").append($fileInfo);
-            return $fileInfo.find("div[name=state]");
-        }
-        resetInfo(){
-            this.element.find("span.progress-Info span").text("");
-            this.element.find("#file-Info").empty();
-        }
-    }
-
-    class InputTagPanel{
-        constructor(key, placeholder) {
-            let me = this;
-            me.key = key;
-            me.data = Status.get(key) || [];
-            me.$panel = $(`<div class="input-tag-panel" name="${key}"></div>`);
-            me.$input = $(`<input type="text" autocomplete="off" value="" placeholder="${placeholder}">`);
-            me.$panel.append(me.$input);
-            me.data.forEach(function(value, index, array) {
-                me.$panel.append(`<div class="tag-div"><span>${value}</span><a href="#">X</a></div>`);
-            });
-            me.$panel.on('click', 'a', function(){
-                me.delete($(this));
-            });
-            me.$input.keyup(function(event) {
-                let key = me.$input.val().trim();
-                if (key && ((event.keyCode ? event.keyCode : event.which) === 13)) {
-                    let keyArray = key.replace("，",",").split(",").filter(k=> k && k.trim());
-                    me.add(keyArray);
-                }
-            });
-            GM_addStyle(`.input-tag-panel{display:flex;flex-direction:row;flex-wrap:wrap;margin:5px;align-content:flex-start;align-items:stretch;}.input-tag-panel>div{font-size:25px;height:25px;box-shadow:5px 5px 4px 0 rgb(0 0 0 / 10%);display:flex;line-height:25px;background-color:burlywood;float:left;padding:5px;margin-right:5px;margin-top:5px;border-radius:4px;align-items:center;}.input-tag-panel>div>a{color:white !important;font-size:20px;text-decoration:none;padding:0 5px 0 5px;}.input-tag-panel>div>a:hover{cursor:pointer;color:red;}.input-tag-panel input{width:100%;height:30px;border:solid 1px burlywood;border-radius:5px;padding:5px;font-size:20px;}.input-tag-panel input:focus{outline:none;}`);
-        }
-        add(keyArray) {
-            let me = this;
-            let $tag = [];
-            keyArray.forEach(key=>{
-                $tag.push(`<div class="tag-div"><span>${key}</span><a>X</a></div>`);
-                me.data.push(key);
-            })
-            me.$panel.append($tag).fadeIn();
-            Status.set(me.key, me.data);
-        }
-        delete($a) {
-            let me = this;
-            let key = $a.prev('span').text();
-            $a.parent('div').fadeOut();
-            let index = me.data.findIndex(v => key == v);
-            index > -1 && me.data.splice(index, 1);
-            Status.set(me.key, me.data);
-        }
-    }
-    
-    class TabPanel{
-        constructor(){
-            let me=this;
-            GM_addStyle(`#tabPanel{display:none;width:600px;height:400px;background-color:white;border-radius:5px;position:fixed;right:15px;bottom:5px;color:black;text-align:center;border:1px solid #ccc;box-shadow:5px 5px 4px 0 rgb(0 0 0 / 10%);z-index:1000}#tabPanel *{box-sizing:content-box;}#tabPanel ul{padding:0;margin:0;}.tab_list{height:40px;background-color:#facbcb;}.tab_list ul li{list-style:none;float:left;height:40px;padding:0 20px;font-size:20px;border-radius:5px 5px 0 0;text-align:center;line-height:40px;cursor:pointer;}.tab_list .tab_current{background-color:white;}.tab_content{height:355px;}.tab_content_item{overflow-y:auto;display:none;width:100%;height:100%;background-color:white;}.tab_content_item::-webkit-scrollbar{width:7px}.tab_content_item::-webkit-scrollbar-track{border-radius:8px;background-color:#f5f5f5}.tab_content_item::-webkit-scrollbar-thumb{border-radius:8px;background-color:#c8c8c8}.close-div{position:absolute;right:0px;width:40px;height:40px;font-size:40px;line-height:30px;cursor:pointer;color:gray;transform:rotate(45deg);}.close-div:hover{color:black;}`)
-            me.element = $(`<div id="tabPanel">
-                                <div class="tab_list">
-                                    <ul><li>批量下载</li><li>屏蔽词</li></ul>
-                                    <div class="close-div">+</div>
-                                </div>
-                                <div class="tab_content">
-                                    <div class="tab_content_item"></div>
-                                    <div class="tab_content_item"></div>
-                                </div>   
-                            </div>`);
-            me.$li = me.element.find(".tab_list ul>li");
-            me.$item = me.element.find(".tab_content_item");
-            me.$li.on("click", function () {
-                me.show(me.$li.index(this));
-            });
-            me.element.find(".close-div").on("click", function () {
-                me.element.toggle();
-            });
-            $('body').append(me.element);
-        }
-        show(index=0){
-            let me =this;
-            me.$li.each((i,el)=>{$(el).removeClass("tab_current")});
-            me.$li.eq(index).addClass("tab_current");
-            me.$item.each((i,el)=>{$(el).hide()});
-            if(me.$item.eq(index).children().length==0){
-                me.addItem(index);
-            }
-            me.$item.eq(index).show();
-            me.element.show();
-        }
-        addItem(index){
-            let me= this;
-            switch (index) {
-                case 0:
-                    let downloadPanel =new DownloadPanel();
-                    me.$item.eq(index).append(downloadPanel.element);
-                    break;
-                case 1:
-                    let tag1 =new InputTagPanel("hiddenWord","标题：支持逗号隔开");
-                    let tag2 =new InputTagPanel("hiddenAvid",`番号：支持逗号隔开,单个或系列如SSIS,OPX-123`);
-                    me.$item.eq(index).append(tag1.$panel).append(tag2.$panel);
-                    break;
-            }
-        }
-        static getInstance(){
-            if(!this.instance){
-                this.instance = new TabPanel();
-            }
-            return this.instance;
-        }
-    }    
     startIntegratedApp();
 })();
-
-

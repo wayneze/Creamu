@@ -4,6 +4,7 @@ import vm from 'node:vm';
 
 const baseSource = fs.readFileSync('packages/jlc-commander/src/parts/20-workbench.js', 'utf8');
 const trackingSource = fs.readFileSync('packages/jlc-commander/src/parts/21-workbench-tracking.js', 'utf8');
+const themeSource = fs.readFileSync('packages/jlc-commander/src/parts/11-theme.js', 'utf8');
 const settingsSource = fs.readFileSync('packages/jlc-commander/src/parts/22-workbench-settings.js', 'utf8');
 const shellSource = fs.readFileSync('packages/jlc-commander/src/parts/23-workbench-shell.js', 'utf8');
 const runtimeSource = fs.readFileSync('packages/jlc-commander/src/parts/24-app-runtime.js', 'utf8');
@@ -25,6 +26,31 @@ assert.match(runtimeSource, /primeWorkbenchTrackingRecordsState\(startupTracking
 assert.match(runtimeSource, /trackingRecords: startupTrackingRecords/);
 assert.match(trackingStateSource, /Array\.isArray\(preloadedRows\)/);
 assert.match(trackingUiSource, /trackingRecords: options\.trackingRecords/);
+assert.match(baseSource, /function scheduleRenderWorkbenchTrackingList/);
+assert.doesNotMatch(trackingUiSource, /jlc-tracking-root|data-jlc-tracking-delete/);
+assert.doesNotMatch(themeSource, /\.jlc-tracking-(?:toolbar|group|item|main|title-row|title-text|meta|actions|empty)\b/);
+
+const trackingRenderSource = extract(
+  trackingUiSource,
+  /async function renderTrackingUI[\s\S]*?(?=\n\s*function clearTrackingPageDecorations)/,
+  'tracking render delegation'
+);
+const renderCalls = [];
+const trackingRenderContext = {
+  workbenchListScrolling: false,
+  scheduleRenderWorkbenchTrackingList(options, delayMs) {
+    renderCalls.push({ options, delayMs });
+  },
+};
+vm.createContext(trackingRenderContext);
+vm.runInContext(trackingRenderSource, trackingRenderContext);
+await trackingRenderContext.renderTrackingUI();
+trackingRenderContext.workbenchListScrolling = true;
+await trackingRenderContext.renderTrackingUI();
+assert.deepEqual(renderCalls.map(call => ({ ...call, options: { ...call.options } })), [
+  { options: {}, delayMs: 220 },
+  { options: {}, delayMs: 0 },
+]);
 
 const primeSource = extract(
   trackingSource,
@@ -75,6 +101,68 @@ assert.deepEqual(
   ['track-new'],
   'an older async read must not overwrite the current tracking snapshot'
 );
+
+const trackingRenderStateSource = extract(
+  trackingSource,
+  /let workbenchTrackingRenderState[^\n]*\n(?:\s*let workbenchTrackingRenderSequence[^\n]*\n)?/,
+  'tracking render state'
+);
+const trackingListRenderSource = extract(
+  trackingSource,
+  /async function renderWorkbenchTrackingList[\s\S]*$/,
+  'tracking list render'
+);
+let resolveOlderRender;
+let staleRecordAccesses = 0;
+const pendingRenderStates = [
+  new Promise(resolve => { resolveOlderRender = resolve; }),
+  new Promise(() => {}),
+];
+const trackingRoot = {
+  firstElementChild: null,
+  querySelector() {
+    return null;
+  },
+};
+const concurrentRenderContext = {
+  trackingDataRevision: 1,
+  document: {
+    getElementById(id) {
+      return id === 'jlc-wb-tracking-root' ? trackingRoot : null;
+    },
+  },
+  getWorkbenchSession() {
+    return { tracking: {}, scrollTops: {} };
+  },
+  getCurrentTrackingPageContext() {
+    return null;
+  },
+  buildWorkbenchTrackingRenderKey() {
+    return 'render-key';
+  },
+  getTrackingUiState() {
+    return { collapsed: {}, refresh_resume: null };
+  },
+  getTrackingRefreshRuntimeState() {
+    return null;
+  },
+  getWorkbenchTrackingRecordsState() {
+    return pendingRenderStates.shift();
+  },
+  restoreWorkbenchScroll() {},
+};
+vm.createContext(concurrentRenderContext);
+vm.runInContext(trackingRenderStateSource + '\n' + trackingListRenderSource, concurrentRenderContext);
+const olderRender = concurrentRenderContext.renderWorkbenchTrackingList();
+void concurrentRenderContext.renderWorkbenchTrackingList();
+resolveOlderRender({
+  get records() {
+    staleRecordAccesses += 1;
+    return [];
+  },
+});
+await olderRender;
+assert.equal(staleRecordAccesses, 0, 'a superseded render must stop before reading stale records');
 
 const navigationSource = extract(
   baseSource,

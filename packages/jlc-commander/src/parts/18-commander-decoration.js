@@ -640,7 +640,7 @@
         const context = getCurrentDetailContext();
         if (!context?.avid) return null;
         const cachedMeta = normalizeMetaRecord(await getVal('meta_cache', context.avid));
-        syncDetailReleaseBadge(context, cachedMeta?.releaseDate || '');
+        syncDetailReleaseBadge(context, cachedMeta?.releaseDate || extractDetailReleaseDate(context));
         renderDetailCommanderBadges(context, buildCommanderDecorationModel(context.title, cachedMeta));
         if (!config.metatube_url) return cachedMeta;
         if (cachedMeta?.genres?.length) return cachedMeta;
@@ -649,7 +649,7 @@
         if (!freshMeta || normalizeResourceAvid(latestContext?.avid || '') !== normalizeResourceAvid(context.avid)) {
             return freshMeta || cachedMeta;
         }
-        syncDetailReleaseBadge(latestContext, freshMeta.releaseDate || '');
+        syncDetailReleaseBadge(latestContext, freshMeta.releaseDate || extractDetailReleaseDate(latestContext));
         renderDetailCommanderBadges(latestContext, buildCommanderDecorationModel(latestContext.title || context.title, freshMeta));
         return freshMeta;
     }

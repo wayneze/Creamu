@@ -375,7 +375,6 @@
         }
     }
 
-    /** 过滤页：本页内联编辑屏蔽词/番号（不跳 TabPanel） */
     function mountWorkbenchFilterEditors() {
         const hosts = [
             document.getElementById('jlc-wb-tags-hidden-word'),
@@ -448,6 +447,7 @@
     function closeWorkbenchV3() {
         const shell = getWorkbenchEl();
         if (!shell) return;
+        closeCoverDownloadDialog();
         captureWorkbenchScroll();
         shell.classList.remove('is-open');
         document.getElementById('jlc-wb-fab')?.classList.remove('is-panel-open');

@@ -3,15 +3,36 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const source = fs.readFileSync('packages/jlc-commander/src/parts/12-resource-services.js', 'utf8');
+const transportSource = fs.readFileSync('packages/jlc-commander/src/parts/12-resource-transport.js', 'utf8');
+const trailerSource = fs.readFileSync('packages/jlc-commander/src/parts/12-resource-trailer-providers.js', 'utf8');
+const linkSource = fs.readFileSync('packages/jlc-commander/src/parts/12-resource-link-providers.js', 'utf8');
+const magnetProviderSource = fs.readFileSync('packages/jlc-commander/src/parts/12-resource-magnet-providers.js', 'utf8');
+const manifest = JSON.parse(fs.readFileSync('packages/jlc-commander/src/parts.manifest.json', 'utf8'));
 const coreSource = fs.readFileSync('packages/jlc-commander/src/parts/10-core.js', 'utf8');
 
-function extract(pattern, label) {
-  const match = source.match(pattern);
+function extract(pattern, label, target = source) {
+  const match = target.match(pattern);
   assert.ok(match, label + ' not found');
   return match[0];
 }
 
 assert.doesNotMatch(coreSource, /function normalizeResourceAvid/, 'resource services must stay out of core');
+assert.deepEqual(
+  manifest.parts.filter(filename => /^12-resource/.test(filename)),
+  [
+    '12-resource-services.js',
+    '12-resource-transport.js',
+    '12-resource-trailer-providers.js',
+    '12-resource-link-providers.js',
+    '12-resource-magnet-providers.js',
+  ],
+  'resource service modules should stay in dependency order'
+);
+assert.doesNotMatch(source, /async function requestPage|function extractDmmSearchPreviewInfo|function extractSukebeiMagnetEntries/);
+assert.match(transportSource, /async function requestPage/);
+assert.match(trailerSource, /function extractDmmSearchPreviewInfo/);
+assert.match(linkSource, /function extractBlogJavScreenshotCandidates/);
+assert.match(magnetProviderSource, /function extractSukebeiMagnetEntries/);
 
 const identitySource = extract(
   /function uniqueLinkObjects[\s\S]*?(?=\n\s*function normalizeResourceStatusState)/,
@@ -19,7 +40,8 @@ const identitySource = extract(
 );
 const mgsSource = extract(
   /const MGS_AVID_PREFIXES[\s\S]*?(?=\n\s*function buildMgsDetailCandidates)/,
-  'MGS identity helpers'
+  'MGS identity helpers',
+  trailerSource
 );
 const resourceContext = {
   URL,
@@ -52,7 +74,8 @@ assert.equal(resourceContext.sanitizeMissAVPageUrl('https://missav.ws/cn/ABP-002
 
 const magnetSource = extract(
   /function normalizeMagnetHref[\s\S]*?(?=\n\s*function buildSukebeiSearchUrl)/,
-  'magnet helpers'
+  'magnet helpers',
+  magnetProviderSource
 );
 vm.runInContext(magnetSource, resourceContext);
 const hash = '0123456789abcdef0123456789abcdef01234567';
@@ -103,7 +126,8 @@ assert.equal(caches.resourceMagnetCache.has('KEEP-001'), true, 'unrelated cache 
 
 const headerSource = extract(
   /function sanitizeBrowserFetchHeaders[\s\S]*?(?=\n\s*function isLikelyBotGuardResponse)/,
-  'browser fetch header sanitizer'
+  'browser fetch header sanitizer',
+  transportSource
 );
 const headerContext = {
   compactText(value) {
@@ -120,6 +144,69 @@ assert.equal(sanitized.referrer, 'https://source.test/page');
 assert.equal(sanitized.headers.Accept, 'text/html');
 assert.equal('Referer' in sanitized.headers, false);
 assert.equal(headerContext.sanitizeBrowserFetchHeaders({ referer: 'https://source.test/' }).headers, undefined);
+
+const requestSource = extract(
+  /async function requestPage\(url, extra = \{\}\)[\s\S]*?(?=\n\s*async function requestText)/,
+  'resource request transport',
+  transportSource
+);
+let requestOptions = null;
+let throwRequest = false;
+const requestContext = {
+  GM_xmlhttpRequest(options) {
+    if (throwRequest) throw new Error('request setup failed');
+    requestOptions = options;
+  },
+};
+vm.createContext(requestContext);
+vm.runInContext(requestSource, requestContext);
+
+let externalLoadCalls = 0;
+const loaded = requestContext.requestPage('https://resource.test/page', {
+  method: 'POST',
+  timeout: 1234,
+  headers: { Accept: 'text/html' },
+  url: 'https://wrong.test/',
+  onload() {
+    externalLoadCalls += 1;
+  },
+});
+assert.equal(requestOptions.method, 'POST');
+assert.equal(requestOptions.timeout, 1234);
+assert.equal(requestOptions.url, 'https://resource.test/page');
+assert.deepEqual(requestOptions.headers, { Accept: 'text/html' });
+requestOptions.onload({ status: 204, responseText: 'ok', finalUrl: 'https://resource.test/final' });
+assert.deepEqual(
+  { ...(await loaded) },
+  {
+    ok: true,
+    status: 204,
+    responseText: 'ok',
+    finalUrl: 'https://resource.test/final',
+    error: '',
+  }
+);
+assert.equal(externalLoadCalls, 0, 'caller callbacks must not replace transport completion');
+
+const networkFailure = requestContext.requestPage('https://resource.test/network');
+requestOptions.onerror();
+assert.equal((await networkFailure).error, 'network');
+
+const timeoutFailure = requestContext.requestPage('https://resource.test/timeout');
+requestOptions.ontimeout();
+assert.equal((await timeoutFailure).error, 'timeout');
+
+const aborted = requestContext.requestPage('https://resource.test/abort');
+requestOptions.onabort();
+requestOptions.onload({ status: 200, responseText: 'late response' });
+assert.equal((await aborted).error, 'abort', 'an aborted request should settle once');
+
+throwRequest = true;
+assert.equal(
+  (await requestContext.requestPage('https://resource.test/throw')).error,
+  'network',
+  'synchronous request setup failures should use the normal failure result'
+);
 
 const toggleSource = extract(
   /function getResourceToggleStates[\s\S]*?(?=\n\s*function syncResourceSettingInputs)/,

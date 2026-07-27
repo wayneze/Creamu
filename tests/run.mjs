@@ -11,6 +11,7 @@ const files = [
   'tests/exh/list-storage.mjs',
   'tests/exh/module-boundaries.mjs',
   'tests/exh/workbench-modules.mjs',
+  'tests/exh/tracking-ui.mjs',
   'tests/jlc/core.mjs',
   'tests/jlc/list-runtime.mjs',
   'tests/jlc/dom-scanning.mjs',

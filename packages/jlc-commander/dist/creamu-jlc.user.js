@@ -493,12 +493,33 @@
             background: #3a3a3a; border-color: rgba(255,255,255,.22);
         }
         .jlc-resource-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 12px;
         }
         .jlc-resource-card {
             background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06);
-            border-radius: 12px; padding: 14px; min-height: 120px;
+            border-radius: 12px; padding: 14px; min-width: 0; min-height: 120px;
+        }
+        .jlc-resource-card[data-jlc-resource="magnet"] { grid-column: 1 / -1; }
+        .jlc-resource-links {
+            display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start;
+            margin: -2px 0 12px; padding: 8px 10px; border-radius: 8px;
+            background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06);
+        }
+        .jlc-resource-links-label {
+            padding-top: 5px; color: #aaa; font-size: 11px; line-height: 1.2; white-space: nowrap;
+        }
+        .jlc-resource-links .jlc-resource-body { min-width: 0; gap: 0; }
+        .jlc-resource-links .jlc-resource-chip-list { gap: 6px; }
+        .jlc-resource-links .jlc-resource-chip {
+            gap: 4px; padding: 4px 7px; border-radius: 6px; font-size: 11px; line-height: 1.2;
+        }
+        .jlc-resource-links .jlc-resource-chip small { display: none; }
+        @media (max-width: 760px) {
+            .jlc-resource-grid { grid-template-columns: minmax(0, 1fr); }
+            .jlc-resource-card[data-jlc-resource="magnet"] { grid-column: auto; }
+            .jlc-resource-links { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+            .jlc-resource-links-label { padding-top: 0; }
         }
         .jlc-resource-card h3 { margin: 0 0 10px; font-size: 14px; color: #fff; }
         .jlc-resource-card-titlebar {
@@ -639,25 +660,37 @@
             background: rgba(255,255,255,.18); border-radius: 999px;
         }
         .jlc-magnet-row {
-            display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start;
-            padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,.16);
+            display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: start;
+            padding: 8px 10px; border-radius: 10px; background: rgba(0,0,0,.16);
         }
-        .jlc-magnet-meta { min-width: 0; }
+        .jlc-magnet-meta { min-width: 0; flex: 1 1 280px; }
         .jlc-magnet-title {
             color: #fff; font-size: 13px; line-height: 1.5; word-break: break-word;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
         }
         .jlc-magnet-side {
-            min-width: min(42%, 280px); display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+            min-width: 0; flex: 0 1 320px; margin-left: auto;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
         }
         .jlc-magnet-sub {
             color: #9f9f9f; font-size: 11px; line-height: 1.5; text-align: right;
-            max-width: min(42vw, 280px);
+            max-width: 320px;
         }
-        .jlc-magnet-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .jlc-magnet-actions { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+        .jlc-magnet-actions button,
+        .jlc-magnet-actions a {
+            padding: 4px 7px; border-radius: 6px; font-size: 11px; line-height: 1.2; white-space: nowrap;
+        }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status {
+            gap: 4px; padding: 4px 7px; font-size: 11px;
+        }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status strong { font-size: 11px; }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status small { font-size: 10px; }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-title-inline-button {
+            padding: 4px 8px; border-radius: 6px; font-size: 11px;
+        }
         @media (max-width: 720px) {
-            .jlc-magnet-row { grid-template-columns: 1fr; }
-            .jlc-magnet-side { min-width: 0; align-items: flex-start; }
+            .jlc-magnet-side { flex: 1 1 100%; margin-left: 0; align-items: flex-start; }
             .jlc-magnet-sub { max-width: none; text-align: left; }
             .jlc-magnet-actions { justify-content: flex-start; }
         }
@@ -13000,7 +13033,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const list = uniqueLinkObjects(links);
         if (!list.length) return '';
         return `<div class="jlc-resource-chip-list">${list.map(link => `
-            <a class="jlc-resource-chip" href="${escapeHtml(link.href)}" target="_blank" rel="noopener noreferrer nofollow">
+            <a class="jlc-resource-chip" href="${escapeHtml(link.href)}" target="_blank" rel="noopener noreferrer nofollow" title="${escapeHtml(link.note || link.label)}">
                 <span>${escapeHtml(link.label)}</span>
                 ${link.note ? `<small>${escapeHtml(link.note)}</small>` : ''}
             </a>`).join('')}</div>`;
@@ -13934,7 +13967,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 <div class="jlc-magnet-side">
                     <div class="jlc-magnet-sub" title="${escapeHtml(note)}">${escapeHtml(note)}</div>
                     <div class="jlc-magnet-actions">
-                        <button type="button" data-jlc-copy-magnet="${index}">复制磁链</button>
+                        <button type="button" data-jlc-copy-magnet="${index}" title="复制磁链">复制</button>
                         <a href="${escapeHtml(magnet.href)}" target="_blank" rel="noopener noreferrer nofollow">打开</a>
                         ${magnet.src ? `<a href="${escapeHtml(magnet.src)}" target="_blank" rel="noopener noreferrer nofollow">来源</a>` : ''}
                     </div>
@@ -14329,9 +14362,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (config.resource_magnet !== false) {
             cards.push('<section class="jlc-resource-card" data-jlc-resource="magnet"><h3>磁力</h3><div class="jlc-resource-body"></div></section>');
         }
-        if (config.resource_links !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="links"><h3>站外链接</h3><div class="jlc-resource-body"></div></section>');
-        }
+        const linksStrip = config.resource_links !== false
+            ? '<div class="jlc-resource-links" data-jlc-resource="links"><span class="jlc-resource-links-label">站外</span><div class="jlc-resource-body"></div></div>'
+            : '';
         container.innerHTML = ''
             + '<div class="jlc-resource-header">'
             + '    <div>'
@@ -14343,6 +14376,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '        <button type="button" data-jlc-resource-settings>资源设置</button>'
             + '    </div>'
             + '</div>'
+            + linksStrip
             + '<div class="jlc-resource-grid">' + (cards.length ? cards.join('') : '<div class="jlc-resource-empty">当前没有启用任何资源模块。</div>') + '</div>';
         container.querySelector('[data-jlc-resource-refresh]')?.addEventListener('click', () => renderDetailResourceCenter(true));
         container.querySelector('[data-jlc-resource-settings]')?.addEventListener('click', () => openCommanderPanel('resource'));
@@ -14353,8 +14387,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (screenshotCard) renderScreenshotSection(screenshotCard, context, token);
         const magnetCard = container.querySelector('[data-jlc-resource="magnet"]');
         if (magnetCard) renderMagnetSection(magnetCard, context, token);
-        const linksCard = container.querySelector('[data-jlc-resource="links"]');
-        if (linksCard) renderResourceLinksSection(linksCard, context);
+        const linksSection = container.querySelector('[data-jlc-resource="links"]');
+        if (linksSection) renderResourceLinksSection(linksSection, context);
     }
 // @@creamu-part:55-site-registry
     let lazyLoad;

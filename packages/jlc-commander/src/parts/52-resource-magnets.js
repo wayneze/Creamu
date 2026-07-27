@@ -172,7 +172,7 @@
                 <div class="jlc-magnet-side">
                     <div class="jlc-magnet-sub" title="${escapeHtml(note)}">${escapeHtml(note)}</div>
                     <div class="jlc-magnet-actions">
-                        <button type="button" data-jlc-copy-magnet="${index}">复制磁链</button>
+                        <button type="button" data-jlc-copy-magnet="${index}" title="复制磁链">复制</button>
                         <a href="${escapeHtml(magnet.href)}" target="_blank" rel="noopener noreferrer nofollow">打开</a>
                         ${magnet.src ? `<a href="${escapeHtml(magnet.src)}" target="_blank" rel="noopener noreferrer nofollow">来源</a>` : ''}
                     </div>

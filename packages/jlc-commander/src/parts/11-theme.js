@@ -30,12 +30,33 @@
             background: #3a3a3a; border-color: rgba(255,255,255,.22);
         }
         .jlc-resource-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 12px;
         }
         .jlc-resource-card {
             background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06);
-            border-radius: 12px; padding: 14px; min-height: 120px;
+            border-radius: 12px; padding: 14px; min-width: 0; min-height: 120px;
+        }
+        .jlc-resource-card[data-jlc-resource="magnet"] { grid-column: 1 / -1; }
+        .jlc-resource-links {
+            display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start;
+            margin: -2px 0 12px; padding: 8px 10px; border-radius: 8px;
+            background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06);
+        }
+        .jlc-resource-links-label {
+            padding-top: 5px; color: #aaa; font-size: 11px; line-height: 1.2; white-space: nowrap;
+        }
+        .jlc-resource-links .jlc-resource-body { min-width: 0; gap: 0; }
+        .jlc-resource-links .jlc-resource-chip-list { gap: 6px; }
+        .jlc-resource-links .jlc-resource-chip {
+            gap: 4px; padding: 4px 7px; border-radius: 6px; font-size: 11px; line-height: 1.2;
+        }
+        .jlc-resource-links .jlc-resource-chip small { display: none; }
+        @media (max-width: 760px) {
+            .jlc-resource-grid { grid-template-columns: minmax(0, 1fr); }
+            .jlc-resource-card[data-jlc-resource="magnet"] { grid-column: auto; }
+            .jlc-resource-links { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+            .jlc-resource-links-label { padding-top: 0; }
         }
         .jlc-resource-card h3 { margin: 0 0 10px; font-size: 14px; color: #fff; }
         .jlc-resource-card-titlebar {
@@ -176,25 +197,37 @@
             background: rgba(255,255,255,.18); border-radius: 999px;
         }
         .jlc-magnet-row {
-            display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start;
-            padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,.16);
+            display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: start;
+            padding: 8px 10px; border-radius: 10px; background: rgba(0,0,0,.16);
         }
-        .jlc-magnet-meta { min-width: 0; }
+        .jlc-magnet-meta { min-width: 0; flex: 1 1 280px; }
         .jlc-magnet-title {
             color: #fff; font-size: 13px; line-height: 1.5; word-break: break-word;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
         }
         .jlc-magnet-side {
-            min-width: min(42%, 280px); display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+            min-width: 0; flex: 0 1 320px; margin-left: auto;
+            display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
         }
         .jlc-magnet-sub {
             color: #9f9f9f; font-size: 11px; line-height: 1.5; text-align: right;
-            max-width: min(42vw, 280px);
+            max-width: 320px;
         }
-        .jlc-magnet-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+        .jlc-magnet-actions { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+        .jlc-magnet-actions button,
+        .jlc-magnet-actions a {
+            padding: 4px 7px; border-radius: 6px; font-size: 11px; line-height: 1.2; white-space: nowrap;
+        }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status {
+            gap: 4px; padding: 4px 7px; font-size: 11px;
+        }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status strong { font-size: 11px; }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status small { font-size: 10px; }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-title-inline-button {
+            padding: 4px 8px; border-radius: 6px; font-size: 11px;
+        }
         @media (max-width: 720px) {
-            .jlc-magnet-row { grid-template-columns: 1fr; }
-            .jlc-magnet-side { min-width: 0; align-items: flex-start; }
+            .jlc-magnet-side { flex: 1 1 100%; margin-left: 0; align-items: flex-start; }
             .jlc-magnet-sub { max-width: none; text-align: left; }
             .jlc-magnet-actions { justify-content: flex-start; }
         }

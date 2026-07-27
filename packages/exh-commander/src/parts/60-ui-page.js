@@ -302,20 +302,6 @@
 
     let body =
       '<div class="exc-compare-note">含自动标题搜索并入的相关上传。</div>';
-    if (cmp && (cmp.current_brief || cmp.other_brief)) {
-      body +=
-        '<div class="exc-compare-pair">' +
-        '<div class="exc-compare-side"><span class="exc-compare-k">当前</span> ' +
-        escapeHtml(cmp.current_brief || '—') +
-        (currentIsLrr ? ' · 库源' : '') +
-        '</div>' +
-        '<div class="exc-compare-side"><span class="exc-compare-k">对方</span> ' +
-        escapeHtml(cmp.other_brief || '—') +
-        (peer && peer.gid ? ' · g' + escapeHtml(String(peer.gid)) : '') +
-        (peer && isLrrGid(peer.gid) ? ' · 库源' : '') +
-        '</div>' +
-        '</div>';
-    }
     if (cmp && cmp.diffs && cmp.diffs.length) {
       body += compareDiffsListHtml(cmp.diffs, {
         leftBetter: 'current',
@@ -420,17 +406,22 @@
     );
   }
 
-  function badgeHtml(lib, work, edition) {
+  function badgeHtml(lib, work, edition, options) {
+    const opts = options || {};
     const bits = [];
     if (lib) {
       // 库内主状态由对照卡承担，badge 只补额外态
       const cardCoversInLib = !!(lib.work_in_library || lib.edition_in_library);
-      if (lib.same_version_confirmed) {
+      if (lib.same_version_confirmed && !opts.lrrComparisonVisible) {
         bits.push('<span class="jlc-status-pill tone-green" title="已手动确认与库内为同一版本">同源✓</span>');
       }
-      if (!cardCoversInLib) {
+      if (!cardCoversInLib && !opts.lrrComparisonVisible) {
         if (lib.preferred_in_library) bits.push('<span class="jlc-status-pill tone-blue">偏好版在库</span>');
-      } else if (lib.preferred_in_library && !lib.edition_in_library) {
+      } else if (
+        lib.preferred_in_library &&
+        !lib.edition_in_library &&
+        !opts.lrrComparisonVisible
+      ) {
         bits.push('<span class="jlc-status-pill tone-blue">偏好版在库</span>');
       }
       if (!cardCoversInLib && lib.maybe_in_library) {
@@ -448,7 +439,11 @@
             '</span>'
         );
       }
-      if (lib.has_better_remote && !lib.same_version_confirmed) {
+      if (
+        lib.has_better_remote &&
+        !lib.same_version_confirmed &&
+        !opts.editionComparisonVisible
+      ) {
         bits.push('<span class="jlc-status-pill tone-orange">⬆有更好版</span>');
       }
     }

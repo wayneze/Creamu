@@ -137,6 +137,9 @@
         String(trackingRecord.breakpoint_gid || '') === gid
       );
       el.classList.toggle('is-exc-breakpoint', isBreakpoint);
+      if (typeof syncListLastSeenMarker === 'function') {
+        syncListLastSeenMarker(el, isBreakpoint);
+      }
       const breakpointButton = el.querySelector('[data-exc-act="breakpoint"]');
       if (breakpointButton) {
         breakpointButton.classList.toggle('is-on', isBreakpoint);

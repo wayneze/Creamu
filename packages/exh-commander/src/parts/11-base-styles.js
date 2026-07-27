@@ -180,6 +180,15 @@
         tr.exc-gl-item.is-exc-breakpoint > td.gl1e {
             box-shadow: inset 3px 0 0 #e8485a !important;
         }
+        .exc-last-seen-mark {
+            position: absolute; left: 4px; bottom: 4px; z-index: 22;
+            display: inline-flex; align-items: center; min-height: 18px;
+            padding: 2px 6px; border: 1px solid rgba(255,210,216,.65); border-radius: 5px;
+            background: rgba(112,23,38,.88); color: #fff5f6;
+            font: 700 10px/1.2 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            white-space: nowrap; pointer-events: none; box-sizing: border-box;
+            box-shadow: 0 2px 6px rgba(80,10,22,.25);
+        }
         #jlc-wb .jlc-wb-item-menu.is-fixed-menu {
             position: fixed !important;
             z-index: 1000200 !important;
@@ -197,6 +206,10 @@
         #jlc-wb .jlc-wb-item-pills > span {
             flex: 0 0 auto !important;
             margin: 0 !important;
+        }
+        #jlc-wb .jlc-site-pill.is-top.is-stale {
+            background: #fff0d8; color: #9a5b12; border-color: #e8c58f;
+            font-weight: 800;
         }
         #jlc-wb .jlc-wb-item-title-row {
             display: flex !important;
@@ -796,6 +809,19 @@
             box-shadow: 0 0 0 2px rgba(212,136,58,.22), 0 3px 0 #e8c48a !important;
             order: -1;
         }
+        #exc-current-work {
+            flex: 0 0 auto; padding: 8px 14px 10px; border-bottom: 1px solid #eadcc6;
+            background: #fff9ef;
+        }
+        #exc-current-work[hidden] { display: none !important; }
+        #exc-current-work .exc-current-work-label {
+            margin: 0 0 6px; color: #9a6a32; font-size: 11px; font-weight: 800;
+        }
+        #exc-current-work .jlc-wb-item.is-current {
+            margin: 0; border: 2px solid #d4883a !important;
+            background: #fff2df !important;
+            box-shadow: 0 0 0 2px rgba(212,136,58,.16), 0 3px 0 #e8c48a !important;
+        }
         #jlc-wb-works-scroll {
             display: flex;
             flex-direction: column;
@@ -810,7 +836,7 @@
         #exc-diag .exc-g-head { padding: 16px 18px 8px; font-weight: 800; font-size: 18px; color: #6b4a2e; }
         #exc-diag .exc-g-body { padding: 4px 18px 16px; color: #7a5a3c; }
         #exc-wb-dialog {
-            position: fixed; inset: 0; z-index: 1000001; display: none; align-items: center; justify-content: center;
+            position: fixed; inset: 0; z-index: 2147483100 !important; display: none; align-items: center; justify-content: center;
             background: rgba(90,60,30,.35); padding: 20px;
         }
         #exc-wb-dialog.is-open { display: flex; }
@@ -823,6 +849,41 @@
         #exc-wb-dialog h4 { margin: 0 0 8px; font-size: 18px; color: #6b4a2e; font-weight: 800; }
         #exc-wb-dialog p { margin: 0 0 12px; font-size: 13.5px; color: #9a7d60; line-height: 1.55; }
         #exc-wb-dialog .jlc-wb-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
+        #exc-folder-dialog .exc-folder-intro {
+            margin-bottom: 10px; color: #6b4a2e; font-weight: 700;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #exc-folder-dialog .exc-folder-options {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px; max-height: 240px; overflow: auto; padding: 2px;
+        }
+        #exc-folder-dialog .exc-folder-choice {
+            appearance: none; display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; min-height: 38px; padding: 8px 10px; border: 1px solid #e0cdae;
+            border-radius: 6px; background: #fffaf2; color: #5a4030; cursor: pointer;
+            font: 650 13px/1.25 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            text-align: left;
+        }
+        #exc-folder-dialog .exc-folder-choice:hover { border-color: #d4883a; background: #fff4e5; }
+        #exc-folder-dialog .exc-folder-choice.is-selected {
+            border-color: #d4883a; background: #fff0dc; box-shadow: 0 0 0 2px rgba(212,136,58,.16);
+        }
+        #exc-folder-dialog .exc-folder-choice small { color: #a08468; font-size: 10.5px; font-weight: 600; }
+        #exc-folder-dialog .exc-folder-create { margin-top: 14px; }
+        #exc-folder-dialog .exc-folder-create > label {
+            display: block; margin-bottom: 6px; color: #8a6f55; font-size: 12px; font-weight: 700;
+        }
+        #exc-folder-dialog .exc-folder-create > div { display: flex; gap: 8px; align-items: stretch; }
+        #exc-folder-dialog .jlc-wb-input {
+            min-width: 0; flex: 1 1 auto; padding: 8px 10px; border: 1px solid #d9c5a8;
+            border-radius: 6px; background: #fffdf8; color: #4a3728; box-sizing: border-box;
+            font: 13px/1.3 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        #exc-folder-dialog .jlc-wb-input:focus { outline: 2px solid rgba(212,136,58,.25); border-color: #d4883a; }
+        @media (max-width: 520px) {
+            #exc-folder-dialog .exc-folder-options { grid-template-columns: 1fr 1fr; }
+            #exc-folder-dialog .exc-folder-create > div { flex-direction: column; }
+        }
         #exc-wb-dialog .exc-modal-row {
             display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px;
             border: 1px solid #efe0cc; border-radius: 16px; margin-bottom: 10px; background: #fffdf8;

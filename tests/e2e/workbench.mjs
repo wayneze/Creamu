@@ -207,7 +207,7 @@ function createJlcDetailFixture() {
     + '<tr id="video_id"><td>ID</td><td class="text">ABP-001</td></tr>'
     + '<tr id="video_date"><td>发行日期</td><td class="text">2026-07-28</td></tr>'
     + '</tbody></table>'
-    + '<div id="video_favorite_edit"></div>'
+    + '<div id="video_favorite_edit"><a href="magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567">Fixture magnet</a></div>'
     + '</body></html>';
 }
 
@@ -1671,6 +1671,153 @@ try {
   );
 
   await runCase(
+    'ExH tracking: collection chooses a folder and immediately establishes the breakpoint',
+    {
+      host: 'e-hentai.org',
+      fixtureFile: 'ehentai-list.html',
+      scriptPath: PATHS.exhDist,
+      gmValues: {
+        exh_commander_config_v1: {
+          list_hover_preview: false,
+        },
+      },
+      beforeInject: async (page) => {
+        await page.evaluate(installExhStorageMetrics);
+      },
+    },
+    async (page) => {
+      await page.locator('#exc-save-tracking').waitFor({ timeout: 15000 });
+      await page.locator('#exc-save-tracking').click();
+      await page.locator('#exc-folder-dialog').waitFor({ timeout: 5000 });
+      await page.locator('#exc-folder-new').fill('常看');
+      await page.locator('[data-folder-action="create"]').click();
+      await page.locator('.exc-gl-item .exc-last-seen-mark').waitFor({ timeout: 5000 });
+
+      const firstState = await page.evaluate(async () => {
+        const data = await window.__readExhStores(['tracking_searches']);
+        const card = document.querySelector('.exc-gl-item');
+        return {
+          records: data.tracking_searches.map((record) => ({
+            f_search: record.f_search,
+            folder: record.custom_folder,
+            breakpoint_gid: record.breakpoint_gid,
+          })),
+          trackingId: card?.dataset.excTrackId || '',
+          marker: card?.querySelector('.exc-last-seen-mark')?.textContent || '',
+        };
+      });
+      assert.deepEqual(firstState.records, [
+        { f_search: 'browse:home', folder: '常看', breakpoint_gid: '111' },
+      ]);
+      assert.ok(firstState.trackingId, 'newly tracked cards should receive their tracking id immediately');
+      assert.match(firstState.marker, /上次看到/);
+
+      await page.evaluate(async () => {
+        history.replaceState(null, '', '/?f_search=second');
+        await window.__excRefreshPage();
+      });
+      await page.waitForFunction(
+        () => document.getElementById('exc-save-tracking')?.textContent?.includes('收藏追更'),
+        null,
+        { timeout: 5000 }
+      );
+      await page.locator('#exc-save-tracking').click();
+      const existingFolder = page.locator('[data-folder-choice="常看"]');
+      await existingFolder.waitFor({ timeout: 5000 });
+      await existingFolder.click();
+
+      const records = await page.evaluate(async () => {
+        const data = await window.__readExhStores(['tracking_searches']);
+        return data.tracking_searches
+          .map((record) => ({
+            f_search: record.f_search,
+            folder: record.custom_folder,
+            breakpoint_gid: record.breakpoint_gid,
+          }))
+          .sort((left, right) => left.f_search.localeCompare(right.f_search));
+      });
+      assert.deepEqual(records, [
+        { f_search: 'browse:home', folder: '常看', breakpoint_gid: '111' },
+        { f_search: 'second', folder: '常看', breakpoint_gid: '111' },
+      ]);
+
+      await page.locator('#exc-wb-dialog').waitFor({ state: 'hidden' });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await waitFab(page);
+      await page.locator('#jlc-wb-fab').click();
+      await waitWorkbenchOpen(page);
+      await page.locator('#jlc-wb .jlc-wb-nav button[data-nav="tracking"]').click();
+      const trackingItem = page.locator('#jlc-wb-list-scroll .jlc-wb-item').first();
+      await trackingItem.waitFor({ timeout: 5000 });
+      await trackingItem.locator('[data-tact="menu"]').click();
+      await trackingItem.locator('[data-tact="folder"]').click();
+      const folderDialog = page.locator('#exc-wb-dialog');
+      await folderDialog.waitFor({ state: 'visible', timeout: 5000 });
+      const modalLayer = await page.evaluate(() => {
+        const dialog = document.getElementById('exc-wb-dialog');
+        const card = dialog?.querySelector('.jlc-wb-dialog-card');
+        const workbench = document.getElementById('jlc-wb');
+        const rect = card?.getBoundingClientRect();
+        const hit = rect
+          ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+          : null;
+        return {
+          dialogZ: Number(getComputedStyle(dialog).zIndex) || 0,
+          workbenchZ: Number(getComputedStyle(workbench).zIndex) || 0,
+          dialogOwnsHit: !!(dialog && hit && dialog.contains(hit)),
+        };
+      });
+      assert.ok(
+        modalLayer.dialogZ > modalLayer.workbenchZ,
+        `folder dialog must layer above the open workbench (${modalLayer.dialogZ}/${modalLayer.workbenchZ})`
+      );
+      assert.equal(modalLayer.dialogOwnsHit, true, 'folder dialog controls must remain clickable');
+    }
+  );
+
+  await runCase(
+    'ExH hover preview: leaving the work cancels a late response',
+    {
+      host: 'e-hentai.org',
+      fixtureFile: 'ehentai-list.html',
+      scriptPath: PATHS.exhDist,
+      gmValues: {
+        exh_commander_config_v1: {
+          list_hover_preview: true,
+          list_hover_preview_delay_ms: 500,
+        },
+      },
+      beforeScript: async (page) => {
+        await page.evaluate(() => {
+          window.GM_xmlhttpRequest = (options) => {
+            setTimeout(() => {
+              options.onload?.({
+                status: 404,
+                responseText: '',
+                finalUrl: options.url || '',
+                responseHeaders: '',
+              });
+            }, 900);
+          };
+        });
+      },
+    },
+    async (page) => {
+      const card = page.locator('.exc-gl-item');
+      await card.waitFor({ timeout: 15000 });
+      await card.hover();
+      await page.locator('#exc-hover-preview').waitFor({ state: 'visible', timeout: 2000 });
+      await page.mouse.move(2, 2);
+      await page.waitForTimeout(1200);
+      assert.equal(
+        await page.locator('#exc-hover-preview').isVisible(),
+        false,
+        'a completed request must not reopen the preview after mouseleave'
+      );
+    }
+  );
+
+  await runCase(
     'ExH list: startup, stable focus, and incremental work stay bounded',
     {
       host: 'e-hentai.org',
@@ -2264,6 +2411,18 @@ try {
         refresh.transactions.total <= MAX_EXH_DETAIL_REFRESH_TRANSACTIONS,
         `ExH detail refresh opened ${refresh.transactions.total} transactions`
       );
+
+      await page.locator('#jlc-wb-fab').click();
+      await waitWorkbenchOpen(page);
+      await page.locator('#jlc-wb .jlc-wb-nav button[data-nav="works"]').click();
+      const currentWork = page.locator('#exc-current-work .jlc-wb-item.is-current');
+      await currentWork.waitFor({ timeout: 10000 });
+      assert.match(await currentWork.textContent() || '', /Detail Gallery/);
+      assert.equal(
+        await currentWork.evaluate((element) => !!element.closest('#jlc-wb-works-scroll')),
+        false,
+        'the current detail work should remain pinned above the scrollable status list'
+      );
     }
   );
 
@@ -2310,11 +2469,23 @@ try {
       const deferred = await page.evaluate(() => {
         const centerNode = document.getElementById('jlc-resource-center');
         const badge = document.querySelector('.avid-date-badge[data-jlc-detail-date="1"]');
+        const grid = centerNode?.querySelector('.jlc-resource-grid');
+        const links = centerNode?.querySelector('[data-jlc-resource="links"]');
+        const magnet = centerNode?.querySelector('[data-jlc-resource="magnet"]');
+        const copyButton = magnet?.querySelector('[data-jlc-copy-magnet]');
+        const providerButton = magnet?.querySelector('[data-jlc-magnet-provider]');
         return {
           requests: window.__jlcDetailResourceRequests.slice(),
           reusedDom: centerNode?.querySelector('.jlc-resource-card') === window.__jlcInitialResourceCard,
           cards: centerNode?.querySelectorAll('.jlc-resource-card').length || 0,
           links: centerNode?.querySelectorAll('[data-jlc-resource="links"] a').length || 0,
+          linksIsCard: links?.classList.contains('jlc-resource-card') || false,
+          linksInsideGrid: !!(links && grid?.contains(links)),
+          gridWidth: grid?.getBoundingClientRect().width || 0,
+          magnetWidth: magnet?.getBoundingClientRect().width || 0,
+          copyText: (copyButton?.textContent || '').trim(),
+          copyHeight: copyButton?.getBoundingClientRect().height || 0,
+          providerHeight: providerButton?.getBoundingClientRect().height || 0,
           renderSignature: centerNode?.dataset.renderSignature || '',
           badgeExists: !!badge,
           badgeInlineStyle: badge?.getAttribute('style') || '',
@@ -2323,12 +2494,42 @@ try {
       });
       assert.equal(deferred.reusedDom, true, 'delayed startup passes should preserve resource card DOM');
       assert.equal(deferred.requests.length, 0, 'offscreen resource cards should not issue network requests');
-      assert.equal(deferred.cards, 4, 'all enabled resource modules should render');
+      assert.equal(deferred.cards, 3, 'external links should not consume a resource grid column');
       assert.ok(deferred.links > 0, 'the enabled external-links module should be wired into the resource center');
+      assert.equal(deferred.linksIsCard, false, 'external links should render as a compact strip');
+      assert.equal(deferred.linksInsideGrid, false, 'external links should stay outside the resource grid');
+      assert.ok(
+        deferred.magnetWidth >= deferred.gridWidth - 2,
+        `the magnet card should span the grid (${deferred.magnetWidth}/${deferred.gridWidth})`
+      );
+      assert.equal(deferred.copyText, '复制', 'magnet copy actions should use compact labels');
+      assert.ok(deferred.copyHeight > 0 && deferred.copyHeight <= 28, `magnet copy action is too tall: ${deferred.copyHeight}`);
+      assert.ok(deferred.providerHeight > 0 && deferred.providerHeight <= 28, `magnet provider action is too tall: ${deferred.providerHeight}`);
       assert.ok(deferred.renderSignature, 'the resource center should persist its render signature');
       assert.equal(deferred.badgeExists, true, 'the page release date should survive metadata decoration');
       assert.equal(deferred.badgeInlineStyle, '', 'detail badges should keep presentation in the stylesheet');
       assert.equal(deferred.badgeMargin, '8px');
+
+      await page.setViewportSize({ width: 480, height: 900 });
+      const mobileLayout = await page.evaluate(() => {
+        const centerNode = document.getElementById('jlc-resource-center');
+        const grid = centerNode?.querySelector('.jlc-resource-grid');
+        const magnet = centerNode?.querySelector('[data-jlc-resource="magnet"]');
+        const gridRect = grid?.getBoundingClientRect();
+        const magnetRect = magnet?.getBoundingClientRect();
+        const actionRects = Array.from(magnet?.querySelectorAll('button, .jlc-magnet-actions a') || [])
+          .map((element) => element.getBoundingClientRect());
+        return {
+          columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/).filter(Boolean).length,
+          magnetMatchesGrid: !!(gridRect && magnetRect && Math.abs(gridRect.width - magnetRect.width) <= 2),
+          actionsInside: actionRects.every((rect) => !magnetRect || (rect.left >= magnetRect.left - 1 && rect.right <= magnetRect.right + 1)),
+          pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      });
+      assert.equal(mobileLayout.columns, 1, 'the resource grid should collapse to one column on mobile');
+      assert.equal(mobileLayout.magnetMatchesGrid, true, 'the mobile magnet card should use the full grid width');
+      assert.equal(mobileLayout.actionsInside, true, 'magnet actions should stay inside the mobile card');
+      assert.equal(mobileLayout.pageOverflow, false, 'the resource center should not cause mobile overflow');
 
       await center.scrollIntoViewIfNeeded();
       await page.waitForFunction(

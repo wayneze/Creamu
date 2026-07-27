@@ -126,7 +126,7 @@
         const list = uniqueLinkObjects(links);
         if (!list.length) return '';
         return `<div class="jlc-resource-chip-list">${list.map(link => `
-            <a class="jlc-resource-chip" href="${escapeHtml(link.href)}" target="_blank" rel="noopener noreferrer nofollow">
+            <a class="jlc-resource-chip" href="${escapeHtml(link.href)}" target="_blank" rel="noopener noreferrer nofollow" title="${escapeHtml(link.note || link.label)}">
                 <span>${escapeHtml(link.label)}</span>
                 ${link.note ? `<small>${escapeHtml(link.note)}</small>` : ''}
             </a>`).join('')}</div>`;

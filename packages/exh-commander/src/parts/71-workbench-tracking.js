@@ -13,6 +13,113 @@
       .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
   }
 
+  async function openTrackingFolderDialog(record, options) {
+    if (!record) return null;
+    const opts = options || {};
+    const folders = await collectManualFolderOptions();
+    const current = compactText(record.custom_folder || '');
+    const folderButtons = [
+      '<button type="button" class="exc-folder-choice' +
+        (!current ? ' is-selected' : '') +
+        '" data-folder-choice=""><span>未分类</span><small>稍后整理</small></button>',
+    ];
+    folders.forEach((folder) => {
+      folderButtons.push(
+        '<button type="button" class="exc-folder-choice' +
+          (folder.name.toLowerCase() === current.toLowerCase() ? ' is-selected' : '') +
+          '" data-folder-choice="' +
+          escapeHtml(folder.name) +
+          '"><span>' +
+          escapeHtml(folder.name) +
+          '</span></button>'
+      );
+    });
+
+    const box = openModal(
+      opts.reason === 'collect' ? '收藏到分类' : '设置分类',
+      '<div id="exc-folder-dialog">' +
+        '<p class="exc-folder-intro">' +
+        escapeHtml(getTrackingDisplayTitle(record)) +
+        '</p>' +
+        '<div class="exc-folder-options" role="listbox" aria-label="已有分类">' +
+        folderButtons.join('') +
+        '</div>' +
+        '<div class="exc-folder-create">' +
+        '<label for="exc-folder-new">新分类</label>' +
+        '<div><input id="exc-folder-new" class="jlc-wb-input" type="text" maxlength="40" placeholder="输入分类名">' +
+        '<button type="button" class="jlc-wb-btn primary" data-folder-action="create">使用此分类</button></div>' +
+        '</div>' +
+        '</div>',
+      '<button type="button" class="jlc-wb-btn ghost" data-folder-action="cancel">' +
+        (opts.reason === 'collect' ? '稍后设置' : '取消') +
+        '</button>'
+    );
+
+    const applyFolder = async (folder) => {
+      record.custom_folder = compactText(folder || '').slice(0, 40);
+      await saveTrackingRecord(record);
+      closeModal();
+      showToast(record.custom_folder ? '已分类到：' + record.custom_folder : '已放入未分类');
+      const trackingRoot = document.getElementById('exc-wb-tracking-root');
+      const trackingPage = trackingRoot && trackingRoot.closest('[data-jlc-wb-page="tracking"]');
+      const trackingVisible = !!(
+        trackingPage &&
+        !trackingPage.hidden &&
+        document.getElementById('jlc-wb')?.classList.contains('is-open')
+      );
+      if (trackingVisible) {
+        await renderTrackingPage();
+      }
+      if (typeof refreshListVolatileState === 'function') {
+        await refreshListVolatileState();
+      }
+      if (trackingVisible) void updateFabBadge();
+      else if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
+      return record.custom_folder;
+    };
+
+    box.onclick = (event) => {
+      const choice = event.target.closest('[data-folder-choice]');
+      const action = event.target.closest('[data-folder-action]');
+      if (choice) {
+        event.preventDefault();
+        void applyFolder(choice.getAttribute('data-folder-choice') || '').catch((error) => {
+          showToast('分类失败: ' + ((error && error.message) || error));
+        });
+        return;
+      }
+      if (!action) return;
+      event.preventDefault();
+      const kind = action.getAttribute('data-folder-action');
+      if (kind === 'cancel') {
+        closeModal();
+        return;
+      }
+      if (kind === 'create') {
+        const input = box.querySelector('#exc-folder-new');
+        const value = compactText(input && input.value);
+        if (!value) {
+          if (input) input.focus();
+          showToast('请输入分类名');
+          return;
+        }
+        void applyFolder(value).catch((error) => {
+          showToast('分类失败: ' + ((error && error.message) || error));
+        });
+      }
+    };
+    const input = box.querySelector('#exc-folder-new');
+    if (input) {
+      input.onkeydown = (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        box.querySelector('[data-folder-action="create"]')?.click();
+      };
+      setTimeout(() => input.focus(), 0);
+    }
+    return box;
+  }
+
   async function renderTrackingPage() {
     invalidateTrackingListPaint();
     const root = document.getElementById('exc-wb-tracking-root');
@@ -88,6 +195,25 @@
     if (diff < 30 * 24 * 60 * 60 * 1000) return Math.floor(diff / (24 * 60 * 60 * 1000)) + '天前';
     const d = new Date(time);
     return d.getMonth() + 1 + '/' + d.getDate();
+  }
+
+  function getTrackingReleaseAge(record, referenceNow) {
+    const postedAt = Number(record && record.top_posted_at) || 0;
+    if (!postedAt) return { text: '', days: 0, stale: false };
+    const now = Number(referenceNow) || Date.now();
+    const diff = Math.max(0, now - postedAt);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const days = Math.floor(diff / dayMs);
+    let text = '';
+    if (days <= 0) text = '今天';
+    else if (days < 30) text = days + '天前';
+    else if (days < 365) text = Math.max(1, Math.floor(days / 30)) + '个月前';
+    else {
+      const years = Math.floor(days / 365);
+      const months = Math.floor((days % 365) / 30);
+      text = years + '年' + (months ? months + '个月' : '') + '前';
+    }
+    return { text, days, stale: days >= 90 };
   }
 
   function updateTrackingCheckButton() {
@@ -233,7 +359,7 @@
     if (top && bp && top !== bp) {
       const noteBits = [
         '最新 ' + (getTrackingTopMetaLabel(r) || '—'),
-        '断点 ' + (getTrackingBpMetaLabel(r) || '—'),
+        '上次看到 ' + (getTrackingBpMetaLabel(r) || '—'),
       ];
       if (unreadNote) noteBits.push(unreadNote);
       return {
@@ -292,7 +418,7 @@
       (topPosted || '未知时间') +
       (r.top_title ? ' · ' + compactText(r.top_title) : topGid ? ' · g' + topGid : '');
     const bpHoverBits = [
-      '断点 ' + (bpPosted || '未知时间'),
+      '上次看到 ' + (bpPosted || '未知时间'),
       r.breakpoint_title
         ? compactText(r.breakpoint_title)
         : bpGid
@@ -301,15 +427,22 @@
       hasBpPage ? '列表第' + (bpPage + 1) + '页' : '',
     ].filter(Boolean);
     const bpHover = bpHoverBits.join(' · ');
+    const releaseAge = getTrackingReleaseAge(r);
 
     // 胶囊：最新 / 断点（替代原「当前 · 上次」行）
     const subPills = [];
     if (topGid || topPosted) {
       subPills.push(
-        '<span class="jlc-site-pill is-top" title="' +
+        '<span class="jlc-site-pill is-top' +
+          (releaseAge.stale ? ' is-stale' : '') +
+          '" title="' +
           escapeHtml(topHover) +
           '">' +
-          escapeHtml('最新 ' + (topPosted || '—')) +
+          escapeHtml(
+            '最新 ' +
+              (topPosted || '—') +
+              (releaseAge.text ? ' · ' + releaseAge.text : '')
+          ) +
           '</span>'
       );
     }
@@ -320,7 +453,7 @@
           '" title="' +
           escapeHtml(bpHover) +
           '">' +
-          escapeHtml('断点 ' + (bpPosted || '—')) +
+          escapeHtml('上次看到 ' + (bpPosted || '—')) +
           '</span>'
       );
     }
@@ -673,15 +806,7 @@
         await saveTrackingRecord(rec);
         paintTrackingList();
       } else if (act === 'folder') {
-        const next = prompt(
-          '手动分类名（用于列表分组；留空=放回「未分类」）',
-          rec.custom_folder || ''
-        );
-        if (next == null) return;
-        rec.custom_folder = compactText(next);
-        await saveTrackingRecord(rec);
-        // 分类变更后重刷整页，更新筛选下拉里的分类名
-        await renderTrackingPage();
+        await openTrackingFolderDialog(rec, { reason: 'edit' });
       } else if (act === 'del') {
         if (!confirm('删除追更「' + getTrackingDisplayTitle(rec) + '」？')) return;
         await deleteTrackingRecord(id);

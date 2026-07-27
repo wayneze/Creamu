@@ -342,7 +342,10 @@
     panel.innerHTML =
       '<div class="exc-g-head">Creamu · ExH · 画廊</div>' +
       '<div class="exc-g-body">' +
-      badgeHtml(lib, work, edition) +
+      badgeHtml(lib, work, edition, {
+        lrrComparisonVisible: !!lrrCompareCard,
+        editionComparisonVisible: !!edCompareCard,
+      }) +
       lrrCompareCard +
       edCompareCard +
       '<div class="jlc-wb-view-title" style="margin-top:10px">操作</div>' +

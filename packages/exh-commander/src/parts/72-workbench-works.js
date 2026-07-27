@@ -8,6 +8,7 @@
       '  <div class="jlc-wb-toolbar-row" id="exc-work-chips"></div>' +
       '  <div class="jlc-wb-toolbar-row jlc-wb-toolbar-note">在库=同步后的 LRR 档案；有更好版/抛弃依赖已浏览作品。搜索收藏请用「追更」。</div>' +
       '</div>' +
+      '<div id="exc-current-work" hidden></div>' +
       '<div class="jlc-wb-list-scroll" id="jlc-wb-works-scroll"></div>';
 
     const chips = [
@@ -42,6 +43,10 @@
     const host = document.getElementById('jlc-wb-works-scroll');
     if (!host) return;
     const storageSnapshot = await loadLibraryStorageSnapshot();
+    await renderCurrentGalleryWork(
+      document.getElementById('exc-current-work'),
+      storageSnapshot
+    );
 
     // LRR 在库：直接列档案（同步后即有），不依赖是否点过画廊
     if (tab === 'lrr') {
@@ -105,6 +110,97 @@
     };
   }
 
+  async function renderCurrentGalleryWork(host, storageSnapshot) {
+    if (!host) return null;
+    let galleryTarget = null;
+    try {
+      galleryTarget = parseGalleryUrl(location.href);
+    } catch (_) { /* ignore */ }
+    if (!galleryTarget || !galleryTarget.gid) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return null;
+    }
+
+    const snapshot = indexListStorageSnapshot(storageSnapshot || {});
+    let edition = snapshot.editionsByGid.get(String(galleryTarget.gid)) || null;
+    if (!edition && typeof parseGalleryPage === 'function') {
+      try {
+        edition = parseGalleryPage();
+      } catch (_) { /* ignore */ }
+    }
+    if (!edition) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return null;
+    }
+
+    const work = edition.work_id ? snapshot.worksById.get(edition.work_id) || null : null;
+    let lib = null;
+    try {
+      lib = await resolveLibraryState(edition, snapshot);
+    } catch (_) { /* ignore */ }
+    const title = compactText(
+      (work && work.title_raw) || edition.title_raw || edition.title_core || '当前作品'
+    );
+    const statusBits = [];
+    if (work && work.blocked) statusBits.push('已抛弃');
+    if (lib) {
+      if (lib.same_version_confirmed) statusBits.push('已确认同源');
+      else if (lib.edition_in_library) statusBits.push('本版在库');
+      else if (lib.work_in_library) statusBits.push('库内有版本');
+      else if (lib.maybe_in_library) statusBits.push(maybeLibLabel(lib));
+      else statusBits.push('未在库');
+      if (lib.has_better_remote) statusBits.push('有更好版');
+    }
+    if (!statusBits.length) statusBits.push('未设置作品状态');
+
+    const cover = compactText(edition.thumb || '');
+    const mono = title.charAt(0) || '本';
+    const topArchive =
+      lib &&
+      ((lib.exact_archives && lib.exact_archives[0]) ||
+        (lib.work_archives && lib.work_archives[0]));
+    const lrrUrl = topArchive ? buildLrrReaderUrl(topArchive.arcid) : '';
+    host.hidden = false;
+    host.innerHTML =
+      '<div class="exc-current-work-label">当前详情作品</div>' +
+      '<div class="jlc-wb-item is-current"' +
+      (edition.work_id ? ' data-work="' + escapeHtml(edition.work_id) + '"' : '') +
+      '>' +
+      '<div class="jlc-wb-item-row">' +
+      '<div class="jlc-wb-cover is-poster" data-group="tag">' +
+      (cover
+        ? '<img src="' + escapeHtml(cover) + '" alt="" loading="lazy">'
+        : '<span class="jlc-wb-cover-fallback">' + escapeHtml(mono) + '</span>') +
+      '</div>' +
+      '<div class="jlc-wb-item-body">' +
+      '<div class="jlc-wb-item-title"><span class="exc-ed-cur-tag">当前</span> ' +
+      escapeHtml(title) +
+      '</div>' +
+      '<div class="jlc-wb-item-meta"><div class="jlc-wb-item-meta-line">' +
+      escapeHtml(statusBits.join(' · ')) +
+      '</div></div>' +
+      '<div class="jlc-wb-item-actions">' +
+      '<button type="button" class="jlc-wb-btn primary" data-current-wact="best">最佳版</button>' +
+      '<button type="button" class="jlc-wb-btn ghost" data-current-wact="bind">绑定 LRR</button>' +
+      (lrrUrl
+        ? '<a class="jlc-wb-btn ghost" href="' +
+          escapeHtml(lrrUrl) +
+          '" target="_blank" rel="noopener">开 LRR</a>'
+        : '') +
+      '</div></div></div></div>';
+
+    host.onclick = async (event) => {
+      const button = event.target.closest('[data-current-wact]');
+      if (!button) return;
+      const action = button.getAttribute('data-current-wact');
+      if (action === 'best' && edition.work_id) await openBestEdition(edition.work_id);
+      else if (action === 'bind') await openBindModal(edition);
+    };
+    return { edition, work, lib };
+  }
+
   async function paintLrrLibraryList(host, storageSnapshot) {
     const entries = typeof listLibraryArchiveEntries === 'function'
       ? await listLibraryArchiveEntries(storageSnapshot)
@@ -127,7 +223,7 @@
     }
 
     const limit = 200;
-    // 当前画廊页：对应档案置顶 + 高亮
+    // 当前画廊由上方固定摘要承载；列表里省略同一档案，避免重复。
     let pageGid = '';
     try {
       if (typeof parseGalleryUrl === 'function') {
@@ -146,10 +242,7 @@
       }
       return false;
     };
-    const ranked = entries.slice().sort((x, y) => {
-      const cx = isEntCurrent(x) ? 1 : 0;
-      const cy = isEntCurrent(y) ? 1 : 0;
-      if (cy !== cx) return cy - cx;
+    const ranked = entries.filter((entry) => !isEntCurrent(entry)).sort((x, y) => {
       const tx = String((x.archive && x.archive.title) || '').toLowerCase();
       const ty = String((y.archive && y.archive.title) || '').toLowerCase();
       return tx < ty ? -1 : tx > ty ? 1 : 0;
@@ -162,7 +255,7 @@
           total +
           ' 本，先显示前 ' +
           limit +
-          ' 本（当前页相关置顶，其余按标题）。</div>'
+          ' 本（当前作品固定在上方，档案按标题排列）。</div>'
       );
     }
     for (const ent of shown) {
@@ -179,9 +272,7 @@
       } else if (ent.source && ent.source.gid && ent.source.token) {
         galleryUrl = buildGalleryUrl(location.origin, ent.source.gid, ent.source.token);
       }
-      const onPage = isEntCurrent(ent);
       const metaBits = [];
-      if (onPage) metaBits.push('当前页');
       if (a.pages) metaBits.push(a.pages + 'p');
       if (a.eh_gid) metaBits.push('gid ' + a.eh_gid);
       if (ent.link) metaBits.push(ent.link.same_version ? '已确认同源' : '已绑定');
@@ -205,9 +296,7 @@
           : '');
 
       chunks.push(
-        '<div class="jlc-wb-item' +
-          (onPage ? ' is-current is-lrr-page' : '') +
-          '" data-arcid="' +
+        '<div class="jlc-wb-item" data-arcid="' +
           escapeHtml(a.arcid) +
           '"' +
           (ent.work && ent.work.work_id ? ' data-work="' + escapeHtml(ent.work.work_id) + '"' : '') +
@@ -221,7 +310,6 @@
           '</span></div>' +
           '<div class="jlc-wb-item-body">' +
           '<div class="jlc-wb-item-title">' +
-          (onPage ? '<span class="exc-ed-cur-tag">当前</span> ' : '') +
           escapeHtml(title) +
           '</div>' +
           (metaBits.length

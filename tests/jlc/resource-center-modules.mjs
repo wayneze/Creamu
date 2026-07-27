@@ -156,7 +156,12 @@ assert.match(
   /container\.dataset\.renderSignature === renderSignature\) return;/,
   'stable resource renders should return before replacing section DOM'
 );
-assert.match(sources[expectedParts[4]], /data-jlc-resource="links"/);
+assert.match(sources[expectedParts[4]], /class="jlc-resource-links" data-jlc-resource="links"/);
+assert.doesNotMatch(
+  sources[expectedParts[4]],
+  /class="jlc-resource-card" data-jlc-resource="links"/,
+  'external links should not consume a resource grid card'
+);
 assert.match(sources[expectedParts[2]], /scheduleResourceSectionLoad\(card, token, loadMagnets\)/);
 assert.match(sources[expectedParts[3]], /scheduleResourceSectionLoad\(card, token, loadTrailer\)/);
 

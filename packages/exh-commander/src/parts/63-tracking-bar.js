@@ -136,7 +136,7 @@
     const btn = document.getElementById('exc-save-tracking');
     if (btn) {
       btn.onclick = async () => {
-        await saveCurrentPageAsTracking();
+        await saveCurrentPageAsTracking({ chooseFolder: true });
         void refreshTrackingBarState();
       };
     }
@@ -197,7 +197,7 @@
             mode: 'page',
             display: String((getCurrentListPageIndex() || 0) + 1),
           };
-    const pageIdx = pageState.known && pageState.index >= 0 ? pageState.index : -1;
+    let pageIdx = pageState.known && pageState.index >= 0 ? pageState.index : -1;
     const pageDisp =
       pageState.display ||
       (typeof formatListPageDisplay === 'function'
@@ -208,33 +208,15 @@
     const isFirstPage = pageState.isFirst === true;
 
     if (rec) {
-      // 翻页时维护 session 深度，点开作品才能正确下调未读
-      try {
-        if (rec.id) {
-          const depthKey = 'exc_trk_depth_' + rec.id;
-          const urlKey = 'exc_trk_url_' + rec.id;
-          const curUrl = location.href.split('#')[0];
-          if (isFirstPage) {
-            sessionStorage.setItem(depthKey, '0');
-          } else if (pageIdx > 0) {
-            sessionStorage.setItem(depthKey, String(pageIdx));
-          } else {
-            const prevUrl = sessionStorage.getItem(urlKey) || '';
-            let depth = parseInt(sessionStorage.getItem(depthKey) || '-1', 10);
-            if (prevUrl && curUrl !== prevUrl && /[?&](next|prev)=/i.test(curUrl)) {
-              depth = (Number.isFinite(depth) && depth >= 0 ? depth : 0) + 1;
-              sessionStorage.setItem(depthKey, String(depth));
-            }
-          }
-          sessionStorage.setItem(urlKey, curUrl);
-          const d = parseInt(sessionStorage.getItem(depthKey) || '', 10);
-          if (Number.isFinite(d) && d >= 0) {
-            document.querySelectorAll('.exc-gl-item[data-exc-track-id="' + rec.id + '"]').forEach((el) => {
-              el.dataset.excTrackLastPage = String(d);
-            });
-          }
-        }
-      } catch (_) { /* ignore */ }
+      // 追更条与卡片共用同一游标深度，prev= 返回更新结果时必须递减。
+      if (rec.id && typeof resolveTrackingListDepth === 'function') {
+        pageIdx = resolveTrackingListDepth(rec.id, pageState, location.href, rec.last_page);
+      }
+      if (rec.id && pageIdx >= 0) {
+        document.querySelectorAll('.exc-gl-item[data-exc-track-id="' + rec.id + '"]').forEach((el) => {
+          el.dataset.excTrackLastPage = String(pageIdx);
+        });
+      }
       bar.classList.add('is-tracked');
       if (status) status.textContent = '已追更';
       btn.textContent = '✓ 已追更';

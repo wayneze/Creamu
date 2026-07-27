@@ -228,6 +228,9 @@
 
   async function upsertTrackingFromContext(context, options = {}) {
     if (!context || !context.query_signature) throw new Error('无法识别当前页为可收藏搜索');
+    const currentUrl = compactText(
+      context.current_url || context.page_url || context.open_url || location.href
+    ).split('#')[0];
     const openCanon =
       typeof canonicalizeTrackingOpenUrl === 'function'
         ? canonicalizeTrackingOpenUrl(context.open_url || context.page_url || location.href)
@@ -269,6 +272,26 @@
       if (context.top_cover) applyTrackingCoverFields(existing, context.top_cover);
       return saveTrackingRecord(existing);
     }
+    const initialBreakpointGid =
+      options.initializeBreakpoint === false
+        ? ''
+        : compactText(context.page_head_gid || context.top_gid || '');
+    const rawInitialPage = Number(context.page_index);
+    const initialPageKnown =
+      context.page_known !== false && Number.isFinite(rawInitialPage) && rawInitialPage >= 0;
+    const initialPage = initialPageKnown
+      ? Math.floor(rawInitialPage)
+      : context.page_is_first === true
+        ? 0
+        : -1;
+    const initialBreakpointToken = compactText(
+      context.page_head_token || context.top_token || ''
+    );
+    const initialBreakpointTitle = compactText(
+      context.page_head_title || context.top_title || ''
+    ).slice(0, 120);
+    const initialBreakpointPostedAt =
+      Number(context.page_head_posted_at) || Number(context.top_posted_at) || 0;
     const created = {
       id: uid('trk'),
       query_signature: context.query_signature,
@@ -291,10 +314,23 @@
       top_posted_at: Number(context.top_posted_at) || 0,
       top_cover: '',
       cover_url: '',
+      breakpoint_gid: initialBreakpointGid,
+      breakpoint_token: initialBreakpointToken,
+      breakpoint_title: initialBreakpointTitle,
+      breakpoint_posted_at: initialBreakpointPostedAt,
+      breakpoint_page: initialBreakpointGid ? initialPage : '',
+      breakpoint_page_known: initialBreakpointGid && initialPageKnown ? 1 : 0,
+      breakpoint_page_mode: initialBreakpointGid ? compactText(context.page_mode || '') : '',
+      breakpoint_url: initialBreakpointGid ? currentUrl : '',
+      breakpoint_at: initialBreakpointGid ? nowMs() : 0,
+      last_page: initialPage,
       has_update: 0,
       unread_estimate: 0,
       unread_estimate_capped: 0,
-      unread_estimate_source: '',
+      unread_estimate_source:
+        initialBreakpointGid && context.top_gid && String(context.top_gid) === initialBreakpointGid
+          ? 'home_caught_up'
+          : '',
       archived: 0,
       last_check_at: nowMs(),
       last_browsed_at: nowMs(),

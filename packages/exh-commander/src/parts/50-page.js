@@ -272,6 +272,7 @@
       browse_key,
       favcat: favcat || '',
       favcat_label: favcat_label || '',
+      current_url: parsed.href.split('#')[0],
       open_url,
       page_url: open_url,
       page_index: pageIndex,

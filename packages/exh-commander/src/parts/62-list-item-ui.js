@@ -1,3 +1,21 @@
+  function syncListLastSeenMarker(el, active, preferredHost) {
+    if (!el) return;
+    let marker = el.querySelector('.exc-last-seen-mark');
+    if (!active) {
+      if (marker) marker.remove();
+      return;
+    }
+    const host =
+      preferredHost ||
+      el.querySelector('.exc-cover-host, .glthumb, .gl1e, .gl3t, a[href*="/g/"]') ||
+      el;
+    if (!marker) {
+      marker = document.createElement('span');
+      marker.className = 'exc-last-seen-mark';
+      marker.textContent = '上次看到';
+    }
+    if (marker.parentNode !== host) host.appendChild(marker);
+  }
 
   async function enhanceListItem(el, ctx) {
     if (!el || el.dataset.excEnhanced === '1') return null;
@@ -367,6 +385,7 @@
           }
         } catch (_) { /* ignore */ }
       }
+      syncListLastSeenMarker(el, isBpWork, coverHost);
       // 作品级断点按钮：封面右下角「断」——不是顶栏整页断点
       const bpBtn =
         pageCtx && pageCtx.trackable
@@ -400,7 +419,7 @@
                 ? await findTrackingForContext(ctx)
                 : await getTrackingBySignature(ctx.query_signature);
             if (!rec) {
-              rec = await saveCurrentPageAsTracking();
+              rec = await saveCurrentPageAsTracking({ chooseFolder: false });
               if (!rec) return;
             }
             const postedLocal =
@@ -442,8 +461,10 @@
             // 刷新本页作品工具条状态
             document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
               n.classList.remove('is-exc-breakpoint');
+              syncListLastSeenMarker(n, false);
             });
             el.classList.add('is-exc-breakpoint');
+            syncListLastSeenMarker(el, true, coverHost);
             await enhanceListItemForce(el);
             if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
             void refreshTrackingBarState();
@@ -511,33 +532,15 @@
               pageLen = gids.length || 0;
               listIndex = gid && gids.length ? gids.indexOf(String(gid)) : -1;
             } catch (_) { /* ignore */ }
-            let pageIndex = st && st.known ? st.index : -1;
-            if (!(pageIndex >= 0) || (st && st.isFirst === false && !(pageIndex > 0))) {
-              const lp = parseInt(el.dataset.excTrackLastPage || '', 10);
-              if (Number.isFinite(lp) && lp > 0) pageIndex = lp;
-            }
-            try {
-              const depthKey = 'exc_trk_depth_' + tid;
-              const urlKey = 'exc_trk_url_' + tid;
-              if (st && st.isFirst) {
-                sessionStorage.setItem(depthKey, '0');
-                sessionStorage.setItem(urlKey, location.href.split('#')[0]);
-                pageIndex = 0;
-              } else if (pageIndex > 0) {
-                sessionStorage.setItem(depthKey, String(pageIndex));
-                sessionStorage.setItem(urlKey, location.href.split('#')[0]);
-              } else {
-                const prevUrl = sessionStorage.getItem(urlKey) || '';
-                const curUrl = location.href.split('#')[0];
-                let depth = parseInt(sessionStorage.getItem(depthKey) || '-1', 10);
-                if (prevUrl && curUrl !== prevUrl && /[?&](next|prev)=/i.test(curUrl)) {
-                  depth = (Number.isFinite(depth) && depth >= 0 ? depth : 0) + 1;
-                  sessionStorage.setItem(depthKey, String(depth));
-                }
-                sessionStorage.setItem(urlKey, curUrl);
-                if (!(pageIndex > 0) && Number.isFinite(depth) && depth > 0) pageIndex = depth;
-              }
-            } catch (_) { /* ignore */ }
+            const fallbackDepth = parseInt(el.dataset.excTrackLastPage || '-1', 10);
+            const pageIndex =
+              typeof resolveTrackingListDepth === 'function'
+                ? resolveTrackingListDepth(tid, st, location.href, fallbackDepth)
+                : st && st.known
+                  ? st.index
+                  : Number.isFinite(fallbackDepth)
+                    ? fallbackDepth
+                    : -1;
 
             const postedAt =
               Number(edition.posted_at) ||
@@ -578,10 +581,12 @@
               // 更新本页断点高亮
               document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
                 n.classList.remove('is-exc-breakpoint');
+                syncListLastSeenMarker(n, false);
                 const btn = n.querySelector('[data-exc-act="breakpoint"]');
                 if (btn) btn.classList.remove('is-on', 'is-bp');
               });
               el.classList.add('is-exc-breakpoint');
+              syncListLastSeenMarker(el, true, coverHost);
               const bpBtn = el.querySelector('[data-exc-act="breakpoint"]');
               if (bpBtn) bpBtn.classList.add('is-on', 'is-bp');
               if (typeof refreshTrackingBarState === 'function') void refreshTrackingBarState();

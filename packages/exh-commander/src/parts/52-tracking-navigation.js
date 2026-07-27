@@ -158,6 +158,58 @@
     return 0;
   }
 
+  function getTrackingCursorDirection(href) {
+    try {
+      const params = new URL(href || location.href, location.origin).searchParams;
+      if (compactText(params.get('next') || '')) return 1;
+      if (compactText(params.get('prev') || '')) return -1;
+    } catch (_) { /* ignore */ }
+    return 0;
+  }
+
+  /**
+   * 维护追更列表的 0-based 浏览深度。EH 的 next= 指向更旧结果，prev= 返回更新结果；
+   * 同一 URL 可能被追更条和卡片先后读取，因此只有 URL 变化时才推进一次。
+   */
+  function resolveTrackingListDepth(trackingId, pageState, href, fallbackDepth) {
+    const state = pageState || {};
+    const explicit = Number(state.index);
+    const fallback = Number(fallbackDepth);
+    if (state.isFirst === true) {
+      if (!trackingId) return 0;
+    } else if (state.known === true && Number.isFinite(explicit) && explicit >= 0) {
+      if (!trackingId) return explicit;
+    } else if (!trackingId) {
+      return Number.isFinite(fallback) && fallback >= 0 ? fallback : -1;
+    }
+
+    const depthKey = 'exc_trk_depth_' + trackingId;
+    const urlKey = 'exc_trk_url_' + trackingId;
+    const currentUrl = compactText(href || location.href).split('#')[0];
+    let depth = Number.isFinite(fallback) && fallback >= 0 ? Math.floor(fallback) : -1;
+    try {
+      const stored = parseInt(sessionStorage.getItem(depthKey) || '-1', 10);
+      if (Number.isFinite(stored) && stored >= 0) depth = stored;
+
+      if (state.isFirst === true) {
+        depth = 0;
+      } else if (state.known === true && Number.isFinite(explicit) && explicit >= 0) {
+        depth = Math.floor(explicit);
+      } else {
+        const previousUrl = sessionStorage.getItem(urlKey) || '';
+        if (currentUrl && currentUrl !== previousUrl) {
+          const direction = getTrackingCursorDirection(currentUrl);
+          if (direction > 0) depth = depth >= 0 ? depth + 1 : 1;
+          else if (direction < 0 && depth >= 0) depth = Math.max(0, depth - 1);
+        }
+      }
+
+      if (depth >= 0) sessionStorage.setItem(depthKey, String(depth));
+      if (currentUrl) sessionStorage.setItem(urlKey, currentUrl);
+    } catch (_) { /* ignore */ }
+    return depth;
+  }
+
   function buildListUrlWithPage(baseUrl, pageIndex) {
     try {
       const u = new URL(baseUrl || location.href, location.origin);
@@ -177,7 +229,8 @@
     }
   }
 
-  async function saveCurrentPageAsTracking() {
+  async function saveCurrentPageAsTracking(options) {
+    const opts = options || {};
     const ctx = parseExhPageContext(location.href);
     if (!ctx || !ctx.trackable) {
       showToast((ctx && ctx.reason) || '当前页不能收藏。请打开标签/搜索/社团页再点收藏。');
@@ -203,6 +256,12 @@
       await saveTrackingRecord(rec);
     } catch (_) { /* ignore */ }
     showToast('已收藏：' + getTrackingDisplayTitle(rec));
+    if (typeof applyListVolatileState === 'function') {
+      applyListVolatileState(loadSeenGids(), rec);
+    }
+    if (opts.chooseFolder === true && typeof openTrackingFolderDialog === 'function') {
+      await openTrackingFolderDialog(rec, { reason: 'collect' });
+    }
     if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
     return rec;
   }
@@ -484,6 +543,13 @@
       const home = canonicalizeTrackingOpenUrl(base);
       url = buildListUrlWithPage(home, targetPage);
     }
+    try {
+      const savedPage = Number(rec.breakpoint_page);
+      if (rec.id && Number.isFinite(savedPage) && savedPage >= 0) {
+        sessionStorage.setItem('exc_trk_depth_' + rec.id, String(Math.floor(savedPage)));
+        sessionStorage.setItem('exc_trk_url_' + rec.id, url.split('#')[0]);
+      }
+    } catch (_) { /* ignore */ }
     const here = location.href.split('#')[0];
     if (url.split('#')[0] === here) {
       void scrollToBreakpointGid(gid);

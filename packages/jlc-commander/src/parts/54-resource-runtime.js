@@ -36,9 +36,9 @@
         if (config.resource_magnet !== false) {
             cards.push('<section class="jlc-resource-card" data-jlc-resource="magnet"><h3>磁力</h3><div class="jlc-resource-body"></div></section>');
         }
-        if (config.resource_links !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="links"><h3>站外链接</h3><div class="jlc-resource-body"></div></section>');
-        }
+        const linksStrip = config.resource_links !== false
+            ? '<div class="jlc-resource-links" data-jlc-resource="links"><span class="jlc-resource-links-label">站外</span><div class="jlc-resource-body"></div></div>'
+            : '';
         container.innerHTML = ''
             + '<div class="jlc-resource-header">'
             + '    <div>'
@@ -50,6 +50,7 @@
             + '        <button type="button" data-jlc-resource-settings>资源设置</button>'
             + '    </div>'
             + '</div>'
+            + linksStrip
             + '<div class="jlc-resource-grid">' + (cards.length ? cards.join('') : '<div class="jlc-resource-empty">当前没有启用任何资源模块。</div>') + '</div>';
         container.querySelector('[data-jlc-resource-refresh]')?.addEventListener('click', () => renderDetailResourceCenter(true));
         container.querySelector('[data-jlc-resource-settings]')?.addEventListener('click', () => openCommanderPanel('resource'));
@@ -60,6 +61,6 @@
         if (screenshotCard) renderScreenshotSection(screenshotCard, context, token);
         const magnetCard = container.querySelector('[data-jlc-resource="magnet"]');
         if (magnetCard) renderMagnetSection(magnetCard, context, token);
-        const linksCard = container.querySelector('[data-jlc-resource="links"]');
-        if (linksCard) renderResourceLinksSection(linksCard, context);
+        const linksSection = container.querySelector('[data-jlc-resource="links"]');
+        if (linksSection) renderResourceLinksSection(linksSection, context);
     }

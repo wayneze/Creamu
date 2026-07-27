@@ -199,7 +199,7 @@
     document.getElementById('jlc-wb-settings-btn').onclick = () => openSettings(true);
     document.getElementById('jlc-wb-settings-close').onclick = () => openSettings(false);
     document.getElementById('jlc-wb-save-current').onclick = async () => {
-      await saveCurrentPageAsTracking();
+      await saveCurrentPageAsTracking({ chooseFolder: true });
       renderWorkbench();
     };
     document.getElementById('exc-check-updates').onclick = () => {

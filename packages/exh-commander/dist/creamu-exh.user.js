@@ -580,6 +580,15 @@
         tr.exc-gl-item.is-exc-breakpoint > td.gl1e {
             box-shadow: inset 3px 0 0 #e8485a !important;
         }
+        .exc-last-seen-mark {
+            position: absolute; left: 4px; bottom: 4px; z-index: 22;
+            display: inline-flex; align-items: center; min-height: 18px;
+            padding: 2px 6px; border: 1px solid rgba(255,210,216,.65); border-radius: 5px;
+            background: rgba(112,23,38,.88); color: #fff5f6;
+            font: 700 10px/1.2 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            white-space: nowrap; pointer-events: none; box-sizing: border-box;
+            box-shadow: 0 2px 6px rgba(80,10,22,.25);
+        }
         #jlc-wb .jlc-wb-item-menu.is-fixed-menu {
             position: fixed !important;
             z-index: 1000200 !important;
@@ -597,6 +606,10 @@
         #jlc-wb .jlc-wb-item-pills > span {
             flex: 0 0 auto !important;
             margin: 0 !important;
+        }
+        #jlc-wb .jlc-site-pill.is-top.is-stale {
+            background: #fff0d8; color: #9a5b12; border-color: #e8c58f;
+            font-weight: 800;
         }
         #jlc-wb .jlc-wb-item-title-row {
             display: flex !important;
@@ -1196,6 +1209,19 @@
             box-shadow: 0 0 0 2px rgba(212,136,58,.22), 0 3px 0 #e8c48a !important;
             order: -1;
         }
+        #exc-current-work {
+            flex: 0 0 auto; padding: 8px 14px 10px; border-bottom: 1px solid #eadcc6;
+            background: #fff9ef;
+        }
+        #exc-current-work[hidden] { display: none !important; }
+        #exc-current-work .exc-current-work-label {
+            margin: 0 0 6px; color: #9a6a32; font-size: 11px; font-weight: 800;
+        }
+        #exc-current-work .jlc-wb-item.is-current {
+            margin: 0; border: 2px solid #d4883a !important;
+            background: #fff2df !important;
+            box-shadow: 0 0 0 2px rgba(212,136,58,.16), 0 3px 0 #e8c48a !important;
+        }
         #jlc-wb-works-scroll {
             display: flex;
             flex-direction: column;
@@ -1210,7 +1236,7 @@
         #exc-diag .exc-g-head { padding: 16px 18px 8px; font-weight: 800; font-size: 18px; color: #6b4a2e; }
         #exc-diag .exc-g-body { padding: 4px 18px 16px; color: #7a5a3c; }
         #exc-wb-dialog {
-            position: fixed; inset: 0; z-index: 1000001; display: none; align-items: center; justify-content: center;
+            position: fixed; inset: 0; z-index: 2147483100 !important; display: none; align-items: center; justify-content: center;
             background: rgba(90,60,30,.35); padding: 20px;
         }
         #exc-wb-dialog.is-open { display: flex; }
@@ -1223,6 +1249,41 @@
         #exc-wb-dialog h4 { margin: 0 0 8px; font-size: 18px; color: #6b4a2e; font-weight: 800; }
         #exc-wb-dialog p { margin: 0 0 12px; font-size: 13.5px; color: #9a7d60; line-height: 1.55; }
         #exc-wb-dialog .jlc-wb-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
+        #exc-folder-dialog .exc-folder-intro {
+            margin-bottom: 10px; color: #6b4a2e; font-weight: 700;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #exc-folder-dialog .exc-folder-options {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px; max-height: 240px; overflow: auto; padding: 2px;
+        }
+        #exc-folder-dialog .exc-folder-choice {
+            appearance: none; display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; min-height: 38px; padding: 8px 10px; border: 1px solid #e0cdae;
+            border-radius: 6px; background: #fffaf2; color: #5a4030; cursor: pointer;
+            font: 650 13px/1.25 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            text-align: left;
+        }
+        #exc-folder-dialog .exc-folder-choice:hover { border-color: #d4883a; background: #fff4e5; }
+        #exc-folder-dialog .exc-folder-choice.is-selected {
+            border-color: #d4883a; background: #fff0dc; box-shadow: 0 0 0 2px rgba(212,136,58,.16);
+        }
+        #exc-folder-dialog .exc-folder-choice small { color: #a08468; font-size: 10.5px; font-weight: 600; }
+        #exc-folder-dialog .exc-folder-create { margin-top: 14px; }
+        #exc-folder-dialog .exc-folder-create > label {
+            display: block; margin-bottom: 6px; color: #8a6f55; font-size: 12px; font-weight: 700;
+        }
+        #exc-folder-dialog .exc-folder-create > div { display: flex; gap: 8px; align-items: stretch; }
+        #exc-folder-dialog .jlc-wb-input {
+            min-width: 0; flex: 1 1 auto; padding: 8px 10px; border: 1px solid #d9c5a8;
+            border-radius: 6px; background: #fffdf8; color: #4a3728; box-sizing: border-box;
+            font: 13px/1.3 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        #exc-folder-dialog .jlc-wb-input:focus { outline: 2px solid rgba(212,136,58,.25); border-color: #d4883a; }
+        @media (max-width: 520px) {
+            #exc-folder-dialog .exc-folder-options { grid-template-columns: 1fr 1fr; }
+            #exc-folder-dialog .exc-folder-create > div { flex-direction: column; }
+        }
         #exc-wb-dialog .exc-modal-row {
             display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px;
             border: 1px solid #efe0cc; border-radius: 16px; margin-bottom: 10px; background: #fffdf8;
@@ -6022,6 +6083,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
   async function upsertTrackingFromContext(context, options = {}) {
     if (!context || !context.query_signature) throw new Error('无法识别当前页为可收藏搜索');
+    const currentUrl = compactText(
+      context.current_url || context.page_url || context.open_url || location.href
+    ).split('#')[0];
     const openCanon =
       typeof canonicalizeTrackingOpenUrl === 'function'
         ? canonicalizeTrackingOpenUrl(context.open_url || context.page_url || location.href)
@@ -6063,6 +6127,26 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       if (context.top_cover) applyTrackingCoverFields(existing, context.top_cover);
       return saveTrackingRecord(existing);
     }
+    const initialBreakpointGid =
+      options.initializeBreakpoint === false
+        ? ''
+        : compactText(context.page_head_gid || context.top_gid || '');
+    const rawInitialPage = Number(context.page_index);
+    const initialPageKnown =
+      context.page_known !== false && Number.isFinite(rawInitialPage) && rawInitialPage >= 0;
+    const initialPage = initialPageKnown
+      ? Math.floor(rawInitialPage)
+      : context.page_is_first === true
+        ? 0
+        : -1;
+    const initialBreakpointToken = compactText(
+      context.page_head_token || context.top_token || ''
+    );
+    const initialBreakpointTitle = compactText(
+      context.page_head_title || context.top_title || ''
+    ).slice(0, 120);
+    const initialBreakpointPostedAt =
+      Number(context.page_head_posted_at) || Number(context.top_posted_at) || 0;
     const created = {
       id: uid('trk'),
       query_signature: context.query_signature,
@@ -6085,10 +6169,23 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       top_posted_at: Number(context.top_posted_at) || 0,
       top_cover: '',
       cover_url: '',
+      breakpoint_gid: initialBreakpointGid,
+      breakpoint_token: initialBreakpointToken,
+      breakpoint_title: initialBreakpointTitle,
+      breakpoint_posted_at: initialBreakpointPostedAt,
+      breakpoint_page: initialBreakpointGid ? initialPage : '',
+      breakpoint_page_known: initialBreakpointGid && initialPageKnown ? 1 : 0,
+      breakpoint_page_mode: initialBreakpointGid ? compactText(context.page_mode || '') : '',
+      breakpoint_url: initialBreakpointGid ? currentUrl : '',
+      breakpoint_at: initialBreakpointGid ? nowMs() : 0,
+      last_page: initialPage,
       has_update: 0,
       unread_estimate: 0,
       unread_estimate_capped: 0,
-      unread_estimate_source: '',
+      unread_estimate_source:
+        initialBreakpointGid && context.top_gid && String(context.top_gid) === initialBreakpointGid
+          ? 'home_caught_up'
+          : '',
       archived: 0,
       last_check_at: nowMs(),
       last_browsed_at: nowMs(),
@@ -7200,6 +7297,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       browse_key,
       favcat: favcat || '',
       favcat_label: favcat_label || '',
+      current_url: parsed.href.split('#')[0],
       open_url,
       page_url: open_url,
       page_index: pageIndex,
@@ -7946,6 +8044,58 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return 0;
   }
 
+  function getTrackingCursorDirection(href) {
+    try {
+      const params = new URL(href || location.href, location.origin).searchParams;
+      if (compactText(params.get('next') || '')) return 1;
+      if (compactText(params.get('prev') || '')) return -1;
+    } catch (_) { /* ignore */ }
+    return 0;
+  }
+
+  /**
+   * 维护追更列表的 0-based 浏览深度。EH 的 next= 指向更旧结果，prev= 返回更新结果；
+   * 同一 URL 可能被追更条和卡片先后读取，因此只有 URL 变化时才推进一次。
+   */
+  function resolveTrackingListDepth(trackingId, pageState, href, fallbackDepth) {
+    const state = pageState || {};
+    const explicit = Number(state.index);
+    const fallback = Number(fallbackDepth);
+    if (state.isFirst === true) {
+      if (!trackingId) return 0;
+    } else if (state.known === true && Number.isFinite(explicit) && explicit >= 0) {
+      if (!trackingId) return explicit;
+    } else if (!trackingId) {
+      return Number.isFinite(fallback) && fallback >= 0 ? fallback : -1;
+    }
+
+    const depthKey = 'exc_trk_depth_' + trackingId;
+    const urlKey = 'exc_trk_url_' + trackingId;
+    const currentUrl = compactText(href || location.href).split('#')[0];
+    let depth = Number.isFinite(fallback) && fallback >= 0 ? Math.floor(fallback) : -1;
+    try {
+      const stored = parseInt(sessionStorage.getItem(depthKey) || '-1', 10);
+      if (Number.isFinite(stored) && stored >= 0) depth = stored;
+
+      if (state.isFirst === true) {
+        depth = 0;
+      } else if (state.known === true && Number.isFinite(explicit) && explicit >= 0) {
+        depth = Math.floor(explicit);
+      } else {
+        const previousUrl = sessionStorage.getItem(urlKey) || '';
+        if (currentUrl && currentUrl !== previousUrl) {
+          const direction = getTrackingCursorDirection(currentUrl);
+          if (direction > 0) depth = depth >= 0 ? depth + 1 : 1;
+          else if (direction < 0 && depth >= 0) depth = Math.max(0, depth - 1);
+        }
+      }
+
+      if (depth >= 0) sessionStorage.setItem(depthKey, String(depth));
+      if (currentUrl) sessionStorage.setItem(urlKey, currentUrl);
+    } catch (_) { /* ignore */ }
+    return depth;
+  }
+
   function buildListUrlWithPage(baseUrl, pageIndex) {
     try {
       const u = new URL(baseUrl || location.href, location.origin);
@@ -7965,7 +8115,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
   }
 
-  async function saveCurrentPageAsTracking() {
+  async function saveCurrentPageAsTracking(options) {
+    const opts = options || {};
     const ctx = parseExhPageContext(location.href);
     if (!ctx || !ctx.trackable) {
       showToast((ctx && ctx.reason) || '当前页不能收藏。请打开标签/搜索/社团页再点收藏。');
@@ -7991,6 +8142,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       await saveTrackingRecord(rec);
     } catch (_) { /* ignore */ }
     showToast('已收藏：' + getTrackingDisplayTitle(rec));
+    if (typeof applyListVolatileState === 'function') {
+      applyListVolatileState(loadSeenGids(), rec);
+    }
+    if (opts.chooseFolder === true && typeof openTrackingFolderDialog === 'function') {
+      await openTrackingFolderDialog(rec, { reason: 'collect' });
+    }
     if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
     return rec;
   }
@@ -8272,6 +8429,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const home = canonicalizeTrackingOpenUrl(base);
       url = buildListUrlWithPage(home, targetPage);
     }
+    try {
+      const savedPage = Number(rec.breakpoint_page);
+      if (rec.id && Number.isFinite(savedPage) && savedPage >= 0) {
+        sessionStorage.setItem('exc_trk_depth_' + rec.id, String(Math.floor(savedPage)));
+        sessionStorage.setItem('exc_trk_url_' + rec.id, url.split('#')[0]);
+      }
+    } catch (_) { /* ignore */ }
     const here = location.href.split('#')[0];
     if (url.split('#')[0] === here) {
       void scrollToBreakpointGid(gid);
@@ -10235,20 +10399,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     let body =
       '<div class="exc-compare-note">含自动标题搜索并入的相关上传。</div>';
-    if (cmp && (cmp.current_brief || cmp.other_brief)) {
-      body +=
-        '<div class="exc-compare-pair">' +
-        '<div class="exc-compare-side"><span class="exc-compare-k">当前</span> ' +
-        escapeHtml(cmp.current_brief || '—') +
-        (currentIsLrr ? ' · 库源' : '') +
-        '</div>' +
-        '<div class="exc-compare-side"><span class="exc-compare-k">对方</span> ' +
-        escapeHtml(cmp.other_brief || '—') +
-        (peer && peer.gid ? ' · g' + escapeHtml(String(peer.gid)) : '') +
-        (peer && isLrrGid(peer.gid) ? ' · 库源' : '') +
-        '</div>' +
-        '</div>';
-    }
     if (cmp && cmp.diffs && cmp.diffs.length) {
       body += compareDiffsListHtml(cmp.diffs, {
         leftBetter: 'current',
@@ -10353,17 +10503,22 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     );
   }
 
-  function badgeHtml(lib, work, edition) {
+  function badgeHtml(lib, work, edition, options) {
+    const opts = options || {};
     const bits = [];
     if (lib) {
       // 库内主状态由对照卡承担，badge 只补额外态
       const cardCoversInLib = !!(lib.work_in_library || lib.edition_in_library);
-      if (lib.same_version_confirmed) {
+      if (lib.same_version_confirmed && !opts.lrrComparisonVisible) {
         bits.push('<span class="jlc-status-pill tone-green" title="已手动确认与库内为同一版本">同源✓</span>');
       }
-      if (!cardCoversInLib) {
+      if (!cardCoversInLib && !opts.lrrComparisonVisible) {
         if (lib.preferred_in_library) bits.push('<span class="jlc-status-pill tone-blue">偏好版在库</span>');
-      } else if (lib.preferred_in_library && !lib.edition_in_library) {
+      } else if (
+        lib.preferred_in_library &&
+        !lib.edition_in_library &&
+        !opts.lrrComparisonVisible
+      ) {
         bits.push('<span class="jlc-status-pill tone-blue">偏好版在库</span>');
       }
       if (!cardCoversInLib && lib.maybe_in_library) {
@@ -10381,7 +10536,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             '</span>'
         );
       }
-      if (lib.has_better_remote && !lib.same_version_confirmed) {
+      if (
+        lib.has_better_remote &&
+        !lib.same_version_confirmed &&
+        !opts.editionComparisonVisible
+      ) {
         bits.push('<span class="jlc-status-pill tone-orange">⬆有更好版</span>');
       }
     }
@@ -10652,6 +10811,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   let hoverPreviewGen = 0;
   let hoverPreviewScrollBound = false;
 
+  function invalidateHoverPreview() {
+    hoverPreviewGen++;
+  }
+
   function ensureHoverPreviewPanel() {
     let panel = document.getElementById('exc-hover-preview');
     if (panel) return panel;
@@ -10685,6 +10848,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   function hideHoverPreview() {
+    invalidateHoverPreview();
     if (hoverPreviewHideTimer) {
       clearTimeout(hoverPreviewHideTimer);
       hoverPreviewHideTimer = null;
@@ -10904,8 +11068,27 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       localGen++;
       const to = ev.relatedTarget;
       if (to && to.closest && to.closest('#exc-hover-preview')) return;
+      invalidateHoverPreview();
       scheduleHideHoverPreview(140);
     });
+  }
+  function syncListLastSeenMarker(el, active, preferredHost) {
+    if (!el) return;
+    let marker = el.querySelector('.exc-last-seen-mark');
+    if (!active) {
+      if (marker) marker.remove();
+      return;
+    }
+    const host =
+      preferredHost ||
+      el.querySelector('.exc-cover-host, .glthumb, .gl1e, .gl3t, a[href*="/g/"]') ||
+      el;
+    if (!marker) {
+      marker = document.createElement('span');
+      marker.className = 'exc-last-seen-mark';
+      marker.textContent = '上次看到';
+    }
+    if (marker.parentNode !== host) host.appendChild(marker);
   }
 
   async function enhanceListItem(el, ctx) {
@@ -11276,6 +11459,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           }
         } catch (_) { /* ignore */ }
       }
+      syncListLastSeenMarker(el, isBpWork, coverHost);
       // 作品级断点按钮：封面右下角「断」——不是顶栏整页断点
       const bpBtn =
         pageCtx && pageCtx.trackable
@@ -11309,7 +11493,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 ? await findTrackingForContext(ctx)
                 : await getTrackingBySignature(ctx.query_signature);
             if (!rec) {
-              rec = await saveCurrentPageAsTracking();
+              rec = await saveCurrentPageAsTracking({ chooseFolder: false });
               if (!rec) return;
             }
             const postedLocal =
@@ -11351,8 +11535,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             // 刷新本页作品工具条状态
             document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
               n.classList.remove('is-exc-breakpoint');
+              syncListLastSeenMarker(n, false);
             });
             el.classList.add('is-exc-breakpoint');
+            syncListLastSeenMarker(el, true, coverHost);
             await enhanceListItemForce(el);
             if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
             void refreshTrackingBarState();
@@ -11420,33 +11606,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
               pageLen = gids.length || 0;
               listIndex = gid && gids.length ? gids.indexOf(String(gid)) : -1;
             } catch (_) { /* ignore */ }
-            let pageIndex = st && st.known ? st.index : -1;
-            if (!(pageIndex >= 0) || (st && st.isFirst === false && !(pageIndex > 0))) {
-              const lp = parseInt(el.dataset.excTrackLastPage || '', 10);
-              if (Number.isFinite(lp) && lp > 0) pageIndex = lp;
-            }
-            try {
-              const depthKey = 'exc_trk_depth_' + tid;
-              const urlKey = 'exc_trk_url_' + tid;
-              if (st && st.isFirst) {
-                sessionStorage.setItem(depthKey, '0');
-                sessionStorage.setItem(urlKey, location.href.split('#')[0]);
-                pageIndex = 0;
-              } else if (pageIndex > 0) {
-                sessionStorage.setItem(depthKey, String(pageIndex));
-                sessionStorage.setItem(urlKey, location.href.split('#')[0]);
-              } else {
-                const prevUrl = sessionStorage.getItem(urlKey) || '';
-                const curUrl = location.href.split('#')[0];
-                let depth = parseInt(sessionStorage.getItem(depthKey) || '-1', 10);
-                if (prevUrl && curUrl !== prevUrl && /[?&](next|prev)=/i.test(curUrl)) {
-                  depth = (Number.isFinite(depth) && depth >= 0 ? depth : 0) + 1;
-                  sessionStorage.setItem(depthKey, String(depth));
-                }
-                sessionStorage.setItem(urlKey, curUrl);
-                if (!(pageIndex > 0) && Number.isFinite(depth) && depth > 0) pageIndex = depth;
-              }
-            } catch (_) { /* ignore */ }
+            const fallbackDepth = parseInt(el.dataset.excTrackLastPage || '-1', 10);
+            const pageIndex =
+              typeof resolveTrackingListDepth === 'function'
+                ? resolveTrackingListDepth(tid, st, location.href, fallbackDepth)
+                : st && st.known
+                  ? st.index
+                  : Number.isFinite(fallbackDepth)
+                    ? fallbackDepth
+                    : -1;
 
             const postedAt =
               Number(edition.posted_at) ||
@@ -11487,10 +11655,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
               // 更新本页断点高亮
               document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
                 n.classList.remove('is-exc-breakpoint');
+                syncListLastSeenMarker(n, false);
                 const btn = n.querySelector('[data-exc-act="breakpoint"]');
                 if (btn) btn.classList.remove('is-on', 'is-bp');
               });
               el.classList.add('is-exc-breakpoint');
+              syncListLastSeenMarker(el, true, coverHost);
               const bpBtn = el.querySelector('[data-exc-act="breakpoint"]');
               if (bpBtn) bpBtn.classList.add('is-on', 'is-bp');
               if (typeof refreshTrackingBarState === 'function') void refreshTrackingBarState();
@@ -11800,7 +11970,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const btn = document.getElementById('exc-save-tracking');
     if (btn) {
       btn.onclick = async () => {
-        await saveCurrentPageAsTracking();
+        await saveCurrentPageAsTracking({ chooseFolder: true });
         void refreshTrackingBarState();
       };
     }
@@ -11861,7 +12031,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             mode: 'page',
             display: String((getCurrentListPageIndex() || 0) + 1),
           };
-    const pageIdx = pageState.known && pageState.index >= 0 ? pageState.index : -1;
+    let pageIdx = pageState.known && pageState.index >= 0 ? pageState.index : -1;
     const pageDisp =
       pageState.display ||
       (typeof formatListPageDisplay === 'function'
@@ -11872,33 +12042,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const isFirstPage = pageState.isFirst === true;
 
     if (rec) {
-      // 翻页时维护 session 深度，点开作品才能正确下调未读
-      try {
-        if (rec.id) {
-          const depthKey = 'exc_trk_depth_' + rec.id;
-          const urlKey = 'exc_trk_url_' + rec.id;
-          const curUrl = location.href.split('#')[0];
-          if (isFirstPage) {
-            sessionStorage.setItem(depthKey, '0');
-          } else if (pageIdx > 0) {
-            sessionStorage.setItem(depthKey, String(pageIdx));
-          } else {
-            const prevUrl = sessionStorage.getItem(urlKey) || '';
-            let depth = parseInt(sessionStorage.getItem(depthKey) || '-1', 10);
-            if (prevUrl && curUrl !== prevUrl && /[?&](next|prev)=/i.test(curUrl)) {
-              depth = (Number.isFinite(depth) && depth >= 0 ? depth : 0) + 1;
-              sessionStorage.setItem(depthKey, String(depth));
-            }
-          }
-          sessionStorage.setItem(urlKey, curUrl);
-          const d = parseInt(sessionStorage.getItem(depthKey) || '', 10);
-          if (Number.isFinite(d) && d >= 0) {
-            document.querySelectorAll('.exc-gl-item[data-exc-track-id="' + rec.id + '"]').forEach((el) => {
-              el.dataset.excTrackLastPage = String(d);
-            });
-          }
-        }
-      } catch (_) { /* ignore */ }
+      // 追更条与卡片共用同一游标深度，prev= 返回更新结果时必须递减。
+      if (rec.id && typeof resolveTrackingListDepth === 'function') {
+        pageIdx = resolveTrackingListDepth(rec.id, pageState, location.href, rec.last_page);
+      }
+      if (rec.id && pageIdx >= 0) {
+        document.querySelectorAll('.exc-gl-item[data-exc-track-id="' + rec.id + '"]').forEach((el) => {
+          el.dataset.excTrackLastPage = String(pageIdx);
+        });
+      }
       bar.classList.add('is-tracked');
       if (status) status.textContent = '已追更';
       btn.textContent = '✓ 已追更';
@@ -12408,7 +12560,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     panel.innerHTML =
       '<div class="exc-g-head">Creamu · ExH · 画廊</div>' +
       '<div class="exc-g-body">' +
-      badgeHtml(lib, work, edition) +
+      badgeHtml(lib, work, edition, {
+        lrrComparisonVisible: !!lrrCompareCard,
+        editionComparisonVisible: !!edCompareCard,
+      }) +
       lrrCompareCard +
       edCompareCard +
       '<div class="jlc-wb-view-title" style="margin-top:10px">操作</div>' +
@@ -12695,6 +12850,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         String(trackingRecord.breakpoint_gid || '') === gid
       );
       el.classList.toggle('is-exc-breakpoint', isBreakpoint);
+      if (typeof syncListLastSeenMarker === 'function') {
+        syncListLastSeenMarker(el, isBreakpoint);
+      }
       const breakpointButton = el.querySelector('[data-exc-act="breakpoint"]');
       if (breakpointButton) {
         breakpointButton.classList.toggle('is-on', isBreakpoint);
@@ -13010,7 +13168,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     document.getElementById('jlc-wb-settings-btn').onclick = () => openSettings(true);
     document.getElementById('jlc-wb-settings-close').onclick = () => openSettings(false);
     document.getElementById('jlc-wb-save-current').onclick = async () => {
-      await saveCurrentPageAsTracking();
+      await saveCurrentPageAsTracking({ chooseFolder: true });
       renderWorkbench();
     };
     document.getElementById('exc-check-updates').onclick = () => {
@@ -13538,6 +13696,113 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
   }
 
+  async function openTrackingFolderDialog(record, options) {
+    if (!record) return null;
+    const opts = options || {};
+    const folders = await collectManualFolderOptions();
+    const current = compactText(record.custom_folder || '');
+    const folderButtons = [
+      '<button type="button" class="exc-folder-choice' +
+        (!current ? ' is-selected' : '') +
+        '" data-folder-choice=""><span>未分类</span><small>稍后整理</small></button>',
+    ];
+    folders.forEach((folder) => {
+      folderButtons.push(
+        '<button type="button" class="exc-folder-choice' +
+          (folder.name.toLowerCase() === current.toLowerCase() ? ' is-selected' : '') +
+          '" data-folder-choice="' +
+          escapeHtml(folder.name) +
+          '"><span>' +
+          escapeHtml(folder.name) +
+          '</span></button>'
+      );
+    });
+
+    const box = openModal(
+      opts.reason === 'collect' ? '收藏到分类' : '设置分类',
+      '<div id="exc-folder-dialog">' +
+        '<p class="exc-folder-intro">' +
+        escapeHtml(getTrackingDisplayTitle(record)) +
+        '</p>' +
+        '<div class="exc-folder-options" role="listbox" aria-label="已有分类">' +
+        folderButtons.join('') +
+        '</div>' +
+        '<div class="exc-folder-create">' +
+        '<label for="exc-folder-new">新分类</label>' +
+        '<div><input id="exc-folder-new" class="jlc-wb-input" type="text" maxlength="40" placeholder="输入分类名">' +
+        '<button type="button" class="jlc-wb-btn primary" data-folder-action="create">使用此分类</button></div>' +
+        '</div>' +
+        '</div>',
+      '<button type="button" class="jlc-wb-btn ghost" data-folder-action="cancel">' +
+        (opts.reason === 'collect' ? '稍后设置' : '取消') +
+        '</button>'
+    );
+
+    const applyFolder = async (folder) => {
+      record.custom_folder = compactText(folder || '').slice(0, 40);
+      await saveTrackingRecord(record);
+      closeModal();
+      showToast(record.custom_folder ? '已分类到：' + record.custom_folder : '已放入未分类');
+      const trackingRoot = document.getElementById('exc-wb-tracking-root');
+      const trackingPage = trackingRoot && trackingRoot.closest('[data-jlc-wb-page="tracking"]');
+      const trackingVisible = !!(
+        trackingPage &&
+        !trackingPage.hidden &&
+        document.getElementById('jlc-wb')?.classList.contains('is-open')
+      );
+      if (trackingVisible) {
+        await renderTrackingPage();
+      }
+      if (typeof refreshListVolatileState === 'function') {
+        await refreshListVolatileState();
+      }
+      if (trackingVisible) void updateFabBadge();
+      else if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
+      return record.custom_folder;
+    };
+
+    box.onclick = (event) => {
+      const choice = event.target.closest('[data-folder-choice]');
+      const action = event.target.closest('[data-folder-action]');
+      if (choice) {
+        event.preventDefault();
+        void applyFolder(choice.getAttribute('data-folder-choice') || '').catch((error) => {
+          showToast('分类失败: ' + ((error && error.message) || error));
+        });
+        return;
+      }
+      if (!action) return;
+      event.preventDefault();
+      const kind = action.getAttribute('data-folder-action');
+      if (kind === 'cancel') {
+        closeModal();
+        return;
+      }
+      if (kind === 'create') {
+        const input = box.querySelector('#exc-folder-new');
+        const value = compactText(input && input.value);
+        if (!value) {
+          if (input) input.focus();
+          showToast('请输入分类名');
+          return;
+        }
+        void applyFolder(value).catch((error) => {
+          showToast('分类失败: ' + ((error && error.message) || error));
+        });
+      }
+    };
+    const input = box.querySelector('#exc-folder-new');
+    if (input) {
+      input.onkeydown = (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        box.querySelector('[data-folder-action="create"]')?.click();
+      };
+      setTimeout(() => input.focus(), 0);
+    }
+    return box;
+  }
+
   async function renderTrackingPage() {
     invalidateTrackingListPaint();
     const root = document.getElementById('exc-wb-tracking-root');
@@ -13613,6 +13878,25 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     if (diff < 30 * 24 * 60 * 60 * 1000) return Math.floor(diff / (24 * 60 * 60 * 1000)) + '天前';
     const d = new Date(time);
     return d.getMonth() + 1 + '/' + d.getDate();
+  }
+
+  function getTrackingReleaseAge(record, referenceNow) {
+    const postedAt = Number(record && record.top_posted_at) || 0;
+    if (!postedAt) return { text: '', days: 0, stale: false };
+    const now = Number(referenceNow) || Date.now();
+    const diff = Math.max(0, now - postedAt);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const days = Math.floor(diff / dayMs);
+    let text = '';
+    if (days <= 0) text = '今天';
+    else if (days < 30) text = days + '天前';
+    else if (days < 365) text = Math.max(1, Math.floor(days / 30)) + '个月前';
+    else {
+      const years = Math.floor(days / 365);
+      const months = Math.floor((days % 365) / 30);
+      text = years + '年' + (months ? months + '个月' : '') + '前';
+    }
+    return { text, days, stale: days >= 90 };
   }
 
   function updateTrackingCheckButton() {
@@ -13758,7 +14042,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     if (top && bp && top !== bp) {
       const noteBits = [
         '最新 ' + (getTrackingTopMetaLabel(r) || '—'),
-        '断点 ' + (getTrackingBpMetaLabel(r) || '—'),
+        '上次看到 ' + (getTrackingBpMetaLabel(r) || '—'),
       ];
       if (unreadNote) noteBits.push(unreadNote);
       return {
@@ -13817,7 +14101,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       (topPosted || '未知时间') +
       (r.top_title ? ' · ' + compactText(r.top_title) : topGid ? ' · g' + topGid : '');
     const bpHoverBits = [
-      '断点 ' + (bpPosted || '未知时间'),
+      '上次看到 ' + (bpPosted || '未知时间'),
       r.breakpoint_title
         ? compactText(r.breakpoint_title)
         : bpGid
@@ -13826,15 +14110,22 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       hasBpPage ? '列表第' + (bpPage + 1) + '页' : '',
     ].filter(Boolean);
     const bpHover = bpHoverBits.join(' · ');
+    const releaseAge = getTrackingReleaseAge(r);
 
     // 胶囊：最新 / 断点（替代原「当前 · 上次」行）
     const subPills = [];
     if (topGid || topPosted) {
       subPills.push(
-        '<span class="jlc-site-pill is-top" title="' +
+        '<span class="jlc-site-pill is-top' +
+          (releaseAge.stale ? ' is-stale' : '') +
+          '" title="' +
           escapeHtml(topHover) +
           '">' +
-          escapeHtml('最新 ' + (topPosted || '—')) +
+          escapeHtml(
+            '最新 ' +
+              (topPosted || '—') +
+              (releaseAge.text ? ' · ' + releaseAge.text : '')
+          ) +
           '</span>'
       );
     }
@@ -13845,7 +14136,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           '" title="' +
           escapeHtml(bpHover) +
           '">' +
-          escapeHtml('断点 ' + (bpPosted || '—')) +
+          escapeHtml('上次看到 ' + (bpPosted || '—')) +
           '</span>'
       );
     }
@@ -14198,15 +14489,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         await saveTrackingRecord(rec);
         paintTrackingList();
       } else if (act === 'folder') {
-        const next = prompt(
-          '手动分类名（用于列表分组；留空=放回「未分类」）',
-          rec.custom_folder || ''
-        );
-        if (next == null) return;
-        rec.custom_folder = compactText(next);
-        await saveTrackingRecord(rec);
-        // 分类变更后重刷整页，更新筛选下拉里的分类名
-        await renderTrackingPage();
+        await openTrackingFolderDialog(rec, { reason: 'edit' });
       } else if (act === 'del') {
         if (!confirm('删除追更「' + getTrackingDisplayTitle(rec) + '」？')) return;
         await deleteTrackingRecord(id);
@@ -14225,6 +14508,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       '  <div class="jlc-wb-toolbar-row" id="exc-work-chips"></div>' +
       '  <div class="jlc-wb-toolbar-row jlc-wb-toolbar-note">在库=同步后的 LRR 档案；有更好版/抛弃依赖已浏览作品。搜索收藏请用「追更」。</div>' +
       '</div>' +
+      '<div id="exc-current-work" hidden></div>' +
       '<div class="jlc-wb-list-scroll" id="jlc-wb-works-scroll"></div>';
 
     const chips = [
@@ -14259,6 +14543,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const host = document.getElementById('jlc-wb-works-scroll');
     if (!host) return;
     const storageSnapshot = await loadLibraryStorageSnapshot();
+    await renderCurrentGalleryWork(
+      document.getElementById('exc-current-work'),
+      storageSnapshot
+    );
 
     // LRR 在库：直接列档案（同步后即有），不依赖是否点过画廊
     if (tab === 'lrr') {
@@ -14322,6 +14610,97 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     };
   }
 
+  async function renderCurrentGalleryWork(host, storageSnapshot) {
+    if (!host) return null;
+    let galleryTarget = null;
+    try {
+      galleryTarget = parseGalleryUrl(location.href);
+    } catch (_) { /* ignore */ }
+    if (!galleryTarget || !galleryTarget.gid) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return null;
+    }
+
+    const snapshot = indexListStorageSnapshot(storageSnapshot || {});
+    let edition = snapshot.editionsByGid.get(String(galleryTarget.gid)) || null;
+    if (!edition && typeof parseGalleryPage === 'function') {
+      try {
+        edition = parseGalleryPage();
+      } catch (_) { /* ignore */ }
+    }
+    if (!edition) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return null;
+    }
+
+    const work = edition.work_id ? snapshot.worksById.get(edition.work_id) || null : null;
+    let lib = null;
+    try {
+      lib = await resolveLibraryState(edition, snapshot);
+    } catch (_) { /* ignore */ }
+    const title = compactText(
+      (work && work.title_raw) || edition.title_raw || edition.title_core || '当前作品'
+    );
+    const statusBits = [];
+    if (work && work.blocked) statusBits.push('已抛弃');
+    if (lib) {
+      if (lib.same_version_confirmed) statusBits.push('已确认同源');
+      else if (lib.edition_in_library) statusBits.push('本版在库');
+      else if (lib.work_in_library) statusBits.push('库内有版本');
+      else if (lib.maybe_in_library) statusBits.push(maybeLibLabel(lib));
+      else statusBits.push('未在库');
+      if (lib.has_better_remote) statusBits.push('有更好版');
+    }
+    if (!statusBits.length) statusBits.push('未设置作品状态');
+
+    const cover = compactText(edition.thumb || '');
+    const mono = title.charAt(0) || '本';
+    const topArchive =
+      lib &&
+      ((lib.exact_archives && lib.exact_archives[0]) ||
+        (lib.work_archives && lib.work_archives[0]));
+    const lrrUrl = topArchive ? buildLrrReaderUrl(topArchive.arcid) : '';
+    host.hidden = false;
+    host.innerHTML =
+      '<div class="exc-current-work-label">当前详情作品</div>' +
+      '<div class="jlc-wb-item is-current"' +
+      (edition.work_id ? ' data-work="' + escapeHtml(edition.work_id) + '"' : '') +
+      '>' +
+      '<div class="jlc-wb-item-row">' +
+      '<div class="jlc-wb-cover is-poster" data-group="tag">' +
+      (cover
+        ? '<img src="' + escapeHtml(cover) + '" alt="" loading="lazy">'
+        : '<span class="jlc-wb-cover-fallback">' + escapeHtml(mono) + '</span>') +
+      '</div>' +
+      '<div class="jlc-wb-item-body">' +
+      '<div class="jlc-wb-item-title"><span class="exc-ed-cur-tag">当前</span> ' +
+      escapeHtml(title) +
+      '</div>' +
+      '<div class="jlc-wb-item-meta"><div class="jlc-wb-item-meta-line">' +
+      escapeHtml(statusBits.join(' · ')) +
+      '</div></div>' +
+      '<div class="jlc-wb-item-actions">' +
+      '<button type="button" class="jlc-wb-btn primary" data-current-wact="best">最佳版</button>' +
+      '<button type="button" class="jlc-wb-btn ghost" data-current-wact="bind">绑定 LRR</button>' +
+      (lrrUrl
+        ? '<a class="jlc-wb-btn ghost" href="' +
+          escapeHtml(lrrUrl) +
+          '" target="_blank" rel="noopener">开 LRR</a>'
+        : '') +
+      '</div></div></div></div>';
+
+    host.onclick = async (event) => {
+      const button = event.target.closest('[data-current-wact]');
+      if (!button) return;
+      const action = button.getAttribute('data-current-wact');
+      if (action === 'best' && edition.work_id) await openBestEdition(edition.work_id);
+      else if (action === 'bind') await openBindModal(edition);
+    };
+    return { edition, work, lib };
+  }
+
   async function paintLrrLibraryList(host, storageSnapshot) {
     const entries = typeof listLibraryArchiveEntries === 'function'
       ? await listLibraryArchiveEntries(storageSnapshot)
@@ -14344,7 +14723,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
 
     const limit = 200;
-    // 当前画廊页：对应档案置顶 + 高亮
+    // 当前画廊由上方固定摘要承载；列表里省略同一档案，避免重复。
     let pageGid = '';
     try {
       if (typeof parseGalleryUrl === 'function') {
@@ -14363,10 +14742,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       }
       return false;
     };
-    const ranked = entries.slice().sort((x, y) => {
-      const cx = isEntCurrent(x) ? 1 : 0;
-      const cy = isEntCurrent(y) ? 1 : 0;
-      if (cy !== cx) return cy - cx;
+    const ranked = entries.filter((entry) => !isEntCurrent(entry)).sort((x, y) => {
       const tx = String((x.archive && x.archive.title) || '').toLowerCase();
       const ty = String((y.archive && y.archive.title) || '').toLowerCase();
       return tx < ty ? -1 : tx > ty ? 1 : 0;
@@ -14379,7 +14755,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           total +
           ' 本，先显示前 ' +
           limit +
-          ' 本（当前页相关置顶，其余按标题）。</div>'
+          ' 本（当前作品固定在上方，档案按标题排列）。</div>'
       );
     }
     for (const ent of shown) {
@@ -14396,9 +14772,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       } else if (ent.source && ent.source.gid && ent.source.token) {
         galleryUrl = buildGalleryUrl(location.origin, ent.source.gid, ent.source.token);
       }
-      const onPage = isEntCurrent(ent);
       const metaBits = [];
-      if (onPage) metaBits.push('当前页');
       if (a.pages) metaBits.push(a.pages + 'p');
       if (a.eh_gid) metaBits.push('gid ' + a.eh_gid);
       if (ent.link) metaBits.push(ent.link.same_version ? '已确认同源' : '已绑定');
@@ -14422,9 +14796,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           : '');
 
       chunks.push(
-        '<div class="jlc-wb-item' +
-          (onPage ? ' is-current is-lrr-page' : '') +
-          '" data-arcid="' +
+        '<div class="jlc-wb-item" data-arcid="' +
           escapeHtml(a.arcid) +
           '"' +
           (ent.work && ent.work.work_id ? ' data-work="' + escapeHtml(ent.work.work_id) + '"' : '') +
@@ -14438,7 +14810,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           '</span></div>' +
           '<div class="jlc-wb-item-body">' +
           '<div class="jlc-wb-item-title">' +
-          (onPage ? '<span class="exc-ed-cur-tag">当前</span> ' : '') +
           escapeHtml(title) +
           '</div>' +
           (metaBits.length

@@ -7,6 +7,10 @@
   let hoverPreviewGen = 0;
   let hoverPreviewScrollBound = false;
 
+  function invalidateHoverPreview() {
+    hoverPreviewGen++;
+  }
+
   function ensureHoverPreviewPanel() {
     let panel = document.getElementById('exc-hover-preview');
     if (panel) return panel;
@@ -40,6 +44,7 @@
   }
 
   function hideHoverPreview() {
+    invalidateHoverPreview();
     if (hoverPreviewHideTimer) {
       clearTimeout(hoverPreviewHideTimer);
       hoverPreviewHideTimer = null;
@@ -259,6 +264,7 @@
       localGen++;
       const to = ev.relatedTarget;
       if (to && to.closest && to.closest('#exc-hover-preview')) return;
+      invalidateHoverPreview();
       scheduleHideHoverPreview(140);
     });
   }

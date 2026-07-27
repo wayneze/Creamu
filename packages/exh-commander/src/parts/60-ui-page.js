@@ -1815,7 +1815,14 @@
     if (!bar.parentNode) document.body.appendChild(bar);
   }
 
-  function injectTrackingBar() {
+  function refreshTrackingBarFrom(preloaded) {
+    const pending = preloaded
+      ? Promise.resolve(preloaded).then((state) => refreshTrackingBarState(state))
+      : refreshTrackingBarState();
+    void pending.catch(() => {});
+  }
+
+  function injectTrackingBar(preloaded) {
     const ctx = parseExhPageContext(location.href);
     let bar = document.getElementById('exc-tracking-bar');
     if (!ctx || !ctx.trackable) {
@@ -1830,6 +1837,7 @@
     // 同一 signature 不重建 DOM，只校正挂载位置。
     if (bar.dataset.sig === ctx.query_signature && bar.dataset.ready === '1') {
       mountTrackingBar(bar);
+      refreshTrackingBarFrom(preloaded);
       return;
     }
 
@@ -1889,7 +1897,7 @@
         if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
       };
     }
-    void refreshTrackingBarState();
+    refreshTrackingBarFrom(preloaded);
   }
 
   async function refreshTrackingBarState(preloaded) {
@@ -1903,6 +1911,7 @@
     const untrack = document.getElementById('exc-untrack');
     const meta = document.getElementById('exc-track-meta');
     if (!ctx || !ctx.trackable || !bar || !btn) return;
+    if (bar.dataset.sig && ctx.query_signature && bar.dataset.sig !== ctx.query_signature) return;
 
     const rec = preloaded && preloaded.resolved
       ? preloaded.record || null
@@ -2361,7 +2370,9 @@
     opts = opts || {};
     const partial = parseGalleryPage();
     if (!partial) return null;
-    const edition = await upsertEdition(partial);
+    const prepared = await upsertEditionsWithSnapshot([partial]);
+    const edition = prepared.editions[0];
+    if (!edition) return null;
     try {
       markGallerySeen(edition.gid);
     } catch (_) { /* ignore */ }
@@ -2371,10 +2382,7 @@
     } catch (e) {
       console.warn('[ExC] auto bp', e);
     }
-    const [storageSnapshot, prog] = await Promise.all([
-      loadLibraryStorageSnapshot(),
-      getProgress(edition.work_id),
-    ]);
+    const storageSnapshot = prepared.snapshot;
     const work = storageSnapshot.worksById.get(edition.work_id) || null;
     const lib = await resolveLibraryState(edition, storageSnapshot);
     let siblings = storageSnapshot.editionsByWork.get(edition.work_id) || [];

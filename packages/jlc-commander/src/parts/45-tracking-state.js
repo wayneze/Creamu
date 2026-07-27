@@ -765,8 +765,10 @@
         return record;
     }
 
-    async function getTrackingSearches() {
-        const list = await getAllFromStore(TRACKING_STORE);
+    async function getTrackingSearches(preloadedRows) {
+        const list = Array.isArray(preloadedRows)
+            ? preloadedRows
+            : await getAllFromStore(TRACKING_STORE);
         return (Array.isArray(list) ? list : [])
             .filter(Boolean)
             .map(record => normalizeTrackingRuntimeRecord(record))
@@ -777,12 +779,13 @@
             });
     }
 
-    async function getTrackingRecordBySignature(signature, openUrl = '') {
-        const list = await getTrackingSearches();
+    async function getTrackingRecordBySignature(signature, openUrl = '', preloadedRows) {
+        const list = await getTrackingSearches(preloadedRows);
         const canonical = buildTrackingCanonicalUrl(openUrl || '');
-        return list.find(record => record.query_signature === signature)
+        const record = list.find(item => item.query_signature === signature)
             || list.find(record => buildTrackingCanonicalUrl(record.open_url || '') === canonical)
             || null;
+        return record ? { ...record } : null;
     }
 
     async function saveTrackingRecord(record) {
@@ -794,7 +797,11 @@
 
     async function createOrUpdateTrackingFromContext(context = getCurrentTrackingPageContext(), options = {}) {
         if (!context) return null;
-        const existing = await getTrackingRecordBySignature(context.query_signature, context.open_url);
+        const existing = await getTrackingRecordBySignature(
+            context.query_signature,
+            context.open_url,
+            options.trackingRecords
+        );
         if (!existing && options.createIfMissing === false) return null;
         const now = new Date().toISOString();
         const firstItem = context.firstItem || getFirstTrackingPageItemInfo(document);

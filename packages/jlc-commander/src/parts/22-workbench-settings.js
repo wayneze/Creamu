@@ -15,9 +15,9 @@
             const step = item.step != null ? item.step : 1;
             return ''
                 + '<div class="legacy-row">'
-                + '  <div style="display:flex;justify-content:space-between;margin-bottom:6px;align-items:center;"><span>' + escapeHtml(item.label) + '</span><b style="color:#d4883a" data-jlc-wb-range-value="' + escapeHtml(item.key) + '">' + value + '</b></div>'
+                + '  <div class="jlc-wb-range-head"><span>' + escapeHtml(item.label) + '</span><b class="jlc-wb-range-value" data-jlc-wb-range-value="' + escapeHtml(item.key) + '">' + value + '</b></div>'
                 + '  <div class="legacy-range"><input type="range" data-jlc-wb-range="' + escapeHtml(item.key) + '" min="' + item.min + '" max="' + item.max + '" step="' + step + '" value="' + value + '"></div>'
-                + (item.key === 'uiBtnScale' ? '<div class="legacy-note" style="margin-top:6px;">只缩放工作台按钮与悬浮球，列表封面/文字不变。笔记本可试 80–90。</div>' : '')
+                + (item.key === 'uiBtnScale' ? '<div class="legacy-note">只缩放工作台按钮与悬浮球，列表封面/文字不变。笔记本可试 80–90。</div>' : '')
                 + '</div>';
         };
 
@@ -29,18 +29,18 @@
                 + '  <span>' + escapeHtml(item.label) + '</span>'
                 + '  <input type="checkbox" data-jlc-wb-toggle="' + escapeHtml(item.key) + '"' + (Status.get(item.key) ? ' checked' : '') + (item.disabled ? ' disabled' : '') + '>'
                 + '</div>').join('')
-            + '<h3 style="margin-top:16px">布局</h3>'
+            + '<h3 class="jlc-wb-section-title">布局</h3>'
             + layoutRanges.map(renderRangeRow).join('')
-            + '<h3 style="margin-top:16px">工作台</h3>'
+            + '<h3 class="jlc-wb-section-title">工作台</h3>'
             + uiRanges.map(renderRangeRow).join('')
-            + '<div class="legacy-row" style="margin-top:4px;">'
-            + '  <div style="margin-bottom:6px;">默认打开方式</div>'
-            + '  <select id="jlc-wb-view-open-mode" class="jlc-wb-select" style="width:100%;">'
+            + '<div class="legacy-row">'
+            + '  <div class="jlc-wb-note-summary">默认打开方式</div>'
+            + '  <select id="jlc-wb-view-open-mode" class="jlc-wb-select">'
             + '    <option value="tab"' + (openMode === 'tab' ? ' selected' : '') + '>新标签打开</option>'
             + '    <option value="same"' + (openMode === 'same' ? ' selected' : '') + '>本页打开</option>'
             + '  </select>'
             + '</div>'
-            + '<button type="button" class="jlc-wb-btn ghost" data-jlc-wb-action="downloadPanel" style="width:100%;margin-top:8px;">批量下载封面</button>';
+            + '<button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" data-jlc-wb-action="downloadPanel">批量下载封面</button>';
 
         container.querySelectorAll('[data-jlc-wb-toggle]').forEach(input => {
             input.addEventListener('change', () => {

@@ -147,6 +147,9 @@ function getCreamuWorkbenchCss(options = {}) {
             display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
         }
         #jlc-wb .jlc-wb-footer-summary { font-size: 12.5px; color: var(--creamu-wb-text-muted); line-height: 1.45; max-width: 52%; }
+        #jlc-wb .jlc-wb-footer-actions {
+            display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        }
 
         #jlc-wb .jlc-wb-toolbar {
             flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px;
@@ -154,6 +157,9 @@ function getCreamuWorkbenchCss(options = {}) {
             position: static;
         }
         #jlc-wb .jlc-wb-toolbar-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        #jlc-wb .jlc-wb-toolbar-note {
+            color: var(--creamu-wb-text-muted); font-size: 12.5px; line-height: 1.45;
+        }
         #jlc-wb .jlc-wb-list-scroll {
             flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto;
             /* 底边留白：少条目时「更多」菜单向下仍有空间；仍不够时 JS 会 is-up 上翻 */
@@ -401,6 +407,24 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .legacy-note,
         #jlc-wb .jlc-wb-settings .legacy-note { font-size: 13px; color: var(--creamu-wb-text-muted); line-height: 1.55; margin-top: 8px; }
+        #jlc-wb .legacy-note.jlc-wb-intro-note,
+        #jlc-wb .jlc-wb-settings .legacy-note.jlc-wb-intro-note { margin: 0 0 10px; }
+        #jlc-wb .jlc-wb-status-note { margin: 4px 0 0; }
+        #jlc-wb .jlc-wb-scroll-note { max-height: 140px; overflow: auto; }
+        #jlc-wb .jlc-wb-note-summary { margin-bottom: 4px; }
+        #jlc-wb .jlc-wb-title-link { color: inherit; text-decoration: none; }
+        #jlc-wb .jlc-wb-inline-form { display: flex; gap: 6px; align-items: stretch; }
+        #jlc-wb .jlc-wb-inline-form input {
+            flex: 1 1 auto; min-width: 0; width: auto; margin-top: 0;
+        }
+        #jlc-wb #jlc-wb-library-root .jlc-wb-inline-form input[type="text"] {
+            flex: 1 1 auto; min-width: 0; width: auto; margin-top: 0;
+        }
+        #jlc-wb .jlc-wb-list-stack { margin-top: 10px; }
+        #jlc-wb .jlc-wb-range-head {
+            display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px;
+        }
+        #jlc-wb .jlc-wb-range-value { color: var(--creamu-wb-accent); }
         #jlc-wb .jlc-wb-view-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
         #jlc-wb .jlc-wb-view-actions .jlc-wb-btn { width: 100%; justify-content: center; }
 
@@ -434,6 +458,27 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-settings-section.is-active { display: block; }
         #jlc-wb .jlc-wb-settings h3 {
             margin: 0 0 12px; font-size: 13px; color: var(--creamu-wb-accent); letter-spacing: 1px; text-transform: uppercase;
+        }
+        #jlc-wb .jlc-wb-settings h3.jlc-wb-section-title { margin-top: 16px; }
+        #jlc-wb .jlc-wb-form-actions {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+        }
+        #jlc-wb .jlc-wb-form-actions > .jlc-wb-btn {
+            flex: 1 1 120px; min-width: 0; justify-content: center;
+        }
+        #jlc-wb .jlc-wb-field-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-top: 6px;
+        }
+        #jlc-wb .jlc-wb-field-grid > * { min-width: 0; }
+        #jlc-wb .jlc-wb-block-action,
+        #jlc-wb .jlc-wb-save-action {
+            width: 100%; justify-content: center;
+        }
+        #jlc-wb .jlc-wb-block-action { margin-top: 8px; }
+        #jlc-wb .jlc-wb-save-action { margin-top: 14px; }
+        #jlc-wb .jlc-wb-settings .legacy-note.jlc-wb-data-report {
+            margin-top: 10px; white-space: pre-wrap; word-break: break-word;
+            max-height: 220px; overflow: auto; font-size: 12px; line-height: 1.45;
         }
         #jlc-wb .jlc-wb-settings label,
         #jlc-wb #jlc-wb-library-root label,
@@ -530,6 +575,7 @@ function getCreamuWorkbenchCss(options = {}) {
             flex: 0 0 auto; border-top: 1px solid var(--creamu-wb-divider); padding: 12px 14px; background: var(--creamu-wb-surface-soft);
             display: flex; flex-direction: column; gap: 8px;
         }
+        #jlc-wb .jlc-wb-settings-footer .jlc-wb-btn { width: 100%; justify-content: center; }
 
         #jlc-wb .jlc-wb-settings input[type="number"] {
             -moz-appearance: textfield;

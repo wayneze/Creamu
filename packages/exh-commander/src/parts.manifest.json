@@ -9,6 +9,10 @@
     "60-ui-page.js",
     "65-list-runtime.js",
     "70-workbench.js",
+    "71-workbench-tracking.js",
+    "72-workbench-works.js",
+    "73-workbench-settings.js",
+    "74-workbench-runtime.js",
     "80-boot.js"
   ],
   "injectAfter": {

@@ -13,6 +13,28 @@
     }
   }
 
+  async function resolveListTrackingState(pageContext, preloaded) {
+    if (preloaded) {
+      try {
+        const state = await preloaded;
+        if (
+          state &&
+          state.resolved === true &&
+          state.context &&
+          state.context.query_signature === (pageContext && pageContext.query_signature)
+        ) {
+          return state;
+        }
+      } catch (_) { /* retry below */ }
+    }
+    return {
+      context: pageContext,
+      record: await loadListTrackingRecord(pageContext),
+      records: null,
+      resolved: true,
+    };
+  }
+
   function getCurrentListRuntimeItems() {
     return queryListItems()
       .map((el) => listItemRuntimeState.get(el))
@@ -22,6 +44,8 @@
   async function enhanceListPageNow(options) {
     const opts = options || {};
     bindListLiveRefresh();
+    const pageContext = parseExhPageContext(location.href);
+    const trackingStatePromise = resolveListTrackingState(pageContext, opts.trackingState);
     const allItems = Array.from(opts.items || queryListItems()).filter(
       (el) => el && el.isConnected !== false
     );
@@ -33,21 +57,21 @@
     }
 
     if (!entries.length) {
-      if (!document.getElementById('exc-tracking-bar')) injectTrackingBar();
+      injectTrackingBar(trackingStatePromise);
       if (opts.reapplyFold) applyWorkFold(getCurrentListRuntimeItems());
       return 0;
     }
 
-    injectTrackingBar();
+    injectTrackingBar(trackingStatePromise);
     let prepared = null;
     try {
-      prepared = await upsertListEditions(entries.map((entry) => entry.partial));
+      prepared = await upsertEditionsWithSnapshot(entries.map((entry) => entry.partial));
     } catch (error) {
       console.warn('[ExC] batch list storage', error);
     }
 
-    const pageContext = parseExhPageContext(location.href);
-    const trackingRecord = await loadListTrackingRecord(pageContext);
+    const trackingState = await trackingStatePromise;
+    const trackingRecord = trackingState.record || null;
     const seenGids = loadSeenGids();
     const enhanced = [];
 

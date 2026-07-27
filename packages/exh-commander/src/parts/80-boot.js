@@ -24,8 +24,9 @@
       showDiagnosticBanner(issue);
     }
 
+    let trackingState = null;
     try {
-      createWorkbench();
+      trackingState = createWorkbench();
       logPhase('workbench-shell');
     } catch (e) {
       console.warn('[ExC] workbench shell', e);
@@ -46,7 +47,7 @@
       } else if (kind === 'image') {
         await enhanceImagePage();
       } else {
-        await enhanceListPage();
+        await enhanceListPage({ trackingState });
         observeListMutations();
       }
       logPhase('page-enhance');

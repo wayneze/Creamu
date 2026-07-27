@@ -1,15 +1,35 @@
 // @@creamu-part:15-meta-fetch
+    function getMetaCodeCandidates(value) {
+        const raw = String(value || '').trim().toUpperCase();
+        const candidates = new Set();
+        const push = candidate => {
+            const normalized = normalizeCode(candidate);
+            if (normalized) candidates.add(normalized);
+        };
+        push(raw);
+        push(raw.replace(
+            /^(?:CARIB(?:BEAN)?(?:COM)?(?:PR)?|10MU(?:SUME)?|PACO(?:PACO)?(?:MAMA)?|MURA(?:MURA)?)[\s_-]*/i,
+            ''
+        ));
+        const fc2 = raw.match(/^FC2(?:[\s_-]*PPV)?[\s_-]*(\d{3,})/i);
+        if (fc2) push(`FC2-${fc2[1]}`);
+        return candidates;
+    }
+
     function pickMetaSearchHit(results, avid) {
         const list = (Array.isArray(results) ? results : []).map(normalizeMetaRecord);
-        const target = normalizeCode(avid);
-        return list.find(x => normalizeCode(x?.number) === target)
-            || list.find(x => normalizeCode(x?.id) === target)
-            || list.find(x => normalizeCode(x?.code) === target)
-            || list[0]
+        const targets = getMetaCodeCandidates(avid);
+        const matches = value => {
+            const normalized = normalizeCode(value);
+            return !!normalized && targets.has(normalized);
+        };
+        return list.find(x => matches(x?.number))
+            || list.find(x => matches(x?.id))
+            || list.find(x => matches(x?.code))
             || null;
     }
 
-    const META_REQUEST_TIMEOUT = 8000;
+    const META_REQUEST_TIMEOUT = 3000;
     const META_FETCH_BUDGET_MS = 8000;
     const META_MISS_TTL_MS = 60000;
     const metaMissCache = new Map();
@@ -27,9 +47,9 @@
         };
 
         if (/^FC2(?:-|_)?PPV/.test(code) || /^FC2(?:-|_)?\d+/.test(code) || /^FC2PPV/.test(code)) {
-            push('FC2PPVDB');
-            push('fc2hub');
             push('FC2');
+            push('fc2hub');
+            push('FC2PPVDB');
             push('JAV321');
             return providers;
         }

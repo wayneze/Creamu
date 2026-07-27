@@ -697,7 +697,7 @@
         }, force ? 40 : 180);
     }
 
-    async function syncTrackingPageState(force = false) {
+    async function syncTrackingPageState(force = false, options = {}) {
         const context = getCurrentTrackingPageContext();
         const previousSignature = trackingPageState.signature;
         const previousPageUrl = trackingPageState.context?.pageUrl || '';
@@ -720,7 +720,8 @@
             createIfMissing: false,
             touchBrowse: shouldTouchBrowse,
             checkTop: true,
-            updateCheck: shouldCheck
+            updateCheck: shouldCheck,
+            trackingRecords: options.trackingRecords
         });
         if (shouldTouchBrowse) trackingPageTouchSignature = context.query_signature;
         trackingPageState.record = record;

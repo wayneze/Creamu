@@ -77,12 +77,16 @@
             padding: 0; overflow: visible; flex: none; min-height: 0;
         }
         #jlc-wb #jlc-wb-config-diag {
-            background: var(--creamu-wb-surface) !important; border: 1px solid #efe0cc !important;
-            color: var(--creamu-wb-text-strong) !important;
+            margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; line-height: 1.6;
+            background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
+            color: var(--creamu-wb-text-strong);
         }
         #jlc-wb #jlc-wb-config-hint {
-            background: #fff7ea !important; border-color: #f0d7a0 !important; color: #9a6700 !important;
+            margin: 0; padding: 10px 12px; line-height: 1.5;
+            background: #fff7ea; border-bottom: 1px solid #f0d7a0; color: #9a6700;
         }
+        #jlc-wb .jlc-wb-tracking-alert { color: #9a6700; font-size: 12px; }
+        #jlc-wb .jlc-wb-virtual-note { color: #4f769c; font-size: 11px; }
         #jlc-tracking-pagebar.jlc-wb-pagebar {
             background: rgba(255,253,248,.97); border: 1px solid var(--creamu-wb-border);
             color: var(--creamu-wb-text); box-shadow: 0 10px 24px rgba(90,60,30,.12);
@@ -311,7 +315,8 @@
 
     async function refreshWorkbenchFabBadge() {
         try {
-            const list = (await getTrackingSearches()).filter(record => !record.archived);
+            const list = (await getWorkbenchTrackingRecordsState()).records
+                .filter(record => !record.archived);
             const updateCount = list.filter(record => {
                 const top = normalizeCode(record.top_avid || '');
                 const seen = normalizeCode(record.last_seen_avid || '');

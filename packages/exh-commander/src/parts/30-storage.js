@@ -522,7 +522,7 @@
     }
   }
 
-  async function upsertListEditions(partials) {
+  async function upsertEditionsWithSnapshot(partials) {
     const input = Array.from(partials || []);
     if (!input.length) {
       return { editions: [], snapshot: indexListStorageSnapshot({ works: [], editions: [], archives: [], links: [] }) };
@@ -1366,8 +1366,10 @@
     return Array.from(all || []).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
   }
 
-  async function listTrackingSearches() {
-    const all = await idbGetAll(STORE_TRACKING);
+  async function listTrackingSearches(preloadedRows) {
+    const all = Array.isArray(preloadedRows)
+      ? preloadedRows
+      : await idbGetAll(STORE_TRACKING);
     const live = (all || []).filter((r) => !r.archived);
     // 同 site + 同搜索词的历史重复项：列表时合并（保留有断点/较新的）
     const byKey = new Map();
@@ -1419,6 +1421,31 @@
     return (rows || []).find((r) => !r.archived) || null;
   }
 
+  async function loadTrackingRowsForContext(sig) {
+    const d = await openDb();
+    const tx = d.transaction(STORE_TRACKING, 'readonly');
+    const store = tx.objectStore(STORE_TRACKING);
+    return new Promise((resolve, reject) => {
+      let result = null;
+      tx.oncomplete = () => resolve(result || { exact: null, rows: [] });
+      tx.onerror = () => reject(tx.error || new Error('tracking lookup failed'));
+      tx.onabort = () => reject(tx.error || new Error('tracking lookup aborted'));
+
+      const exactRequest = store.index('query_signature').getAll(sig);
+      exactRequest.onsuccess = () => {
+        const exact = (exactRequest.result || []).find((record) => !record.archived) || null;
+        if (exact) {
+          result = { exact, rows: null };
+          return;
+        }
+        const allRequest = store.getAll();
+        allRequest.onsuccess = () => {
+          result = { exact: null, rows: allRequest.result || [] };
+        };
+      };
+    });
+  }
+
   function trackingFSearchKey(s) {
     if (typeof normalizeTrackingFSearch === 'function') return normalizeTrackingFSearch(s);
     return compactText(s)
@@ -1431,14 +1458,25 @@
    * 按上下文找追更：先精确签名，再按 site+f_search 软匹配（吞掉旧版噪声签名重复）。
    * 若命中多条重复，合并进一条并删其余。
    */
-  async function findTrackingForContext(context) {
+  async function findTrackingForContext(context, preloadedRecords) {
     if (!context) return null;
     const sig = context.query_signature || '';
+    const hasPreloadedRecords = Array.isArray(preloadedRecords);
+    let all = hasPreloadedRecords ? preloadedRecords : null;
     if (sig) {
-      const exact = await getTrackingBySignature(sig);
+      let exact = null;
+      if (hasPreloadedRecords) {
+        exact = preloadedRecords.find(
+          (record) => record && !record.archived && record.query_signature === sig
+        ) || null;
+      } else {
+        const loaded = await loadTrackingRowsForContext(sig);
+        exact = loaded.exact;
+        if (!exact) all = await listTrackingSearches(loaded.rows);
+      }
       if (exact) return exact;
     }
-    const all = await listTrackingSearches();
+    if (!all) all = await listTrackingSearches();
     if (!all.length) return null;
     const site = context.site || '';
     const fs = trackingFSearchKey(context.f_search || '');

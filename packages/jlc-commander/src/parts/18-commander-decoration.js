@@ -2,6 +2,10 @@
     const META_FETCH_CONCURRENCY = 8;
     const META_FETCH_RETRY_LIMIT = 1;
     const META_FETCH_RETRY_DELAY = 900;
+    const META_CACHE_WRITE_DELAY = 200;
+    const META_CACHE_WRITE_BATCH_SIZE = 24;
+    const META_CACHE_WRITE_RETRY_DELAY = 1000;
+    const META_CACHE_WRITE_RETRY_LIMIT = 3;
     const META_IMMEDIATE_MARGIN_PX = 1200;
     const META_PREFETCH_MARGIN_PX = 1200;
     const META_IMMEDIATE_SWEEP_DELAY = 32;
@@ -22,9 +26,69 @@
     let metaDeferredSweepTimer = null;
     let metaDeferredSweepDueAt = 0;
     let metaSweepEventsBound = false;
+    const metaCacheWriteBuffer = new Map();
+    let metaCacheWriteTimer = null;
+    let metaCacheWriteActive = null;
+    let metaCacheWriteRetryCount = 0;
     let rescanTimer = null;
     let rescanBudget = 0;
     const COMMANDER_RESCAN_INTERVAL = 700;
+
+    function scheduleMetaCacheWriteFlush(delay = META_CACHE_WRITE_DELAY) {
+        if (metaCacheWriteActive || metaCacheWriteTimer || !metaCacheWriteBuffer.size) return;
+        metaCacheWriteTimer = window.setTimeout(() => {
+            metaCacheWriteTimer = null;
+            void flushMetaCacheWrites();
+        }, Math.max(0, Number(delay) || 0));
+    }
+
+    function flushMetaCacheWrites() {
+        if (metaCacheWriteTimer) {
+            window.clearTimeout(metaCacheWriteTimer);
+            metaCacheWriteTimer = null;
+        }
+        if (metaCacheWriteActive) return metaCacheWriteActive;
+        if (!metaCacheWriteBuffer.size) return Promise.resolve();
+
+        const entries = Array.from(metaCacheWriteBuffer.entries());
+        let writeSucceeded = false;
+        metaCacheWriteActive = Promise.resolve(
+            setManyVals('meta_cache', entries.map(([, value]) => value))
+        ).then(written => {
+            writeSucceeded = written === true;
+            if (!writeSucceeded) return false;
+            entries.forEach(([avid, value]) => {
+                if (metaCacheWriteBuffer.get(avid) === value) metaCacheWriteBuffer.delete(avid);
+            });
+            metaCacheWriteRetryCount = 0;
+            return true;
+        }).catch(error => {
+            console.warn('[Commander] 元数据缓存写入失败', error);
+            return false;
+        }).finally(() => {
+            if (!writeSucceeded) metaCacheWriteRetryCount += 1;
+            metaCacheWriteActive = null;
+            if (!metaCacheWriteBuffer.size || !db) return;
+            if (writeSucceeded) {
+                scheduleMetaCacheWriteFlush();
+            } else if (metaCacheWriteRetryCount <= META_CACHE_WRITE_RETRY_LIMIT) {
+                scheduleMetaCacheWriteFlush(META_CACHE_WRITE_RETRY_DELAY * metaCacheWriteRetryCount);
+            }
+        });
+        return metaCacheWriteActive;
+    }
+
+    function queueMetaCacheWrite(record) {
+        const avid = normalizeCode(record?.avid || '');
+        if (!avid) return;
+        metaCacheWriteBuffer.set(avid, { ...record, avid });
+        if (!metaCacheWriteActive) metaCacheWriteRetryCount = 0;
+        if (metaCacheWriteBuffer.size >= META_CACHE_WRITE_BATCH_SIZE) {
+            void flushMetaCacheWrites();
+        } else {
+            scheduleMetaCacheWriteFlush();
+        }
+    }
 
     function isPlaceholderCover(src, title = '') {
         const sample = `${String(src || '')} ${String(title || '')}`.toLowerCase();
@@ -146,7 +210,13 @@
             }
             if (!force && processed >= META_DEFERRED_BATCH_SIZE) break;
             clearDeferredMetaItem(item);
-            requestMetaEnrichment(item, pending.avid, pending.title, isItemImmediateViewport(item));
+            requestMetaEnrichment(
+                item,
+                pending.avid,
+                pending.title,
+                isItemImmediateViewport(item),
+                pending.cachedMeta
+            );
             processed += 1;
         }
         if (!force && processed >= META_DEFERRED_BATCH_SIZE && metaDeferredItems.size) {
@@ -194,14 +264,16 @@
         window.addEventListener('scroll', trigger, { passive: true });
         window.addEventListener('resize', trigger, { passive: true });
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) scheduleDeferredMetaSweep(60);
+            if (document.hidden) void flushMetaCacheWrites();
+            else scheduleDeferredMetaSweep(60);
         });
+        window.addEventListener('pagehide', () => void flushMetaCacheWrites());
     }
 
-    function scheduleMetaEnrichment(item, avid, title) {
+    function scheduleMetaEnrichment(item, avid, title, cachedMeta) {
         if (!item || !item.isConnected || !config.metatube_url) return;
         item.dataset.jlcMetaState = 'deferred';
-        item._jlcMetaPending = { avid, title };
+        item._jlcMetaPending = { avid, title, cachedMeta };
         metaDeferredItems.add(item);
         ensureMetaViewportObserver();
         bindMetaSweepEvents();
@@ -256,11 +328,14 @@
             metaQueuedTasks.delete(task.key);
             metaFetchActiveCount += 1;
             Promise.resolve().then(async () => {
-                const cached = normalizeMetaRecord(await getVal('meta_cache', task.avid));
+                const queued = normalizeMetaRecord(metaCacheWriteBuffer.get(normalizeCode(task.avid)));
+                const cached = queued || (task.cachedMeta === undefined
+                    ? normalizeMetaRecord(await getVal('meta_cache', task.avid))
+                    : normalizeMetaRecord(task.cachedMeta));
                 if (cached?.genres?.length) return cached;
                 const fresh = normalizeMetaRecord(await fetchMeta(task.avid, cached, task.base));
                 if (fresh) {
-                    await setVal('meta_cache', { avid: task.avid, ...fresh });
+                    queueMetaCacheWrite({ avid: task.avid, ...fresh });
                     return fresh;
                 }
                 return cached;
@@ -279,7 +354,7 @@
         return !!(meta && (meta.genres?.length || meta.actors?.length || meta.releaseDate));
     }
 
-    function queueMetaFetch(avid, prioritize = false) {
+    function queueMetaFetch(avid, prioritize = false, cachedMeta) {
         const base = normalizeMetaBase(config.metatube_url);
         const key = getMetaFetchKey(avid, base);
         if (!key) return Promise.resolve(null);
@@ -289,7 +364,7 @@
         }
         if (hasRecentMetaMiss(key)) return Promise.resolve(null);
         const promise = new Promise(resolve => {
-            const task = { key, base, avid, resolve, prioritized: !!prioritize };
+            const task = { key, base, avid, cachedMeta, resolve, prioritized: !!prioritize };
             enqueueStablePriority(metaFetchQueue, task, prioritize, entry => entry.prioritized);
             metaQueuedTasks.set(key, task);
             pumpMetaFetchQueue();
@@ -569,7 +644,7 @@
         renderDetailCommanderBadges(context, buildCommanderDecorationModel(context.title, cachedMeta));
         if (!config.metatube_url) return cachedMeta;
         if (cachedMeta?.genres?.length) return cachedMeta;
-        const freshMeta = normalizeMetaRecord(await queueMetaFetch(context.avid, prioritize));
+        const freshMeta = normalizeMetaRecord(await queueMetaFetch(context.avid, prioritize, cachedMeta));
         const latestContext = getCurrentDetailContext();
         if (!freshMeta || normalizeResourceAvid(latestContext?.avid || '') !== normalizeResourceAvid(context.avid)) {
             return freshMeta || cachedMeta;
@@ -579,12 +654,12 @@
         return freshMeta;
     }
 
-    function requestMetaEnrichment(item, avid, title, prioritize = false) {
+    function requestMetaEnrichment(item, avid, title, prioritize = false, cachedMeta) {
         if (!item || !item.isConnected || !config.metatube_url || item.dataset.jlcMetaState === 'pending') return;
         clearDeferredMetaItem(item);
         const currentRetry = Number(item.dataset.jlcMetaRetry || '0');
         item.dataset.jlcMetaState = 'pending';
-        queueMetaFetch(avid, prioritize).then(freshMeta => {
+        queueMetaFetch(avid, prioritize, cachedMeta).then(freshMeta => {
             if (!item.isConnected) return;
             if (freshMeta) {
                 setItemReleaseDate(item, freshMeta.releaseDate);
@@ -625,9 +700,12 @@
         const normalizedAvids = Array.from(new Set(
             Array.from(avids || []).map(avid => String(avid || '').trim().toUpperCase()).filter(Boolean)
         ));
+        const embySnapshot = typeof getEmbyMovieRecordsFromSnapshot === 'function'
+            ? getEmbyMovieRecordsFromSnapshot(normalizedAvids)
+            : null;
         const [videos, embyData, metaCache] = await Promise.all([
             getManyFromStore('videos', normalizedAvids),
-            getManyFromStore('emby_data', normalizedAvids.map(avid => `vid_${avid}`)),
+            embySnapshot || getManyFromStore('emby_data', normalizedAvids.map(avid => `vid_${avid}`)),
             getManyFromStore('meta_cache', normalizedAvids)
         ]);
         return { videos, embyData, metaCache };
@@ -651,9 +729,14 @@
             inEmby = batch.embyData.get(`vid_${avid}`) || null;
             cachedMeta = batch.metaCache.get(avid) || null;
         } else {
+            const embySnapshot = typeof getEmbyMovieRecordsFromSnapshot === 'function'
+                ? getEmbyMovieRecordsFromSnapshot([avid])
+                : null;
             [vidData, inEmby, cachedMeta] = await Promise.all([
                 getVal('videos', avid),
-                getVal('emby_data', `vid_${avid}`),
+                embySnapshot
+                    ? Promise.resolve(embySnapshot.get(`vid_${avid}`) || null)
+                    : getVal('emby_data', `vid_${avid}`),
                 getVal('meta_cache', avid)
             ]);
         }
@@ -683,7 +766,7 @@
             delete item.dataset.jlcMetaRetry;
             return;
         }
-        scheduleMetaEnrichment(item, avid, title);
+        scheduleMetaEnrichment(item, avid, title, normalizedMeta);
     }
 
     function queueDecorateItem(item, prioritize = false) {

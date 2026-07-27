@@ -11,18 +11,21 @@ import {
 
 let passed = 0;
 let failed = 0;
-const MAX_BATCH_TRANSACTIONS = 16;
+const MAX_JLC_STARTUP_TRANSACTIONS = 4;
 const MAX_STARTUP_TRACKING_TRANSACTIONS = 4;
 const MAX_INITIAL_META_REQUESTS = 24;
+const MAX_META_CACHE_TRANSACTIONS = 8;
+const JLC_TRACKING_STRESS_COUNT = 180;
 const EXH_STRESS_CARD_COUNT = 32;
-const MAX_EXH_STARTUP_TRANSACTIONS = 12;
-const MAX_EXH_STABLE_REFRESH_TRANSACTIONS = 4;
-const MAX_EXH_INCREMENTAL_TRANSACTIONS = 10;
+const MAX_EXH_STARTUP_TRANSACTIONS = 5;
+const MAX_EXH_STABLE_REFRESH_TRANSACTIONS = 1;
+const MAX_EXH_INCREMENTAL_TRANSACTIONS = 4;
 const EXH_LARGE_LIBRARY_ARCHIVE_COUNT = 4000;
 const MAX_EXH_LARGE_LIBRARY_REFRESH_MS = 5000;
 const MAX_EXH_LIBRARY_TAB_TRANSACTIONS = 6;
 const MAX_EXH_BETTER_TAB_TRANSACTIONS = 8;
-const MAX_EXH_DETAIL_REFRESH_TRANSACTIONS = 8;
+const MAX_EXH_DETAIL_STARTUP_TRANSACTIONS = 5;
+const MAX_EXH_DETAIL_REFRESH_TRANSACTIONS = 4;
 const EXH_TRACKING_RACE_COUNT = 30;
 const MAX_EXH_TRACKING_BURST_TRANSACTIONS = 2;
 const MAX_EXH_TRACKING_RACE_TRANSACTIONS = 4;
@@ -321,7 +324,7 @@ function installExhStorageMetrics() {
     store.put({
       arcid: 'relevant-stress-gallery',
       title: relevantTitle,
-      title_core: String(relevantTitle).toLowerCase(),
+      title_core: String(relevantTitle).replace(/^\[[^\]]+\]\s*/, '').toLowerCase(),
       tags: [],
       language: 'other',
       censor_tier: 'unknown',
@@ -377,6 +380,128 @@ function installExhStorageMetrics() {
       });
     }
     await done;
+    db.close();
+  };
+}
+
+function installJlcStorageMetrics() {
+  window.__jlcStorageMetrics = {
+    transactions: { total: 0, byStore: {} },
+    lastTransactionAt: performance.now(),
+  };
+  const original = IDBDatabase.prototype.transaction;
+  IDBDatabase.prototype.transaction = function countedTransaction(storeNames, ...args) {
+    const metrics = window.__jlcStorageMetrics;
+    const stores = typeof storeNames === 'string' ? [storeNames] : Array.from(storeNames || []);
+    metrics.transactions.total += 1;
+    metrics.lastTransactionAt = performance.now();
+    stores.forEach((store) => {
+      metrics.transactions.byStore[store] = (metrics.transactions.byStore[store] || 0) + 1;
+    });
+    return original.call(this, storeNames, ...args);
+  };
+  window.__resetJlcStorageMetrics = () => {
+    window.__jlcStorageMetrics.transactions = { total: 0, byStore: {} };
+    window.__jlcStorageMetrics.lastTransactionAt = performance.now();
+  };
+
+  const openJlcDb = () => new Promise((resolve, reject) => {
+    const request = indexedDB.open('JavLibCommander_Permanent', 2);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains('videos')) {
+        db.createObjectStore('videos', { keyPath: 'avid' });
+      }
+      if (!db.objectStoreNames.contains('emby_data')) {
+        db.createObjectStore('emby_data', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('meta_cache')) {
+        db.createObjectStore('meta_cache', { keyPath: 'avid' });
+      }
+      if (!db.objectStoreNames.contains('tracking_searches')) {
+        db.createObjectStore('tracking_searches', { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  window.__readJlcStore = async (name) => {
+    const db = await openJlcDb();
+    const transaction = db.transaction(name, 'readonly');
+    const request = transaction.objectStore(name).getAll();
+    const rows = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+    await new Promise((resolve, reject) => {
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+    db.close();
+    return rows;
+  };
+  window.__seedJlcLibrary = async ({ movies = 0, persons = 0, videos = 0, movieIds = [] } = {}) => {
+    const db = await openJlcDb();
+    const transaction = db.transaction(['emby_data', 'videos'], 'readwrite');
+    const embyStore = transaction.objectStore('emby_data');
+    const videoStore = transaction.objectStore('videos');
+    for (let index = 0; index < movies; index++) {
+      embyStore.put({ id: `vid_SEED-${index}`, type: 'movie' });
+    }
+    for (const avid of movieIds) {
+      embyStore.put({ id: `vid_${String(avid || '').trim().toUpperCase()}`, type: 'movie' });
+    }
+    for (let index = 0; index < persons; index++) {
+      embyStore.put({ id: `person-${index}`, name: `Person ${index}`, type: 'person' });
+    }
+    for (let index = 0; index < videos; index++) {
+      videoStore.put({ avid: `SEEN-${index}`, clicked: true, status: 'none' });
+    }
+    await new Promise((resolve, reject) => {
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+    db.close();
+  };
+  window.__seedJlcTracking = async (count) => {
+    const db = await openJlcDb();
+    const transaction = db.transaction('tracking_searches', 'readwrite');
+    const store = transaction.objectStore('tracking_searches');
+    store.clear();
+    for (let index = 0; index < count; index++) {
+      const code = `SEED-${String(index).padStart(3, '0')}`;
+      const label = `Tracking ${String(index).padStart(3, '0')}`
+        + (index === count - 1 ? ' Needle' : '');
+      const checkedAt = new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString();
+      store.put({
+        id: `seed-tracking-${index}`,
+        site: 'javlibrary',
+        page_type: 'keyword',
+        group_type: 'keyword',
+        group_name: `seed ${index}`,
+        raw_query: `seed ${index}`,
+        query_text: `seed ${index}`,
+        query_signature: `seed-signature-${index}`,
+        custom_label: label,
+        title: label,
+        open_url: `https://www.javlibrary.com/cn/vl_searchbyid.php?keyword=seed-${index}`,
+        page_url: `https://www.javlibrary.com/cn/vl_searchbyid.php?keyword=seed-${index}`,
+        top_avid: code,
+        last_seen_avid: index % 3 === 0 ? `SEEN-${String(index).padStart(3, '0')}` : code,
+        check_status: index % 3 === 0 ? 'updated' : 'latest',
+        last_check_at: checkedAt,
+        created_at: checkedAt,
+        updated_at: checkedAt,
+        archived: false,
+      });
+    }
+    await new Promise((resolve, reject) => {
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
     db.close();
   };
 }
@@ -632,6 +757,53 @@ async function assertNoInlinePresentation(page, selector, label) {
     }, 0);
   }, selector);
   assert.equal(count, 0, label + ' should not render static inline styles');
+}
+
+async function openWorkbenchNav(page, nav) {
+  await page.locator(`#jlc-wb .jlc-wb-nav button[data-nav="${nav}"]`).click();
+  await page.locator(`[data-jlc-wb-page="${nav}"]:not([hidden])`).waitFor();
+}
+
+async function openWorkbenchSettingsTab(page, tab) {
+  const drawer = page.locator('#jlc-wb-settings');
+  if (!await drawer.evaluate((element) => element.classList.contains('is-open'))) {
+    await page.locator('#jlc-wb-settings-btn').click();
+    await page.waitForFunction(
+      () => document.getElementById('jlc-wb-settings')?.classList.contains('is-open')
+    );
+  }
+  await drawer.locator(`[data-jlc-settings-tab="${tab}"]`).click();
+  await drawer.locator(`[data-jlc-settings-tab="${tab}"].active`).waitFor();
+}
+
+async function assertWorkbenchRegionLayout(page, selector, label) {
+  const metrics = await page.evaluate((rootSelector) => {
+    const panel = document.getElementById('jlc-wb');
+    const root = document.querySelector(rootSelector);
+    if (!panel || !root) throw new Error('Workbench region is missing: ' + rootSelector);
+    const panelRect = panel.getBoundingClientRect();
+    const rootRect = root.getBoundingClientRect();
+    const controls = Array.from(root.querySelectorAll('input, select, textarea, button'))
+      .filter((element) => element.getClientRects().length > 0)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, right: rect.right };
+      });
+    return {
+      inlineStyles: (root.hasAttribute('style') ? 1 : 0) + root.querySelectorAll('[style]').length,
+      horizontalOverflow: root.scrollWidth - root.clientWidth,
+      insidePanel:
+        rootRect.left >= panelRect.left - 1 &&
+        rootRect.right <= panelRect.right + 1,
+      controlsInsidePanel: controls.every(
+        (rect) => rect.left >= panelRect.left - 1 && rect.right <= panelRect.right + 1
+      ),
+    };
+  }, selector);
+  assert.equal(metrics.inlineStyles, 0, label + ' should not render static inline styles');
+  assert.ok(metrics.horizontalOverflow <= 1, label + ' should not overflow horizontally');
+  assert.ok(metrics.insidePanel, label + ' should stay inside the workbench');
+  assert.ok(metrics.controlsInsidePanel, label + ' controls should stay inside the workbench');
 }
 
 async function assertScoutListFlowStyles(page, { mobile = false } = {}) {
@@ -1425,11 +1597,43 @@ try {
         panel: 'exhPanelResizeBound',
         header: 'exhPanelDragBound',
       });
-      const works = page.locator('#jlc-wb .jlc-wb-nav button[data-nav="works"]');
-      await works.waitFor();
-      await works.click();
-      await page.locator('#jlc-wb .jlc-wb-nav button.active[data-nav="works"]').waitFor();
+      await assertWorkbenchRegionLayout(page, '#exc-wb-tracking-root', 'ExH tracking');
+      await openWorkbenchNav(page, 'works');
+      await assertWorkbenchRegionLayout(page, '#exc-wb-works-root', 'ExH works');
 
+      for (const tab of ['sync', 'tags', 'pref', 'ui', 'data']) {
+        await openWorkbenchSettingsTab(page, tab);
+        await assertWorkbenchRegionLayout(page, '#exc-settings-body', 'ExH ' + tab + ' settings');
+      }
+      await page.locator('#jlc-wb-settings-close').click();
+
+      await page.locator('#jlc-wb-close-btn').click();
+      await waitWorkbenchClosed(page);
+    }
+  );
+
+  await runCase(
+    'ExH mobile: workbench content and settings fit the viewport',
+    {
+      host: 'e-hentai.org',
+      fixtureFile: 'ehentai-list.html',
+      scriptPath: PATHS.exhDist,
+      viewport: { width: 390, height: 844 },
+    },
+    async (page) => {
+      await openAndCheckTitle(page, /ExH/i);
+      await assertWorkbenchRegionLayout(page, '#exc-wb-tracking-root', 'ExH mobile tracking');
+      await openWorkbenchNav(page, 'works');
+      await assertWorkbenchRegionLayout(page, '#exc-wb-works-root', 'ExH mobile works');
+      for (const tab of ['sync', 'tags', 'pref', 'ui', 'data']) {
+        await openWorkbenchSettingsTab(page, tab);
+        await assertWorkbenchRegionLayout(
+          page,
+          '#exc-settings-body',
+          'ExH mobile ' + tab + ' settings'
+        );
+      }
+      await page.locator('#jlc-wb-settings-close').click();
       await page.locator('#jlc-wb-close-btn').click();
       await waitWorkbenchClosed(page);
     }
@@ -1536,8 +1740,16 @@ try {
         'ExH startup opened too many IndexedDB transactions: ' + startup.transactions.total
       );
       assert.ok(
+        (startup.transactions.byStore.tracking_searches || 0) <= 1,
+        'ExH startup should share one tracking_searches snapshot'
+      );
+      assert.ok(
         stable.transactions.total <= MAX_EXH_STABLE_REFRESH_TRANSACTIONS,
         'stable ExH focus opened too many IndexedDB transactions: ' + stable.transactions.total
+      );
+      assert.ok(
+        (stable.transactions.byStore.tracking_searches || 0) <= 1,
+        'stable ExH focus should use one tracking_searches transaction'
       );
       assert.equal(stable.enhancedWrites, 0, 'stable ExH focus should not invalidate enhanced cards');
       assert.equal(stable.badgesPreserved, true, 'stable ExH focus should preserve badge DOM');
@@ -1546,6 +1758,10 @@ try {
         incremental.transactions.total <= MAX_EXH_INCREMENTAL_TRANSACTIONS,
         'one inserted ExH card opened too many IndexedDB transactions: '
           + incremental.transactions.total
+      );
+      assert.ok(
+        (incremental.transactions.byStore.tracking_searches || 0) <= 1,
+        'one inserted ExH card should use one tracking_searches transaction'
       );
       assert.equal(
         incremental.existingBadgesPreserved,
@@ -1651,6 +1867,10 @@ try {
       assert.ok(
         largeLibrary.transactions.total <= MAX_EXH_STARTUP_TRANSACTIONS,
         `large ExH library refresh opened ${largeLibrary.transactions.total} transactions`
+      );
+      assert.ok(
+        (largeLibrary.transactions.byStore.tracking_searches || 0) <= 1,
+        'large ExH library refresh should use one tracking_searches transaction'
       );
       assert.equal(largeLibrary.fuzzyBadge, true, 'large library index should preserve fuzzy matches');
 
@@ -1974,7 +2194,7 @@ try {
 
       await page.evaluate(
         ([archiveCount, relevantTitle]) => window.__seedExhArchives(archiveCount, relevantTitle),
-        [EXH_LARGE_LIBRARY_ARCHIVE_COUNT, 'Detail Gallery']
+        [EXH_LARGE_LIBRARY_ARCHIVE_COUNT, '[Detail Group] Detail Gallery']
       );
       await page.evaluate(() => {
         const panel = document.getElementById('exc-gallery-panel');
@@ -1997,10 +2217,18 @@ try {
         durationMs: performance.now() - window.__exhDetailRefreshStarted,
         transactions: structuredClone(window.__exhListMetrics.transactions),
         panelVisible: document.getElementById('exc-gallery-panel')?.offsetParent !== null,
+        fuzzyBadge: Array.from(
+          document.querySelectorAll('#exc-gallery-panel .jlc-status-pill')
+        ).some((element) => (element.textContent || '').includes('库内近似')),
       }));
       console.log('      ExH detail startup: ' + JSON.stringify(startup));
       console.log('      ExH detail refresh: ' + JSON.stringify(refresh));
       assert.equal(refresh.panelVisible, true, 'ExH detail panel should remain visible after refresh');
+      assert.equal(refresh.fuzzyBadge, true, 'ExH detail refresh should preserve fuzzy archive matches');
+      assert.ok(
+        startup.transactions.total <= MAX_EXH_DETAIL_STARTUP_TRANSACTIONS,
+        `ExH detail startup opened ${startup.transactions.total} transactions`
+      );
       assert.ok(
         refresh.transactions.total <= MAX_EXH_DETAIL_REFRESH_TRANSACTIONS,
         `ExH detail refresh opened ${refresh.transactions.total} transactions`
@@ -2016,22 +2244,268 @@ try {
       scriptPath: PATHS.jlcDist,
       needJquery: true,
       gmValues: { version: '20250311' },
+      beforeInject: async (page) => {
+        await page.evaluate(installJlcStorageMetrics);
+      },
+      beforeScript: async (page) => {
+        await page.evaluate(() => window.__seedJlcLibrary({
+          movies: 80,
+          persons: 320,
+          videos: 120,
+        }));
+        await page.evaluate(() => window.__resetJlcStorageMetrics());
+      },
     },
     async (page) => {
       await waitJlcListDecorated(page);
+      await page.waitForFunction(
+        () => performance.now() - window.__jlcStorageMetrics.lastTransactionAt >= 50
+      );
+      const startupLibrary = await page.evaluate(() => ({
+        transactions: structuredClone(window.__jlcStorageMetrics.transactions),
+        renderedPersons: document.querySelectorAll('#jlc-wb-person-list .person-item').length,
+      }));
+      console.log('      JLC lazy library startup: ' + JSON.stringify(startupLibrary));
+      assert.ok(
+        startupLibrary.transactions.total <= MAX_JLC_STARTUP_TRANSACTIONS,
+        'JLC startup opened too many IndexedDB transactions: '
+          + startupLibrary.transactions.total
+      );
+      assert.equal(
+        startupLibrary.renderedPersons,
+        0,
+        'JLC startup should not render the hidden library list'
+      );
+      assert.ok(
+        (startupLibrary.transactions.byStore.emby_data || 0) <= 1,
+        'JLC startup should share one Emby snapshot'
+      );
+      assert.ok(
+        (startupLibrary.transactions.byStore.tracking_searches || 0) <= 1,
+        'JLC startup should share one tracking snapshot'
+      );
+      assert.ok(
+        (startupLibrary.transactions.byStore.videos || 0) <= 1,
+        'JLC startup should not read the full video library for hidden UI'
+      );
       await openAndCheckTitle(page, /JavLibrary|Creamu/i, 25000);
       await exerciseWorkbenchGeometry(page, {
         fab: 'jlcFabDragBound',
         panel: 'jlcPanelResizeBound',
         header: 'jlcPanelDragBound',
       });
-      await page.locator('#jlc-wb .jlc-wb-nav button[data-nav="library"]').click();
-      await page.locator('#jlc-wb .jlc-wb-nav button.active[data-nav="library"]').waitFor();
-      await page.locator('#jlc-wb .jlc-wb-nav button[data-nav="filter"]').click();
-      await page.locator('#jlc-wb .jlc-wb-nav button.active[data-nav="filter"]').waitFor();
+      await assertWorkbenchRegionLayout(page, '#jlc-wb-tracking-root', 'JLC tracking');
+      await openWorkbenchNav(page, 'library');
+      await page.waitForFunction(
+        () => document.querySelectorAll('#jlc-wb-person-list .person-item').length === 300
+      );
+      assert.deepEqual(
+        await page.evaluate(() => ({
+          movies: document.getElementById('jlc-wb-st-m')?.textContent || '',
+          persons: document.getElementById('jlc-wb-st-p')?.textContent || '',
+          videos: document.getElementById('jlc-wb-st-v')?.textContent || '',
+        })),
+        { movies: '80', persons: '320', videos: '120' }
+      );
+      await assertWorkbenchRegionLayout(page, '#jlc-wb-library-root', 'JLC library');
+      await page.evaluate(() => {
+        window.__jlcLibraryFirstPerson = document.querySelector(
+          '#jlc-wb-person-list .person-item'
+        );
+        window.__resetJlcStorageMetrics();
+      });
+      await openWorkbenchNav(page, 'filter');
+      await assertWorkbenchRegionLayout(page, '#jlc-wb-filter-root', 'JLC filter');
+      await openWorkbenchNav(page, 'library');
+      await page.waitForFunction(
+        () => performance.now() - window.__jlcStorageMetrics.lastTransactionAt >= 50
+      );
+      const repeatedLibrary = await page.evaluate(() => ({
+        transactions: structuredClone(window.__jlcStorageMetrics.transactions),
+        reusedDom: document.querySelector('#jlc-wb-person-list .person-item')
+          === window.__jlcLibraryFirstPerson,
+      }));
+      console.log('      JLC repeated library tab: ' + JSON.stringify(repeatedLibrary));
+      assert.deepEqual(
+        repeatedLibrary.transactions,
+        { total: 0, byStore: {} },
+        'unchanged JLC library tab should reuse its loaded data'
+      );
+      assert.equal(repeatedLibrary.reusedDom, true, 'unchanged JLC library tab should reuse its DOM');
+      await page.evaluate(() => {
+        document.querySelector('.jlc-tool-btn.j-l')?.click();
+      });
+      await page.locator('.jlc-tool-btn.j-l.active-like').waitFor();
+      await page.evaluate(() => window.__resetJlcStorageMetrics());
+      await openWorkbenchNav(page, 'filter');
+      await openWorkbenchNav(page, 'library');
+      await page.waitForFunction(
+        () => document.getElementById('jlc-wb-st-v')?.textContent === '121'
+      );
+      const changedLibrary = await page.evaluate(() => ({
+        transactions: structuredClone(window.__jlcStorageMetrics.transactions),
+        reusedDom: document.querySelector('#jlc-wb-person-list .person-item')
+          === window.__jlcLibraryFirstPerson,
+      }));
+      assert.deepEqual(
+        changedLibrary.transactions,
+        { total: 1, byStore: { videos: 1 } },
+        'a video-only library change should reuse the Emby snapshot'
+      );
+      assert.equal(changedLibrary.reusedDom, false, 'changed JLC library data should refresh its DOM');
+      await openWorkbenchNav(page, 'filter');
+
+      await page.evaluate(() => window.__resetJlcStorageMetrics());
+      await openWorkbenchSettingsTab(page, 'resource');
+      await page.waitForFunction(
+        () => performance.now() - window.__jlcStorageMetrics.lastTransactionAt >= 50
+      );
+      const settingsTransactions = await page.evaluate(
+        () => structuredClone(window.__jlcStorageMetrics.transactions)
+      );
+      assert.deepEqual(
+        settingsTransactions,
+        { total: 0, byStore: {} },
+        'opening JLC settings should not read IndexedDB stores'
+      );
+      await assertWorkbenchRegionLayout(
+        page,
+        '#jlc-wb .jlc-wb-settings-body',
+        'JLC resource settings'
+      );
+
+      for (const tab of ['display', 'services', 'backup']) {
+        await openWorkbenchSettingsTab(page, tab);
+        await assertWorkbenchRegionLayout(
+          page,
+          '#jlc-wb .jlc-wb-settings-body',
+          'JLC ' + tab + ' settings'
+        );
+      }
+      await page.locator('#jlc-wb-settings-close').click();
 
       await page.locator('#jlc-wb-close-btn').click();
       await waitWorkbenchClosed(page, 25000);
+    }
+  );
+
+  await runCase(
+    'JLC tracking: reopen and local views avoid redundant storage work',
+    {
+      host: 'www.javlibrary.com',
+      fixtureFile: 'javlibrary-list.html',
+      scriptPath: PATHS.jlcDist,
+      needJquery: true,
+      gmValues: { version: '20250311' },
+      beforeInject: async (page) => {
+        await page.evaluate(installJlcStorageMetrics);
+      },
+      beforeScript: async (page) => {
+        await page.evaluate(
+          (count) => window.__seedJlcTracking(count),
+          JLC_TRACKING_STRESS_COUNT
+        );
+        await page.evaluate(() => window.__resetJlcStorageMetrics());
+      },
+    },
+    async (page) => {
+      await waitJlcListDecorated(page);
+      await openAndCheckTitle(page, /JavLibrary|Creamu/i, 25000);
+      await page.waitForFunction(
+        (count) => document.querySelectorAll('#jlc-wb-tracking-root .jlc-wb-item').length === count,
+        JLC_TRACKING_STRESS_COUNT,
+        { timeout: 10000 }
+      );
+
+      await page.evaluate(() => {
+        window.__jlcTrackingToolbar = document.querySelector(
+          '#jlc-wb-tracking-root .jlc-wb-toolbar'
+        );
+        window.__resetJlcStorageMetrics();
+      });
+      await page.locator('#jlc-wb-close-btn').click();
+      await waitWorkbenchClosed(page);
+      await page.locator('#jlc-wb-fab').click();
+      await waitWorkbenchOpen(page);
+      await page.waitForFunction(
+        () => performance.now() - window.__jlcStorageMetrics.lastTransactionAt >= 50
+      );
+      const reopened = await page.evaluate(() => ({
+        transactions: structuredClone(window.__jlcStorageMetrics.transactions),
+        reusedDom: document.querySelector('#jlc-wb-tracking-root .jlc-wb-toolbar')
+          === window.__jlcTrackingToolbar,
+      }));
+      console.log('      JLC tracking reopen: ' + JSON.stringify(reopened));
+      assert.deepEqual(
+        reopened.transactions,
+        { total: 0, byStore: {} },
+        'reopening unchanged JLC tracking should not reread IndexedDB'
+      );
+      assert.equal(reopened.reusedDom, true, 'reopening unchanged JLC tracking should reuse its DOM');
+
+      await page.evaluate(() => {
+        window.__jlcTrackingScroller = document.getElementById('jlc-wb-list-scroll');
+        window.__resetJlcStorageMetrics();
+      });
+      await page.locator('#jlc-wb-tracking-query').fill('Needle');
+      await page.waitForFunction(
+        () => document.querySelectorAll('#jlc-wb-tracking-root .jlc-wb-item').length === 1
+      );
+      const filtered = await page.evaluate(() => ({
+        transactions: structuredClone(window.__jlcStorageMetrics.transactions),
+        rebuiltDom: document.getElementById('jlc-wb-list-scroll') !== window.__jlcTrackingScroller,
+      }));
+      assert.deepEqual(
+        filtered.transactions,
+        { total: 0, byStore: {} },
+        'filtering loaded JLC tracking data should not reread IndexedDB'
+      );
+      assert.equal(filtered.rebuiltDom, true, 'a changed tracking filter should rebuild its view');
+
+      await page.locator('#jlc-wb-tracking-query').fill('');
+      await page.waitForFunction(
+        (count) => document.querySelectorAll('#jlc-wb-tracking-root .jlc-wb-item').length === count,
+        JLC_TRACKING_STRESS_COUNT
+      );
+      await page.evaluate(() => {
+        window.__jlcTrackingScroller = document.getElementById('jlc-wb-list-scroll');
+        window.__resetJlcStorageMetrics();
+      });
+      await page.locator('#jlc-wb-sort').selectOption('name');
+      await page.waitForFunction(
+        () => document.getElementById('jlc-wb-list-scroll') !== window.__jlcTrackingScroller
+      );
+      const sorted = await page.evaluate(
+        () => structuredClone(window.__jlcStorageMetrics.transactions)
+      );
+      assert.deepEqual(
+        sorted,
+        { total: 0, byStore: {} },
+        'sorting loaded JLC tracking data should not reread IndexedDB'
+      );
+
+      await page.locator('#jlc-wb-tracking-query').fill('Needle');
+      await page.waitForFunction(
+        () => document.querySelectorAll('#jlc-wb-tracking-root .jlc-wb-item').length === 1
+      );
+      await page.evaluate(() => window.__resetJlcStorageMetrics());
+      await page.locator('[data-jlc-wb-more]').click();
+      page.once('dialog', (dialog) => dialog.accept());
+      await page.locator('[data-jlc-wb-delete]').click();
+      await page.locator('#jlc-wb-list-scroll .jlc-wb-empty').waitFor();
+      await page.waitForFunction(
+        () => performance.now() - window.__jlcStorageMetrics.lastTransactionAt >= 50
+      );
+      const deleted = await page.evaluate(
+        () => structuredClone(window.__jlcStorageMetrics.transactions)
+      );
+      assert.deepEqual(
+        deleted,
+        { total: 2, byStore: { tracking_searches: 2 } },
+        'deleting JLC tracking data should write once and reload once'
+      );
+      await page.locator('#jlc-wb-close-btn').click();
+      await waitWorkbenchClosed(page);
     }
   );
 
@@ -2044,24 +2518,9 @@ try {
       needJquery: true,
       gmValues: { version: '20250311' },
       beforeInject: async (page) => {
+        await page.evaluate(installJlcStorageMetrics);
         await page.evaluate(() => {
-          window.__creamuIdbTransactions = { total: 0, byStore: {} };
           window.__creamuCommanderRescanIntervals = 0;
-          const original = IDBDatabase.prototype.transaction;
-          if (original.__creamuCounted) return;
-          function countedTransaction(storeNames, ...args) {
-            const stats = window.__creamuIdbTransactions;
-            const stores = typeof storeNames === 'string'
-              ? [storeNames]
-              : Array.from(storeNames || []);
-            stats.total += 1;
-            stores.forEach((store) => {
-              stats.byStore[store] = (stats.byStore[store] || 0) + 1;
-            });
-            return original.call(this, storeNames, ...args);
-          }
-          countedTransaction.__creamuCounted = true;
-          IDBDatabase.prototype.transaction = countedTransaction;
           const originalSetInterval = window.setInterval;
           window.setInterval = function (callback, delay, ...args) {
             if (delay === 700) window.__creamuCommanderRescanIntervals += 1;
@@ -2080,10 +2539,12 @@ try {
         { timeout: 25000 }
       );
       await page.waitForTimeout(2300);
-      const transactionStats = await page.evaluate(() => window.__creamuIdbTransactions);
+      const transactionStats = await page.evaluate(
+        () => structuredClone(window.__jlcStorageMetrics.transactions)
+      );
       console.log('      IndexedDB transactions: ' + JSON.stringify(transactionStats));
       assert.ok(
-        transactionStats.total <= MAX_BATCH_TRANSACTIONS,
+        transactionStats.total <= MAX_JLC_STARTUP_TRANSACTIONS,
         '120-card startup opened too many IndexedDB transactions: ' + transactionStats.total
       );
       assert.ok(
@@ -2136,8 +2597,12 @@ try {
           webdav_enabled: false,
         },
       },
+      beforeInject: async (page) => {
+        await page.evaluate(installJlcStorageMetrics);
+      },
       beforeScript: async (page) => {
-        await page.evaluate(() => {
+        await page.evaluate(async () => {
+          await window.__seedJlcLibrary({ movieIds: ['TEST-001'] });
           window.__creamuMetaStats = {
             active: 0,
             maxActive: 0,
@@ -2179,6 +2644,7 @@ try {
               });
             }, 35 + (index % 4) * 15);
           };
+          window.__resetJlcStorageMetrics();
         });
       },
     },
@@ -2209,15 +2675,40 @@ try {
       await page.waitForFunction(() => (
         document.querySelectorAll('#grid-b .item-b[data-jlc-meta-state="done"]').length === 48
       ), null, { timeout: 15000 });
-      const stats = await page.evaluate(() => window.__creamuMetaStats);
-      console.log('      MetaTube requests: ' + stats.requests.length + ', max concurrency: ' + stats.maxActive);
+      await page.waitForTimeout(300);
+      const stats = await page.evaluate(async () => {
+        const storage = structuredClone(window.__jlcStorageMetrics.transactions);
+        const cachedRows = await window.__readJlcStore('meta_cache');
+        return {
+          ...window.__creamuMetaStats,
+          storage,
+          cachedAvids: cachedRows.map(row => row.avid),
+        };
+      });
+      console.log(
+        '      MetaTube requests: ' + stats.requests.length
+        + ', max concurrency: ' + stats.maxActive
+        + ', storage: ' + JSON.stringify(stats.storage)
+      );
       assert.ok(stats.maxActive <= 8, 'metadata concurrency exceeded the configured limit');
       assert.equal(stats.requests.length, 48, 'each card should issue one metadata request');
       assert.equal(new Set(stats.requests).size, 48, 'metadata requests should not repeat an avid');
+      assert.ok(
+        (stats.storage.byStore.meta_cache || 0) <= MAX_META_CACHE_TRANSACTIONS,
+        'metadata enrichment should batch cache reads and writes: '
+          + JSON.stringify(stats.storage)
+      );
+      assert.equal(stats.cachedAvids.length, 48, 'every metadata result should reach the cache');
+      assert.equal(new Set(stats.cachedAvids).size, 48, 'metadata cache rows should stay unique by avid');
       assert.equal(
         await page.locator('#grid-b .item-b .meta-tag.hot').count(),
         48,
         'every card should render its matching hot tag'
+      );
+      assert.equal(
+        await page.locator('[data-jlc-avid="TEST-001"]').evaluate(item => item.classList.contains('emby-item')),
+        true,
+        'the startup Emby snapshot should decorate matching cards'
       );
     }
   );
@@ -2239,6 +2730,20 @@ try {
       assert.ok(box, 'workbench should have a layout box');
       assert.ok(box.x >= -1, 'workbench should not start outside the left edge');
       assert.ok(box.x + box.width <= 391, 'workbench should fit the mobile viewport');
+      await assertWorkbenchRegionLayout(page, '#jlc-wb-tracking-root', 'JLC mobile tracking');
+      await openWorkbenchNav(page, 'library');
+      await assertWorkbenchRegionLayout(page, '#jlc-wb-library-root', 'JLC mobile library');
+      await openWorkbenchNav(page, 'filter');
+      await assertWorkbenchRegionLayout(page, '#jlc-wb-filter-root', 'JLC mobile filter');
+      for (const tab of ['resource', 'display', 'services', 'backup']) {
+        await openWorkbenchSettingsTab(page, tab);
+        await assertWorkbenchRegionLayout(
+          page,
+          '#jlc-wb .jlc-wb-settings-body',
+          'JLC mobile ' + tab + ' settings'
+        );
+      }
+      await page.locator('#jlc-wb-settings-close').click();
       await page.locator('#jlc-wb-close-btn').click();
       await waitWorkbenchClosed(page, 25000);
     }

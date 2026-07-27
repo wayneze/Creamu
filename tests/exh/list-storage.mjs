@@ -60,6 +60,23 @@ function makeArchive(context, arcid, title, extra = {}) {
 }
 
 const storage = loadStorageContext();
+const preloadedTracking = {
+  id: 'tracking-home',
+  site: 'ehentai',
+  query_signature: 'ehentai|other||||browse:home||home:/',
+  f_search: 'browse:home',
+};
+assert.equal(
+  await storage.findTrackingForContext(
+    {
+      site: 'ehentai',
+      query_signature: preloadedTracking.query_signature,
+      f_search: preloadedTracking.f_search,
+    },
+    [preloadedTracking]
+  ),
+  preloadedTracking
+);
 const edition = {
   gid: '710000',
   token: 'aaaaaaaaaa',

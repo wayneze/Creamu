@@ -118,7 +118,7 @@ const sweepSource = extract(
 const sweepItems = [0, 1, 2].map((id) => ({
   id: String(id),
   isConnected: true,
-  _jlcMetaPending: { avid: 'T-' + id, title: '' },
+  _jlcMetaPending: { avid: 'T-' + id, title: '', cachedMeta: null },
 }));
 const requested = [];
 const sweepContext = {
@@ -132,13 +132,15 @@ const sweepContext = {
   sortMetaItemsByViewport(items) { return Array.from(items); },
   isItemNearViewport() { return true; },
   isItemImmediateViewport() { return true; },
-  requestMetaEnrichment(item, avid) { requested.push([item.id, avid]); },
+  requestMetaEnrichment(item, avid, title, prioritize, cachedMeta) {
+    requested.push([item.id, avid, cachedMeta]);
+  },
   scheduleDeferredMetaSweep() {},
 };
 vm.createContext(sweepContext);
 vm.runInContext(sweepSource, sweepContext);
 sweepContext.flushDeferredMetaItems();
-assert.deepEqual(requested, [['0', 'T-0'], ['1', 'T-1']]);
+assert.deepEqual(requested, [['0', 'T-0', null], ['1', 'T-1', null]]);
 assert.equal(sweepContext.metaDeferredItems.size, 1, 'a sweep should cap visible metadata requests');
 
 const enqueueSource = extract(
@@ -146,7 +148,41 @@ const enqueueSource = extract(
   'metadata enqueue function'
 );
 assert.match(enqueueSource, /metaDeferredItems\.add\(item\)/);
+assert.match(enqueueSource, /_jlcMetaPending = \{ avid, title, cachedMeta \}/);
 assert.match(enqueueSource, /META_IMMEDIATE_SWEEP_DELAY/);
 assert.doesNotMatch(enqueueSource, /requestMetaEnrichment\s*\(/);
+
+const decorationBatchSource = extract(
+  /async function loadCommanderDecorationBatch[\s\S]*?(?=\n\s*async function decorate)/,
+  'decoration storage batch'
+);
+const decorationStoreReads = [];
+const decorationBatchContext = {
+  getEmbyMovieRecordsFromSnapshot(avids) {
+    return new Map(avids.map(avid => [`vid_${avid}`, { id: `vid_${avid}`, type: 'movie' }]));
+  },
+  async getManyFromStore(store) {
+    decorationStoreReads.push(store);
+    return new Map();
+  },
+};
+vm.createContext(decorationBatchContext);
+vm.runInContext(decorationBatchSource, decorationBatchContext);
+const decorationBatch = await decorationBatchContext.loadCommanderDecorationBatch(['a-001', 'A-001']);
+assert.deepEqual(
+  decorationStoreReads,
+  ['videos', 'meta_cache'],
+  'a ready Emby snapshot should remove the decoration store read'
+);
+assert.equal(decorationBatch.embyData.has('vid_A-001'), true);
+
+decorationStoreReads.length = 0;
+decorationBatchContext.getEmbyMovieRecordsFromSnapshot = () => null;
+await decorationBatchContext.loadCommanderDecorationBatch(['A-001']);
+assert.deepEqual(
+  decorationStoreReads,
+  ['videos', 'emby_data', 'meta_cache'],
+  'decoration should fall back to IndexedDB before the Emby snapshot is ready'
+);
 
 console.log('JLC metadata scheduling tests OK');

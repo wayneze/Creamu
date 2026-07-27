@@ -76,15 +76,29 @@
             console.warn('[Creamu] initDB', e);
         }
 
+        let startupStores = null;
         try {
-            await loadRadarData();
+            startupStores = await getAllFromStores(['emby_data', TRACKING_STORE]);
+        } catch (e) {
+            console.warn('[Creamu] startup data', e);
+        }
+
+        try {
+            await loadRadarData(startupStores?.get('emby_data'));
         } catch (e) {
             console.warn('[Creamu] radar', e);
         }
 
+        let startupTrackingRecords = null;
+        try {
+            startupTrackingRecords = await getTrackingSearches(startupStores?.get(TRACKING_STORE));
+            primeWorkbenchTrackingRecordsState(startupTrackingRecords);
+        } catch (e) {
+            console.warn('[Creamu] tracking data', e);
+        }
+
         try {
             await restoreWorkbenchSession();
-            await refreshLibraryUI();
             ensureStandaloneCommanderEntry();
             renderDetailResourceCenter();
             refreshCommanderDecorations?.(document, {
@@ -101,7 +115,7 @@
         } catch (_) { /* ignore */ }
 
         void Promise.resolve()
-            .then(() => syncTrackingPageState(true))
+            .then(() => syncTrackingPageState(true, { trackingRecords: startupTrackingRecords }))
             .catch((e) => console.warn('[Creamu] tracking', e));
 
         primeJavLibraryComboOptionSnapshotFromCurrentPage();

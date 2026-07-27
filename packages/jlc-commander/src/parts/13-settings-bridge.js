@@ -116,23 +116,25 @@
             TabPanel.getInstance().show(1);
         }
     };
-
-
-
-
+    let libraryUiRenderState = { revision: -1, mEl: null, mElV3: null };
 
     async function refreshLibraryUI() {
-        const [embyItems, videoItems] = await Promise.all([
-            getAllFromStore('emby_data'),
-            getAllFromStore('videos')
-        ]);
-        const mCount = embyItems.filter(i => i.type === 'movie').length;
-        const pList = embyItems.filter(i => i.type === 'person');
+        const mEl = document.getElementById('st-m');
+        const mElV3 = document.getElementById('jlc-wb-st-m');
+        if (!mEl && !mElV3) return;
+        if (
+            libraryUiRenderState.revision === libraryDataRevision
+            && libraryUiRenderState.mEl === mEl
+            && libraryUiRenderState.mElV3 === mElV3
+        ) return;
+        const embySnapshot = getEmbyDataSnapshot() || await loadRadarData();
+        const renderRevision = libraryDataRevision;
+        const videoItems = await getAllFromStore('videos');
+        const mCount = Number(embySnapshot?.movieCount || 0) || 0;
+        const personNames = Array.from(embySnapshot?.personNames || []);
         const vCount = videoItems.length;
         const personCount = knownPersons.size;
 
-        const mEl = document.getElementById('st-m');
-        const mElV3 = document.getElementById('jlc-wb-st-m');
         if (mEl) {
             mEl.innerText = mCount;
             const pEl = document.getElementById('st-p');
@@ -147,12 +149,10 @@
             if (pEl) pEl.innerText = personCount;
             if (vEl) vEl.innerText = vCount;
         }
-        if (!mEl && !mElV3) return;
-
         const fillPersonList = (wrap) => {
             if (!wrap) return;
             wrap.innerHTML = '';
-            const all = [...new Set([...config.custom_persons, ...pList.map(x => x.name).filter(Boolean)])].sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
+            const all = [...new Set([...config.custom_persons, ...personNames])].sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
             all.slice(0, 300).forEach(name => {
                 const div = document.createElement('div');
                 div.className = 'person-item';
@@ -170,4 +170,5 @@
         };
         fillPersonList(document.getElementById('jlc-person-list'));
         fillPersonList(document.getElementById('jlc-wb-person-list'));
+        libraryUiRenderState = { revision: renderRevision, mEl, mElV3 };
     }

@@ -15,6 +15,39 @@ function extract(pattern, label) {
 assert.doesNotMatch(coreSource, /function buildBackupPayload/, 'data portability must stay out of core');
 assert.match(settingsSource, /function getLegacySettingsSchema/, 'settings bridge must expose the legacy schema');
 
+const importedConfigSource = extract(
+  /function applyImportedConfig[\s\S]*?(?=\n\s*function describeLiveConfig)/,
+  'imported config application'
+);
+const knownPersonsSource = coreSource.match(
+  /function refreshKnownPersonsFromSnapshot[\s\S]*?(?=\n\s*function getEmbyMovieRecordsFromSnapshot)/
+);
+assert.ok(knownPersonsSource, 'known-person snapshot refresh not found');
+let importedConfigStored = null;
+const importedConfigContext = {
+  DEFAULT_CONFIG: { fav_tags: [], custom_persons: [], hate_tags: [] },
+  config: { custom_persons: ['Old Person'] },
+  embyDataSnapshot: { personNames: ['Emby Person'] },
+  knownPersons: new Set(['Old Person', 'Emby Person']),
+  libraryDataRevision: 4,
+  GM_setValue(key, value) {
+    if (key === 'jlc_config_stable') importedConfigStored = value;
+  },
+  GM_getValue() {
+    return importedConfigStored;
+  },
+};
+vm.createContext(importedConfigContext);
+vm.runInContext(knownPersonsSource[0], importedConfigContext);
+vm.runInContext(importedConfigSource, importedConfigContext);
+importedConfigContext.applyImportedConfig({ custom_persons: ['Imported Person'] });
+assert.deepEqual(
+  Array.from(importedConfigContext.knownPersons).sort(),
+  ['Emby Person', 'Imported Person'],
+  'config import should refresh radar membership without rereading Emby'
+);
+assert.equal(importedConfigContext.libraryDataRevision, 5);
+
 const preferenceSource = extract(
   /const STATUS_PREF_SIMPLE_KEYS[\s\S]*?(?=\n\s*function markStatusPrefsDirty)/,
   'status preference portability'

@@ -99,6 +99,9 @@
     const WORKBENCH_SESSION_KEY = 'jlc_workbench_session_v1';
     let db = null;
     let knownPersons = new Set();
+    let embyDataSnapshot = null;
+    let libraryDataRevision = 0;
+    let trackingDataRevision = 0;
     let commanderObserver = null;
     let trackingPageRefreshTimer = null;
     let trackingPageSearchPromise = null;
@@ -682,6 +685,11 @@
                     db.onversionchange = () => {
                         try { db.close(); } catch (e) {}
                     };
+                    invalidateIdbStoreSnapshot('emby_data');
+                    invalidateIdbStoreSnapshot(TRACKING_STORE);
+                    try {
+                        if (typeof flushMetaCacheWrites === 'function') void flushMetaCacheWrites();
+                    } catch (_) { /* ignore */ }
                 }
             };
 
@@ -835,7 +843,14 @@
     /** 会进 WebDAV vault 的 IDB 仓库（meta_cache 可再生，不同步） */
     const SYNCABLE_IDB_STORES = new Set(['videos', 'emby_data', 'tracking_searches']);
 
+    function invalidateIdbStoreSnapshot(store) {
+        if (store === 'emby_data') embyDataSnapshot = null;
+        if (store === 'emby_data' || store === 'videos') libraryDataRevision += 1;
+        if (store === TRACKING_STORE) trackingDataRevision += 1;
+    }
+
     function markIdbStoreDirty(store) {
+        invalidateIdbStoreSnapshot(store);
         if (!SYNCABLE_IDB_STORES.has(store)) return;
         try {
             if (typeof markStatusPrefsDirty === 'function') markStatusPrefsDirty();
@@ -843,19 +858,27 @@
         } catch (_) { /* ignore */ }
     }
 
-    async function setVal(store, val) {
-        if (!db) return;
+    async function setManyVals(store, values) {
+        const rows = Array.from(values || []).filter(value => value != null);
+        if (!rows.length) return true;
+        if (!db) return false;
         return new Promise(r => {
             try {
                 const tx = db.transaction(store, 'readwrite');
-                tx.objectStore(store).put(val);
+                const objectStore = tx.objectStore(store);
+                rows.forEach(value => objectStore.put(value));
                 tx.oncomplete = () => {
                     markIdbStoreDirty(store);
-                    r();
+                    r(true);
                 };
-                tx.onerror = () => r();
-            } catch (e) { r(); }
+                tx.onerror = () => r(false);
+                tx.onabort = () => r(false);
+            } catch (e) { r(false); }
         });
+    }
+
+    async function setVal(store, val) {
+        return setManyVals(store, [val]);
     }
 
     async function deleteVal(store, key) {
@@ -873,22 +896,76 @@
         });
     }
 
-    async function getAllFromStore(store) {
-        if (!db) return [];
-        return new Promise(r => {
+    async function getAllFromStores(stores) {
+        const names = Array.from(new Set(Array.from(stores || []).filter(Boolean)));
+        const rowsByStore = new Map(names.map(name => [name, []]));
+        if (!db || !names.length) return rowsByStore;
+        const available = names.filter(name => db.objectStoreNames.contains(name));
+        if (!available.length) return rowsByStore;
+        return new Promise(resolve => {
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                resolve(rowsByStore);
+            };
             try {
-                const tx = db.transaction(store, 'readonly');
-                const req = tx.objectStore(store).getAll();
-                req.onsuccess = () => r(req.result || []);
-                req.onerror = () => r([]);
-            } catch (e) { r([]); }
+                const tx = db.transaction(available, 'readonly');
+                available.forEach(name => {
+                    const request = tx.objectStore(name).getAll();
+                    request.onsuccess = () => rowsByStore.set(name, request.result || []);
+                });
+                tx.oncomplete = finish;
+                tx.onerror = finish;
+                tx.onabort = finish;
+            } catch (e) { finish(); }
         });
     }
 
-    async function loadRadarData() {
-        const items = await getAllFromStore('emby_data');
-        const embyPersons = items.filter(i => i.type === 'person');
-        knownPersons = new Set([...config.custom_persons, ...embyPersons.map(p => String(p.name || '').trim()).filter(Boolean)]);
+    async function getAllFromStore(store) {
+        const rowsByStore = await getAllFromStores([store]);
+        return rowsByStore.get(store) || [];
+    }
+
+    function getEmbyDataSnapshot() {
+        return embyDataSnapshot;
+    }
+
+    function refreshKnownPersonsFromSnapshot() {
+        const embyPersons = Array.from(embyDataSnapshot?.personNames || []);
+        knownPersons = new Set([...(config.custom_persons || []), ...embyPersons]);
+        return knownPersons;
+    }
+
+    function getEmbyMovieRecordsFromSnapshot(avids) {
+        if (!embyDataSnapshot) return null;
+        const records = new Map();
+        Array.from(avids || []).forEach(avid => {
+            const normalized = String(avid || '').trim().toUpperCase();
+            if (!normalized) return;
+            const id = `vid_${normalized}`;
+            if (embyDataSnapshot.movieIds.has(id)) records.set(id, { id, type: 'movie' });
+        });
+        return records;
+    }
+
+    async function loadRadarData(preloadedItems) {
+        const items = Array.isArray(preloadedItems)
+            ? preloadedItems
+            : await getAllFromStore('emby_data');
+        const movieIds = new Set();
+        const personNames = [];
+        items.forEach(item => {
+            if (item?.type === 'movie' && item.id) movieIds.add(String(item.id));
+            if (item?.type === 'person') {
+                const name = String(item.name || '').trim();
+                if (name) personNames.push(name);
+            }
+        });
+        embyDataSnapshot = { movieIds, movieCount: movieIds.size, personNames };
+        refreshKnownPersonsFromSnapshot();
+        libraryDataRevision += 1;
+        return embyDataSnapshot;
     }
 
     /**

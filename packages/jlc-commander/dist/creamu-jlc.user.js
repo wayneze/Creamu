@@ -122,6 +122,9 @@
     const WORKBENCH_SESSION_KEY = 'jlc_workbench_session_v1';
     let db = null;
     let knownPersons = new Set();
+    let embyDataSnapshot = null;
+    let libraryDataRevision = 0;
+    let trackingDataRevision = 0;
     let commanderObserver = null;
     let trackingPageRefreshTimer = null;
     let trackingPageSearchPromise = null;
@@ -705,6 +708,11 @@
                     db.onversionchange = () => {
                         try { db.close(); } catch (e) {}
                     };
+                    invalidateIdbStoreSnapshot('emby_data');
+                    invalidateIdbStoreSnapshot(TRACKING_STORE);
+                    try {
+                        if (typeof flushMetaCacheWrites === 'function') void flushMetaCacheWrites();
+                    } catch (_) { /* ignore */ }
                 }
             };
 
@@ -858,7 +866,14 @@
     /** 会进 WebDAV vault 的 IDB 仓库（meta_cache 可再生，不同步） */
     const SYNCABLE_IDB_STORES = new Set(['videos', 'emby_data', 'tracking_searches']);
 
+    function invalidateIdbStoreSnapshot(store) {
+        if (store === 'emby_data') embyDataSnapshot = null;
+        if (store === 'emby_data' || store === 'videos') libraryDataRevision += 1;
+        if (store === TRACKING_STORE) trackingDataRevision += 1;
+    }
+
     function markIdbStoreDirty(store) {
+        invalidateIdbStoreSnapshot(store);
         if (!SYNCABLE_IDB_STORES.has(store)) return;
         try {
             if (typeof markStatusPrefsDirty === 'function') markStatusPrefsDirty();
@@ -866,19 +881,27 @@
         } catch (_) { /* ignore */ }
     }
 
-    async function setVal(store, val) {
-        if (!db) return;
+    async function setManyVals(store, values) {
+        const rows = Array.from(values || []).filter(value => value != null);
+        if (!rows.length) return true;
+        if (!db) return false;
         return new Promise(r => {
             try {
                 const tx = db.transaction(store, 'readwrite');
-                tx.objectStore(store).put(val);
+                const objectStore = tx.objectStore(store);
+                rows.forEach(value => objectStore.put(value));
                 tx.oncomplete = () => {
                     markIdbStoreDirty(store);
-                    r();
+                    r(true);
                 };
-                tx.onerror = () => r();
-            } catch (e) { r(); }
+                tx.onerror = () => r(false);
+                tx.onabort = () => r(false);
+            } catch (e) { r(false); }
         });
+    }
+
+    async function setVal(store, val) {
+        return setManyVals(store, [val]);
     }
 
     async function deleteVal(store, key) {
@@ -896,22 +919,76 @@
         });
     }
 
-    async function getAllFromStore(store) {
-        if (!db) return [];
-        return new Promise(r => {
+    async function getAllFromStores(stores) {
+        const names = Array.from(new Set(Array.from(stores || []).filter(Boolean)));
+        const rowsByStore = new Map(names.map(name => [name, []]));
+        if (!db || !names.length) return rowsByStore;
+        const available = names.filter(name => db.objectStoreNames.contains(name));
+        if (!available.length) return rowsByStore;
+        return new Promise(resolve => {
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                resolve(rowsByStore);
+            };
             try {
-                const tx = db.transaction(store, 'readonly');
-                const req = tx.objectStore(store).getAll();
-                req.onsuccess = () => r(req.result || []);
-                req.onerror = () => r([]);
-            } catch (e) { r([]); }
+                const tx = db.transaction(available, 'readonly');
+                available.forEach(name => {
+                    const request = tx.objectStore(name).getAll();
+                    request.onsuccess = () => rowsByStore.set(name, request.result || []);
+                });
+                tx.oncomplete = finish;
+                tx.onerror = finish;
+                tx.onabort = finish;
+            } catch (e) { finish(); }
         });
     }
 
-    async function loadRadarData() {
-        const items = await getAllFromStore('emby_data');
-        const embyPersons = items.filter(i => i.type === 'person');
-        knownPersons = new Set([...config.custom_persons, ...embyPersons.map(p => String(p.name || '').trim()).filter(Boolean)]);
+    async function getAllFromStore(store) {
+        const rowsByStore = await getAllFromStores([store]);
+        return rowsByStore.get(store) || [];
+    }
+
+    function getEmbyDataSnapshot() {
+        return embyDataSnapshot;
+    }
+
+    function refreshKnownPersonsFromSnapshot() {
+        const embyPersons = Array.from(embyDataSnapshot?.personNames || []);
+        knownPersons = new Set([...(config.custom_persons || []), ...embyPersons]);
+        return knownPersons;
+    }
+
+    function getEmbyMovieRecordsFromSnapshot(avids) {
+        if (!embyDataSnapshot) return null;
+        const records = new Map();
+        Array.from(avids || []).forEach(avid => {
+            const normalized = String(avid || '').trim().toUpperCase();
+            if (!normalized) return;
+            const id = `vid_${normalized}`;
+            if (embyDataSnapshot.movieIds.has(id)) records.set(id, { id, type: 'movie' });
+        });
+        return records;
+    }
+
+    async function loadRadarData(preloadedItems) {
+        const items = Array.isArray(preloadedItems)
+            ? preloadedItems
+            : await getAllFromStore('emby_data');
+        const movieIds = new Set();
+        const personNames = [];
+        items.forEach(item => {
+            if (item?.type === 'movie' && item.id) movieIds.add(String(item.id));
+            if (item?.type === 'person') {
+                const name = String(item.name || '').trim();
+                if (name) personNames.push(name);
+            }
+        });
+        embyDataSnapshot = { movieIds, movieCount: movieIds.size, personNames };
+        refreshKnownPersonsFromSnapshot();
+        libraryDataRevision += 1;
+        return embyDataSnapshot;
     }
 
     /**
@@ -2853,23 +2930,25 @@
             TabPanel.getInstance().show(1);
         }
     };
-
-
-
-
+    let libraryUiRenderState = { revision: -1, mEl: null, mElV3: null };
 
     async function refreshLibraryUI() {
-        const [embyItems, videoItems] = await Promise.all([
-            getAllFromStore('emby_data'),
-            getAllFromStore('videos')
-        ]);
-        const mCount = embyItems.filter(i => i.type === 'movie').length;
-        const pList = embyItems.filter(i => i.type === 'person');
+        const mEl = document.getElementById('st-m');
+        const mElV3 = document.getElementById('jlc-wb-st-m');
+        if (!mEl && !mElV3) return;
+        if (
+            libraryUiRenderState.revision === libraryDataRevision
+            && libraryUiRenderState.mEl === mEl
+            && libraryUiRenderState.mElV3 === mElV3
+        ) return;
+        const embySnapshot = getEmbyDataSnapshot() || await loadRadarData();
+        const renderRevision = libraryDataRevision;
+        const videoItems = await getAllFromStore('videos');
+        const mCount = Number(embySnapshot?.movieCount || 0) || 0;
+        const personNames = Array.from(embySnapshot?.personNames || []);
         const vCount = videoItems.length;
         const personCount = knownPersons.size;
 
-        const mEl = document.getElementById('st-m');
-        const mElV3 = document.getElementById('jlc-wb-st-m');
         if (mEl) {
             mEl.innerText = mCount;
             const pEl = document.getElementById('st-p');
@@ -2884,12 +2963,10 @@
             if (pEl) pEl.innerText = personCount;
             if (vEl) vEl.innerText = vCount;
         }
-        if (!mEl && !mElV3) return;
-
         const fillPersonList = (wrap) => {
             if (!wrap) return;
             wrap.innerHTML = '';
-            const all = [...new Set([...config.custom_persons, ...pList.map(x => x.name).filter(Boolean)])].sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
+            const all = [...new Set([...config.custom_persons, ...personNames])].sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'));
             all.slice(0, 300).forEach(name => {
                 const div = document.createElement('div');
                 div.className = 'person-item';
@@ -2907,6 +2984,7 @@
         };
         fillPersonList(document.getElementById('jlc-person-list'));
         fillPersonList(document.getElementById('jlc-wb-person-list'));
+        libraryUiRenderState = { revision: renderRevision, mEl, mElV3 };
     }
 // @@creamu-part:14-data-portability
     function applyImportedConfig(rawConfig) {
@@ -2922,6 +3000,8 @@
             if (!Object.prototype.hasOwnProperty.call(next, key)) next[key] = rawConfig[key];
         });
         config = next;
+        refreshKnownPersonsFromSnapshot();
+        libraryDataRevision += 1;
         GM_setValue('jlc_config_stable', config);
         // 立刻回读校验是否真的写入油猴存储
         const verify = GM_getValue('jlc_config_stable');
@@ -3105,6 +3185,7 @@
             // 让出主线程，避免 50MB 备份卡死页面
             await new Promise(r => setTimeout(r, 0));
         }
+        invalidateIdbStoreSnapshot(storeName);
         return written;
     }
 
@@ -3391,17 +3472,37 @@
         inp.click();
     }
 // @@creamu-part:15-meta-fetch
+    function getMetaCodeCandidates(value) {
+        const raw = String(value || '').trim().toUpperCase();
+        const candidates = new Set();
+        const push = candidate => {
+            const normalized = normalizeCode(candidate);
+            if (normalized) candidates.add(normalized);
+        };
+        push(raw);
+        push(raw.replace(
+            /^(?:CARIB(?:BEAN)?(?:COM)?(?:PR)?|10MU(?:SUME)?|PACO(?:PACO)?(?:MAMA)?|MURA(?:MURA)?)[\s_-]*/i,
+            ''
+        ));
+        const fc2 = raw.match(/^FC2(?:[\s_-]*PPV)?[\s_-]*(\d{3,})/i);
+        if (fc2) push(`FC2-${fc2[1]}`);
+        return candidates;
+    }
+
     function pickMetaSearchHit(results, avid) {
         const list = (Array.isArray(results) ? results : []).map(normalizeMetaRecord);
-        const target = normalizeCode(avid);
-        return list.find(x => normalizeCode(x?.number) === target)
-            || list.find(x => normalizeCode(x?.id) === target)
-            || list.find(x => normalizeCode(x?.code) === target)
-            || list[0]
+        const targets = getMetaCodeCandidates(avid);
+        const matches = value => {
+            const normalized = normalizeCode(value);
+            return !!normalized && targets.has(normalized);
+        };
+        return list.find(x => matches(x?.number))
+            || list.find(x => matches(x?.id))
+            || list.find(x => matches(x?.code))
             || null;
     }
 
-    const META_REQUEST_TIMEOUT = 8000;
+    const META_REQUEST_TIMEOUT = 3000;
     const META_FETCH_BUDGET_MS = 8000;
     const META_MISS_TTL_MS = 60000;
     const metaMissCache = new Map();
@@ -3419,9 +3520,9 @@
         };
 
         if (/^FC2(?:-|_)?PPV/.test(code) || /^FC2(?:-|_)?\d+/.test(code) || /^FC2PPV/.test(code)) {
-            push('FC2PPVDB');
-            push('fc2hub');
             push('FC2');
+            push('fc2hub');
+            push('FC2PPVDB');
             push('JAV321');
             return providers;
         }
@@ -3572,6 +3673,10 @@
     const META_FETCH_CONCURRENCY = 8;
     const META_FETCH_RETRY_LIMIT = 1;
     const META_FETCH_RETRY_DELAY = 900;
+    const META_CACHE_WRITE_DELAY = 200;
+    const META_CACHE_WRITE_BATCH_SIZE = 24;
+    const META_CACHE_WRITE_RETRY_DELAY = 1000;
+    const META_CACHE_WRITE_RETRY_LIMIT = 3;
     const META_IMMEDIATE_MARGIN_PX = 1200;
     const META_PREFETCH_MARGIN_PX = 1200;
     const META_IMMEDIATE_SWEEP_DELAY = 32;
@@ -3592,9 +3697,69 @@
     let metaDeferredSweepTimer = null;
     let metaDeferredSweepDueAt = 0;
     let metaSweepEventsBound = false;
+    const metaCacheWriteBuffer = new Map();
+    let metaCacheWriteTimer = null;
+    let metaCacheWriteActive = null;
+    let metaCacheWriteRetryCount = 0;
     let rescanTimer = null;
     let rescanBudget = 0;
     const COMMANDER_RESCAN_INTERVAL = 700;
+
+    function scheduleMetaCacheWriteFlush(delay = META_CACHE_WRITE_DELAY) {
+        if (metaCacheWriteActive || metaCacheWriteTimer || !metaCacheWriteBuffer.size) return;
+        metaCacheWriteTimer = window.setTimeout(() => {
+            metaCacheWriteTimer = null;
+            void flushMetaCacheWrites();
+        }, Math.max(0, Number(delay) || 0));
+    }
+
+    function flushMetaCacheWrites() {
+        if (metaCacheWriteTimer) {
+            window.clearTimeout(metaCacheWriteTimer);
+            metaCacheWriteTimer = null;
+        }
+        if (metaCacheWriteActive) return metaCacheWriteActive;
+        if (!metaCacheWriteBuffer.size) return Promise.resolve();
+
+        const entries = Array.from(metaCacheWriteBuffer.entries());
+        let writeSucceeded = false;
+        metaCacheWriteActive = Promise.resolve(
+            setManyVals('meta_cache', entries.map(([, value]) => value))
+        ).then(written => {
+            writeSucceeded = written === true;
+            if (!writeSucceeded) return false;
+            entries.forEach(([avid, value]) => {
+                if (metaCacheWriteBuffer.get(avid) === value) metaCacheWriteBuffer.delete(avid);
+            });
+            metaCacheWriteRetryCount = 0;
+            return true;
+        }).catch(error => {
+            console.warn('[Commander] 元数据缓存写入失败', error);
+            return false;
+        }).finally(() => {
+            if (!writeSucceeded) metaCacheWriteRetryCount += 1;
+            metaCacheWriteActive = null;
+            if (!metaCacheWriteBuffer.size || !db) return;
+            if (writeSucceeded) {
+                scheduleMetaCacheWriteFlush();
+            } else if (metaCacheWriteRetryCount <= META_CACHE_WRITE_RETRY_LIMIT) {
+                scheduleMetaCacheWriteFlush(META_CACHE_WRITE_RETRY_DELAY * metaCacheWriteRetryCount);
+            }
+        });
+        return metaCacheWriteActive;
+    }
+
+    function queueMetaCacheWrite(record) {
+        const avid = normalizeCode(record?.avid || '');
+        if (!avid) return;
+        metaCacheWriteBuffer.set(avid, { ...record, avid });
+        if (!metaCacheWriteActive) metaCacheWriteRetryCount = 0;
+        if (metaCacheWriteBuffer.size >= META_CACHE_WRITE_BATCH_SIZE) {
+            void flushMetaCacheWrites();
+        } else {
+            scheduleMetaCacheWriteFlush();
+        }
+    }
 
     function isPlaceholderCover(src, title = '') {
         const sample = `${String(src || '')} ${String(title || '')}`.toLowerCase();
@@ -3716,7 +3881,13 @@
             }
             if (!force && processed >= META_DEFERRED_BATCH_SIZE) break;
             clearDeferredMetaItem(item);
-            requestMetaEnrichment(item, pending.avid, pending.title, isItemImmediateViewport(item));
+            requestMetaEnrichment(
+                item,
+                pending.avid,
+                pending.title,
+                isItemImmediateViewport(item),
+                pending.cachedMeta
+            );
             processed += 1;
         }
         if (!force && processed >= META_DEFERRED_BATCH_SIZE && metaDeferredItems.size) {
@@ -3764,14 +3935,16 @@
         window.addEventListener('scroll', trigger, { passive: true });
         window.addEventListener('resize', trigger, { passive: true });
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) scheduleDeferredMetaSweep(60);
+            if (document.hidden) void flushMetaCacheWrites();
+            else scheduleDeferredMetaSweep(60);
         });
+        window.addEventListener('pagehide', () => void flushMetaCacheWrites());
     }
 
-    function scheduleMetaEnrichment(item, avid, title) {
+    function scheduleMetaEnrichment(item, avid, title, cachedMeta) {
         if (!item || !item.isConnected || !config.metatube_url) return;
         item.dataset.jlcMetaState = 'deferred';
-        item._jlcMetaPending = { avid, title };
+        item._jlcMetaPending = { avid, title, cachedMeta };
         metaDeferredItems.add(item);
         ensureMetaViewportObserver();
         bindMetaSweepEvents();
@@ -3826,11 +3999,14 @@
             metaQueuedTasks.delete(task.key);
             metaFetchActiveCount += 1;
             Promise.resolve().then(async () => {
-                const cached = normalizeMetaRecord(await getVal('meta_cache', task.avid));
+                const queued = normalizeMetaRecord(metaCacheWriteBuffer.get(normalizeCode(task.avid)));
+                const cached = queued || (task.cachedMeta === undefined
+                    ? normalizeMetaRecord(await getVal('meta_cache', task.avid))
+                    : normalizeMetaRecord(task.cachedMeta));
                 if (cached?.genres?.length) return cached;
                 const fresh = normalizeMetaRecord(await fetchMeta(task.avid, cached, task.base));
                 if (fresh) {
-                    await setVal('meta_cache', { avid: task.avid, ...fresh });
+                    queueMetaCacheWrite({ avid: task.avid, ...fresh });
                     return fresh;
                 }
                 return cached;
@@ -3849,7 +4025,7 @@
         return !!(meta && (meta.genres?.length || meta.actors?.length || meta.releaseDate));
     }
 
-    function queueMetaFetch(avid, prioritize = false) {
+    function queueMetaFetch(avid, prioritize = false, cachedMeta) {
         const base = normalizeMetaBase(config.metatube_url);
         const key = getMetaFetchKey(avid, base);
         if (!key) return Promise.resolve(null);
@@ -3859,7 +4035,7 @@
         }
         if (hasRecentMetaMiss(key)) return Promise.resolve(null);
         const promise = new Promise(resolve => {
-            const task = { key, base, avid, resolve, prioritized: !!prioritize };
+            const task = { key, base, avid, cachedMeta, resolve, prioritized: !!prioritize };
             enqueueStablePriority(metaFetchQueue, task, prioritize, entry => entry.prioritized);
             metaQueuedTasks.set(key, task);
             pumpMetaFetchQueue();
@@ -4139,7 +4315,7 @@
         renderDetailCommanderBadges(context, buildCommanderDecorationModel(context.title, cachedMeta));
         if (!config.metatube_url) return cachedMeta;
         if (cachedMeta?.genres?.length) return cachedMeta;
-        const freshMeta = normalizeMetaRecord(await queueMetaFetch(context.avid, prioritize));
+        const freshMeta = normalizeMetaRecord(await queueMetaFetch(context.avid, prioritize, cachedMeta));
         const latestContext = getCurrentDetailContext();
         if (!freshMeta || normalizeResourceAvid(latestContext?.avid || '') !== normalizeResourceAvid(context.avid)) {
             return freshMeta || cachedMeta;
@@ -4149,12 +4325,12 @@
         return freshMeta;
     }
 
-    function requestMetaEnrichment(item, avid, title, prioritize = false) {
+    function requestMetaEnrichment(item, avid, title, prioritize = false, cachedMeta) {
         if (!item || !item.isConnected || !config.metatube_url || item.dataset.jlcMetaState === 'pending') return;
         clearDeferredMetaItem(item);
         const currentRetry = Number(item.dataset.jlcMetaRetry || '0');
         item.dataset.jlcMetaState = 'pending';
-        queueMetaFetch(avid, prioritize).then(freshMeta => {
+        queueMetaFetch(avid, prioritize, cachedMeta).then(freshMeta => {
             if (!item.isConnected) return;
             if (freshMeta) {
                 setItemReleaseDate(item, freshMeta.releaseDate);
@@ -4195,9 +4371,12 @@
         const normalizedAvids = Array.from(new Set(
             Array.from(avids || []).map(avid => String(avid || '').trim().toUpperCase()).filter(Boolean)
         ));
+        const embySnapshot = typeof getEmbyMovieRecordsFromSnapshot === 'function'
+            ? getEmbyMovieRecordsFromSnapshot(normalizedAvids)
+            : null;
         const [videos, embyData, metaCache] = await Promise.all([
             getManyFromStore('videos', normalizedAvids),
-            getManyFromStore('emby_data', normalizedAvids.map(avid => `vid_${avid}`)),
+            embySnapshot || getManyFromStore('emby_data', normalizedAvids.map(avid => `vid_${avid}`)),
             getManyFromStore('meta_cache', normalizedAvids)
         ]);
         return { videos, embyData, metaCache };
@@ -4221,9 +4400,14 @@
             inEmby = batch.embyData.get(`vid_${avid}`) || null;
             cachedMeta = batch.metaCache.get(avid) || null;
         } else {
+            const embySnapshot = typeof getEmbyMovieRecordsFromSnapshot === 'function'
+                ? getEmbyMovieRecordsFromSnapshot([avid])
+                : null;
             [vidData, inEmby, cachedMeta] = await Promise.all([
                 getVal('videos', avid),
-                getVal('emby_data', `vid_${avid}`),
+                embySnapshot
+                    ? Promise.resolve(embySnapshot.get(`vid_${avid}`) || null)
+                    : getVal('emby_data', `vid_${avid}`),
                 getVal('meta_cache', avid)
             ]);
         }
@@ -4253,7 +4437,7 @@
             delete item.dataset.jlcMetaRetry;
             return;
         }
-        scheduleMetaEnrichment(item, avid, title);
+        scheduleMetaEnrichment(item, avid, title, normalizedMeta);
     }
 
     function queueDecorateItem(item, prioritize = false) {
@@ -4454,6 +4638,9 @@ function getCreamuWorkbenchCss(options = {}) {
             display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
         }
         #jlc-wb .jlc-wb-footer-summary { font-size: 12.5px; color: var(--creamu-wb-text-muted); line-height: 1.45; max-width: 52%; }
+        #jlc-wb .jlc-wb-footer-actions {
+            display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        }
 
         #jlc-wb .jlc-wb-toolbar {
             flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px;
@@ -4461,6 +4648,9 @@ function getCreamuWorkbenchCss(options = {}) {
             position: static;
         }
         #jlc-wb .jlc-wb-toolbar-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        #jlc-wb .jlc-wb-toolbar-note {
+            color: var(--creamu-wb-text-muted); font-size: 12.5px; line-height: 1.45;
+        }
         #jlc-wb .jlc-wb-list-scroll {
             flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto;
             /* 底边留白：少条目时「更多」菜单向下仍有空间；仍不够时 JS 会 is-up 上翻 */
@@ -4708,6 +4898,24 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .legacy-note,
         #jlc-wb .jlc-wb-settings .legacy-note { font-size: 13px; color: var(--creamu-wb-text-muted); line-height: 1.55; margin-top: 8px; }
+        #jlc-wb .legacy-note.jlc-wb-intro-note,
+        #jlc-wb .jlc-wb-settings .legacy-note.jlc-wb-intro-note { margin: 0 0 10px; }
+        #jlc-wb .jlc-wb-status-note { margin: 4px 0 0; }
+        #jlc-wb .jlc-wb-scroll-note { max-height: 140px; overflow: auto; }
+        #jlc-wb .jlc-wb-note-summary { margin-bottom: 4px; }
+        #jlc-wb .jlc-wb-title-link { color: inherit; text-decoration: none; }
+        #jlc-wb .jlc-wb-inline-form { display: flex; gap: 6px; align-items: stretch; }
+        #jlc-wb .jlc-wb-inline-form input {
+            flex: 1 1 auto; min-width: 0; width: auto; margin-top: 0;
+        }
+        #jlc-wb #jlc-wb-library-root .jlc-wb-inline-form input[type="text"] {
+            flex: 1 1 auto; min-width: 0; width: auto; margin-top: 0;
+        }
+        #jlc-wb .jlc-wb-list-stack { margin-top: 10px; }
+        #jlc-wb .jlc-wb-range-head {
+            display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px;
+        }
+        #jlc-wb .jlc-wb-range-value { color: var(--creamu-wb-accent); }
         #jlc-wb .jlc-wb-view-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
         #jlc-wb .jlc-wb-view-actions .jlc-wb-btn { width: 100%; justify-content: center; }
 
@@ -4741,6 +4949,27 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-settings-section.is-active { display: block; }
         #jlc-wb .jlc-wb-settings h3 {
             margin: 0 0 12px; font-size: 13px; color: var(--creamu-wb-accent); letter-spacing: 1px; text-transform: uppercase;
+        }
+        #jlc-wb .jlc-wb-settings h3.jlc-wb-section-title { margin-top: 16px; }
+        #jlc-wb .jlc-wb-form-actions {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+        }
+        #jlc-wb .jlc-wb-form-actions > .jlc-wb-btn {
+            flex: 1 1 120px; min-width: 0; justify-content: center;
+        }
+        #jlc-wb .jlc-wb-field-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-top: 6px;
+        }
+        #jlc-wb .jlc-wb-field-grid > * { min-width: 0; }
+        #jlc-wb .jlc-wb-block-action,
+        #jlc-wb .jlc-wb-save-action {
+            width: 100%; justify-content: center;
+        }
+        #jlc-wb .jlc-wb-block-action { margin-top: 8px; }
+        #jlc-wb .jlc-wb-save-action { margin-top: 14px; }
+        #jlc-wb .jlc-wb-settings .legacy-note.jlc-wb-data-report {
+            margin-top: 10px; white-space: pre-wrap; word-break: break-word;
+            max-height: 220px; overflow: auto; font-size: 12px; line-height: 1.45;
         }
         #jlc-wb .jlc-wb-settings label,
         #jlc-wb #jlc-wb-library-root label,
@@ -4837,6 +5066,7 @@ function getCreamuWorkbenchCss(options = {}) {
             flex: 0 0 auto; border-top: 1px solid var(--creamu-wb-divider); padding: 12px 14px; background: var(--creamu-wb-surface-soft);
             display: flex; flex-direction: column; gap: 8px;
         }
+        #jlc-wb .jlc-wb-settings-footer .jlc-wb-btn { width: 100%; justify-content: center; }
 
         #jlc-wb .jlc-wb-settings input[type="number"] {
             -moz-appearance: textfield;
@@ -5998,12 +6228,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             padding: 0; overflow: visible; flex: none; min-height: 0;
         }
         #jlc-wb #jlc-wb-config-diag {
-            background: var(--creamu-wb-surface) !important; border: 1px solid #efe0cc !important;
-            color: var(--creamu-wb-text-strong) !important;
+            margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; line-height: 1.6;
+            background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
+            color: var(--creamu-wb-text-strong);
         }
         #jlc-wb #jlc-wb-config-hint {
-            background: #fff7ea !important; border-color: #f0d7a0 !important; color: #9a6700 !important;
+            margin: 0; padding: 10px 12px; line-height: 1.5;
+            background: #fff7ea; border-bottom: 1px solid #f0d7a0; color: #9a6700;
         }
+        #jlc-wb .jlc-wb-tracking-alert { color: #9a6700; font-size: 12px; }
+        #jlc-wb .jlc-wb-virtual-note { color: #4f769c; font-size: 11px; }
         #jlc-tracking-pagebar.jlc-wb-pagebar {
             background: rgba(255,253,248,.97); border: 1px solid var(--creamu-wb-border);
             color: var(--creamu-wb-text); box-shadow: 0 10px 24px rgba(90,60,30,.12);
@@ -6232,7 +6466,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     async function refreshWorkbenchFabBadge() {
         try {
-            const list = (await getTrackingSearches()).filter(record => !record.archived);
+            const list = (await getWorkbenchTrackingRecordsState()).records
+                .filter(record => !record.archived);
             const updateCount = list.filter(record => {
                 const top = normalizeCode(record.top_avid || '');
                 const seen = normalizeCode(record.last_seen_avid || '');
@@ -6560,6 +6795,65 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     let WB_VIRT_ITEM_H = 112;
     let WB_VIRT_GROUP_H = 44;
     let workbenchVirtState = null;
+    let workbenchTrackingRecordsState = { revision: -1, records: null };
+    let workbenchTrackingRecordsLoad = null;
+    let workbenchTrackingRenderState = { root: null, key: '' };
+
+    function primeWorkbenchTrackingRecordsState(records) {
+        if (!Array.isArray(records)) return workbenchTrackingRecordsState;
+        workbenchTrackingRecordsLoad = null;
+        workbenchTrackingRecordsState = {
+            revision: trackingDataRevision,
+            records: records.slice()
+        };
+        return workbenchTrackingRecordsState;
+    }
+
+    async function getWorkbenchTrackingRecordsState() {
+        const revision = trackingDataRevision;
+        if (
+            workbenchTrackingRecordsState.revision === revision
+            && Array.isArray(workbenchTrackingRecordsState.records)
+        ) return workbenchTrackingRecordsState;
+        if (workbenchTrackingRecordsLoad?.revision === revision) {
+            return workbenchTrackingRecordsLoad.promise;
+        }
+        const load = { revision, promise: null };
+        load.promise = (async () => {
+            const records = await getTrackingSearches();
+            if (trackingDataRevision !== revision) return getWorkbenchTrackingRecordsState();
+            const next = { revision, records };
+            workbenchTrackingRecordsState = next;
+            return next;
+        })().finally(() => {
+            if (workbenchTrackingRecordsLoad === load) workbenchTrackingRecordsLoad = null;
+        });
+        workbenchTrackingRecordsLoad = load;
+        return load.promise;
+    }
+
+    function buildWorkbenchTrackingRenderKey(session, context) {
+        const tracking = session.tracking || {};
+        const uiState = getTrackingUiState();
+        return JSON.stringify({
+            revision: trackingDataRevision,
+            minute: Math.floor(Date.now() / 60000),
+            context: [context?.query_signature || '', context?.pageUrl || ''],
+            tracking: {
+                query: tracking.query || '',
+                filterUpdatesOnly: !!tracking.filterUpdatesOnly,
+                groupFilter: tracking.groupFilter || 'all',
+                sort: tracking.sort || 'updates_first',
+                pinCurrent: tracking.pinCurrent !== false,
+                focusRecordId: tracking.focusRecordId || '',
+                lastOpenedId: tracking.lastOpenedId || '',
+                lastOpenedAt: tracking.lastOpenedAt || ''
+            },
+            collapsed: uiState.collapsed || {},
+            refreshResume: uiState.refresh_resume || null,
+            refreshRuntime: getTrackingRefreshRuntimeState()
+        });
+    }
 
     /** 胶囊用短相对时间：刚刚 / 5分钟前 / 3小时前 / 1天前 */
     function formatCompactRelativeTime(value) {
@@ -6943,12 +7237,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         document.getElementById('jlc-wb-fab')?.classList.add('is-panel-open');
         applyWorkbenchShellGeometry();
         persistWorkbenchSession({ panelOpen: true, nav });
-        activateWorkbenchNav(nav, { forceRender: true });
+        activateWorkbenchNav(nav, { forceRender: true, reuseIfUnchanged: true });
         const wantSettings = !!(mapped.settings || (compactText(tabId || '') ? false : session.settingsOpen));
         if (wantSettings || mapped.settings) {
             setWorkbenchSettingsOpen(true, mapped.section || session.settingsSection || '');
             syncWorkbenchSettingsForm();
-            void refreshLibraryUI();
         } else {
             setWorkbenchSettingsOpen(false);
         }
@@ -7096,7 +7389,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const session = getWorkbenchSession();
         const context = getCurrentTrackingPageContext();
         const currentSignature = context?.query_signature || '';
-        const allRecords = (await getTrackingSearches()).filter(record => !record.archived);
+        const renderKey = buildWorkbenchTrackingRenderKey(session, context);
+        if (
+            options.reuseIfUnchanged
+            && root.firstElementChild
+            && workbenchTrackingRenderState.root === root
+            && workbenchTrackingRenderState.key === renderKey
+        ) {
+            restoreWorkbenchScroll({ scrollTop: preservedScrollTop });
+            return;
+        }
+        const recordsState = await getWorkbenchTrackingRecordsState();
+        const allRecords = recordsState.records.filter(record => !record.archived);
         let list = allRecords.slice();
 
         const query = compactText(session.tracking.query || '').toLowerCase();
@@ -7202,11 +7506,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '    <button type="button" class="jlc-wb-chip" data-jlc-wb-continue>继续上次</button>'
             + '  </div>'
             + (resumePendingIds.length
-                ? '  <div class="jlc-wb-toolbar-row" style="color:#fde68a;font-size:12px;">刷新已暂停 · 待验证后继续 ' + resumePendingIds.length + ' 项'
+                ? '  <div class="jlc-wb-toolbar-row jlc-wb-tracking-alert">刷新已暂停 · 待验证后继续 ' + resumePendingIds.length + ' 项'
                 + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-open-verify>去验证</button>'
                 + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-resume>验证后继续</button></div>'
                 : '')
-            + (useVirtual ? '  <div class="jlc-wb-toolbar-row" style="color:#93c5fd;font-size:11px;">虚拟列表已启用（' + list.length + ' 项）</div>' : '')
+            + (useVirtual ? '  <div class="jlc-wb-toolbar-row jlc-wb-virtual-note">虚拟列表已启用（' + list.length + ' 项）</div>' : '')
             + '</div>';
 
         const emptyHtml = '<div class="jlc-wb-empty">' + (context ? '没有匹配的追更项。可点底部「收藏当前搜索」。' : '还没有追更项，先在列表页收藏一个搜索吧。') + '</div>';
@@ -7407,6 +7711,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 scrollIntoFocus: true
             });
         }
+        workbenchTrackingRenderState = { root, key: renderKey };
     }
 // @@creamu-part:22-workbench-settings
     function renderWorkbenchViewSettings() {
@@ -7425,9 +7730,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             const step = item.step != null ? item.step : 1;
             return ''
                 + '<div class="legacy-row">'
-                + '  <div style="display:flex;justify-content:space-between;margin-bottom:6px;align-items:center;"><span>' + escapeHtml(item.label) + '</span><b style="color:#d4883a" data-jlc-wb-range-value="' + escapeHtml(item.key) + '">' + value + '</b></div>'
+                + '  <div class="jlc-wb-range-head"><span>' + escapeHtml(item.label) + '</span><b class="jlc-wb-range-value" data-jlc-wb-range-value="' + escapeHtml(item.key) + '">' + value + '</b></div>'
                 + '  <div class="legacy-range"><input type="range" data-jlc-wb-range="' + escapeHtml(item.key) + '" min="' + item.min + '" max="' + item.max + '" step="' + step + '" value="' + value + '"></div>'
-                + (item.key === 'uiBtnScale' ? '<div class="legacy-note" style="margin-top:6px;">只缩放工作台按钮与悬浮球，列表封面/文字不变。笔记本可试 80–90。</div>' : '')
+                + (item.key === 'uiBtnScale' ? '<div class="legacy-note">只缩放工作台按钮与悬浮球，列表封面/文字不变。笔记本可试 80–90。</div>' : '')
                 + '</div>';
         };
 
@@ -7439,18 +7744,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 + '  <span>' + escapeHtml(item.label) + '</span>'
                 + '  <input type="checkbox" data-jlc-wb-toggle="' + escapeHtml(item.key) + '"' + (Status.get(item.key) ? ' checked' : '') + (item.disabled ? ' disabled' : '') + '>'
                 + '</div>').join('')
-            + '<h3 style="margin-top:16px">布局</h3>'
+            + '<h3 class="jlc-wb-section-title">布局</h3>'
             + layoutRanges.map(renderRangeRow).join('')
-            + '<h3 style="margin-top:16px">工作台</h3>'
+            + '<h3 class="jlc-wb-section-title">工作台</h3>'
             + uiRanges.map(renderRangeRow).join('')
-            + '<div class="legacy-row" style="margin-top:4px;">'
-            + '  <div style="margin-bottom:6px;">默认打开方式</div>'
-            + '  <select id="jlc-wb-view-open-mode" class="jlc-wb-select" style="width:100%;">'
+            + '<div class="legacy-row">'
+            + '  <div class="jlc-wb-note-summary">默认打开方式</div>'
+            + '  <select id="jlc-wb-view-open-mode" class="jlc-wb-select">'
             + '    <option value="tab"' + (openMode === 'tab' ? ' selected' : '') + '>新标签打开</option>'
             + '    <option value="same"' + (openMode === 'same' ? ' selected' : '') + '>本页打开</option>'
             + '  </select>'
             + '</div>'
-            + '<button type="button" class="jlc-wb-btn ghost" data-jlc-wb-action="downloadPanel" style="width:100%;margin-top:8px;">批量下载封面</button>';
+            + '<button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" data-jlc-wb-action="downloadPanel">批量下载封面</button>';
 
         container.querySelectorAll('[data-jlc-wb-toggle]').forEach(input => {
             input.addEventListener('change', () => {
@@ -7783,32 +8088,32 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '</div>'
             + '<div class="jlc-wb-body">'
             + '  <div data-jlc-wb-page="tracking"><div id="jlc-wb-tracking-root"></div></div>'
-            + '  <div data-jlc-wb-page="library" hidden><div id="jlc-wb-library-root" style="padding:14px;overflow:auto;flex:1;min-height:0;">'
+            + '  <div data-jlc-wb-page="library" hidden><div id="jlc-wb-library-root">'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">熟人与统计</div>'
             + '      <div class="stat-box"><div class="stat-item"><b id="jlc-wb-st-m">0</b><span>影片</span></div><div class="stat-item"><b id="jlc-wb-st-p">0</b><span>追踪</span></div><div class="stat-item"><b id="jlc-wb-st-v">0</b><span>已阅</span></div></div>'
-            + '      <div class="legacy-note" style="margin:0 0 10px;">Emby 影片/熟人缓存统计；下方可手动加熟人。</div>'
-            + '      <div style="display:flex;gap:6px;"><input id="jlc-wb-i-new-p" type="text" placeholder="手动添加演员/导演" style="flex:1"><button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-add-p">+</button></div>'
-            + '      <div id="jlc-wb-person-list" style="margin-top:10px;"></div>'
+            + '      <div class="legacy-note jlc-wb-intro-note">Emby 影片/熟人缓存统计；下方可手动加熟人。</div>'
+            + '      <div class="jlc-wb-inline-form"><input id="jlc-wb-i-new-p" type="text" placeholder="手动添加演员/导演"><button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-add-p">+</button></div>'
+            + '      <div id="jlc-wb-person-list" class="jlc-wb-list-stack"></div>'
             + '    </div></div></div>'
-            + '  <div data-jlc-wb-page="filter" hidden><div id="jlc-wb-filter-root" style="padding:14px;overflow:auto;flex:1;min-height:0;">'
+            + '  <div data-jlc-wb-page="filter" hidden><div id="jlc-wb-filter-root">'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">心动标签</div>'
-            + '      <div class="legacy-note" style="margin:0 0 8px;">列表高亮你关心的标签。回车或失焦即保存。</div>'
+            + '      <div class="legacy-note jlc-wb-intro-note">列表高亮你关心的标签。回车或失焦即保存。</div>'
             + '      <textarea id="jlc-wb-i-fav" rows="3" placeholder="女优, 巨乳, … 逗号分隔"></textarea>'
             + '    </div>'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">屏蔽标题词</div>'
-            + '      <div class="legacy-note" style="margin:0 0 8px;">标题含这些词会淡化/隐藏。回车添加，点 × 删除。</div>'
+            + '      <div class="legacy-note jlc-wb-intro-note">标题含这些词会淡化/隐藏。回车添加，点 × 删除。</div>'
             + '      <div id="jlc-wb-tags-hidden-word" class="jlc-wb-tag-editor" data-key="hiddenWord" data-placeholder="输入词后回车，支持逗号批量"></div>'
             + '    </div>'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">屏蔽番号</div>'
-            + '      <div class="legacy-note" style="margin:0 0 8px;">单个或系列前缀，如 SSIS、OPX-123。</div>'
+            + '      <div class="legacy-note jlc-wb-intro-note">单个或系列前缀，如 SSIS、OPX-123。</div>'
             + '      <div id="jlc-wb-tags-hidden-avid" class="jlc-wb-tag-editor" data-key="hiddenAvid" data-placeholder="输入番号后回车，支持逗号批量"></div>'
             + '    </div>'
-            + '    <div class="legacy-note" id="jlc-wb-hidden-summary" style="margin:4px 0 0;">—</div>'
+            + '    <div class="legacy-note jlc-wb-status-note" id="jlc-wb-hidden-summary">—</div>'
             + '  </div></div>'
             + '</div>'
             + '<div class="jlc-wb-footer">'
             + '  <div class="jlc-wb-footer-summary" id="jlc-wb-footer-summary">—</div>'
-            + '  <div style="display:flex;gap:8px;flex-wrap:wrap;">'
+            + '  <div class="jlc-wb-footer-actions">'
             + '    <button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">⭐ 收藏当前</button>'
             + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-refresh-all">刷新全部</button>'
             + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-sync-now" title="先同步 Emby，再推送 WebDAV（含点击/心动/追更/屏蔽词）">☁ 立即同步</button>'
@@ -7826,12 +8131,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '      <button type="button" data-jlc-settings-tab="services">服务</button>'
             + '      <button type="button" data-jlc-settings-tab="backup">备份</button>'
             + '    </div>'
-            + '    <div id="jlc-wb-config-hint" class="legacy-note" hidden style="margin:0;padding:10px 12px;background:#2a1f10;border-bottom:1px solid #5a4020;color:#fde68a;line-height:1.5;"></div>'
+            + '    <div id="jlc-wb-config-hint" class="legacy-note" hidden></div>'
             + '    <div class="jlc-wb-settings-body">'
             // —— 资源：详情页增强 ——
             + '      <section class="jlc-wb-settings-section is-active" data-jlc-settings-panel="resource">'
             + '        <h3>详情页资源</h3>'
-            + '        <div class="legacy-note" style="margin:0 0 10px;">控制详情页资源中心各模块，点底部「保存并应用」后生效。</div>'
+            + '        <div class="legacy-note jlc-wb-intro-note">控制详情页资源中心各模块，点底部「保存并应用」后生效。</div>'
             + '        <div class="legacy-row legacy-toggle"><span>详情页资源中心</span><input type="checkbox" data-jlc-wb-resource="resource_center"></div>'
             + '        <div class="legacy-row legacy-toggle"><span>预告片模块</span><input type="checkbox" data-jlc-wb-resource="resource_trailer"></div>'
             + '        <div class="legacy-row legacy-toggle"><span>截图模块</span><input type="checkbox" data-jlc-wb-resource="resource_screenshot"></div>'
@@ -7842,14 +8147,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             // —— 服务：Emby / MetaTube / WebDAV ——
             + '      <section class="jlc-wb-settings-section" data-jlc-settings-panel="services">'
             + '        <h3>Emby / MetaTube</h3>'
-            + '        <div id="jlc-wb-config-diag" class="legacy-note" style="margin:0 0 12px;padding:10px 12px;background:#1a222c;border:1px solid #334;border-radius:10px;color:#cde;line-height:1.6;"></div>'
+            + '        <div id="jlc-wb-config-diag" class="legacy-note"></div>'
             + '        <label>Emby 地址</label><input id="jlc-wb-i-url" type="text" placeholder="http://emby.example:8096">'
             + '        <label>Emby API Key</label><input id="jlc-wb-i-key" type="password">'
             + '        <div class="legacy-note">密钥框留空=不修改已保存值；只有输入新内容才会覆盖。</div>'
-            + '        <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-sync" style="width:100%;margin-top:8px;">🔄 立即同步 Emby</button>'
+            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-sync">🔄 立即同步 Emby</button>'
             + '        <label>MetaTube Server</label><input id="jlc-wb-i-mt" type="text" placeholder="http://127.0.0.1:1234">'
-            + '        <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-diag" style="width:100%;margin-top:8px;">🔍 重新读取并显示配置</button>'
-            + '        <h3 style="margin-top:16px">WebDAV 同步</h3>'
+            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-diag">🔍 重新读取并显示配置</button>'
+            + '        <h3 class="jlc-wb-section-title">WebDAV 同步</h3>'
             + '        <div class="legacy-note">通用 WebDAV（坚果云 / Nextcloud / 群晖等）。读写 {路径}/jlc.vault.json。坚果云请用应用密码。</div>'
             + '        <label>地址</label><input id="jlc-wb-wd-url" type="text" placeholder="https://dav.jianguoyun.com/dav/">'
             + '        <label>用户名</label><input id="jlc-wb-wd-user" type="text" placeholder="邮箱 / 用户名" autocomplete="username">'
@@ -7857,15 +8162,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '        <label>远端路径</label><input id="jlc-wb-wd-path" type="text" placeholder="/Creamu">'
             + '        <div class="legacy-row legacy-toggle"><span>启用同步</span><input type="checkbox" id="jlc-wb-wd-en"></div>'
             + '        <div class="legacy-row legacy-toggle"><span>打开时自动同步</span><input type="checkbox" id="jlc-wb-wd-auto"></div>'
-            + '        <label>冲突策略</label><select id="jlc-wb-wd-conflict" class="jlc-wb-select" style="width:100%;margin-top:6px;"><option value="ask">询问</option><option value="remote">云端优先</option><option value="local">本机优先</option></select>'
-            + '        <div class="legacy-note" id="jlc-wb-wd-status" style="margin-top:8px;">—</div>'
-            + '        <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap;">'
-            + '          <button type="button" class="jlc-wb-btn primary" id="jlc-wb-wd-test" style="flex:1;min-width:100px;">测试连接</button>'
-            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-wd-sync" style="flex:1;min-width:100px;">立即同步</button>'
+            + '        <label>冲突策略</label><select id="jlc-wb-wd-conflict" class="jlc-wb-select"><option value="ask">询问</option><option value="remote">云端优先</option><option value="local">本机优先</option></select>'
+            + '        <div class="legacy-note" id="jlc-wb-wd-status">—</div>'
+            + '        <div class="jlc-wb-form-actions">'
+            + '          <button type="button" class="jlc-wb-btn primary" id="jlc-wb-wd-test">测试连接</button>'
+            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-wd-sync">立即同步</button>'
             + '        </div>'
-            + '        <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap;">'
-            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-wd-push" style="flex:1;">强制推送</button>'
-            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-wd-pull" style="flex:1;">强制拉取</button>'
+            + '        <div class="jlc-wb-form-actions">'
+            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-wd-push">强制推送</button>'
+            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-wd-pull">强制拉取</button>'
             + '        </div>'
             + '      </section>'
             // —— 显示：列表/布局/按钮缩放（renderWorkbenchViewSettings 填充）——
@@ -7875,25 +8180,25 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             // —— 备份：导入导出 ——
             + '      <section class="jlc-wb-settings-section" data-jlc-settings-panel="backup">'
             + '        <h3>导入 / 导出</h3>'
-            + '        <div class="legacy-note" style="margin-bottom:10px;">配置/追更/Emby 按脚本安装隔离。从旧脚本迁移：先导出 → 再在这里导入。</div>'
-            + '        <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap;">'
-            + '          <button type="button" class="jlc-wb-btn primary" id="jlc-wb-btn-import-config" style="flex:1;min-width:120px;">仅导入配置</button>'
-            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-import" style="flex:1;min-width:120px;">完整导入</button>'
+            + '        <div class="legacy-note jlc-wb-intro-note">配置/追更/Emby 按脚本安装隔离。从旧脚本迁移：先导出 → 再在这里导入。</div>'
+            + '        <div class="jlc-wb-form-actions">'
+            + '          <button type="button" class="jlc-wb-btn primary" id="jlc-wb-btn-import-config">仅导入配置</button>'
+            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-import">完整导入</button>'
             + '        </div>'
-            + '        <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap;">'
-            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-export-config" style="flex:1;min-width:120px;">导出配置</button>'
-            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-export" style="flex:1;min-width:120px;">完整导出</button>'
+            + '        <div class="jlc-wb-form-actions">'
+            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-export-config">导出配置</button>'
+            + '          <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-export">完整导出</button>'
             + '        </div>'
             + '        <div class="legacy-note">完整备份不含 meta_cache。</div>'
-            + '        <h3 style="margin-top:14px">数据检查</h3>'
-            + '        <div class="legacy-note" style="margin-bottom:8px;">查看本机断点、浏览时间与点击记录数量。</div>'
-            + '        <button type="button" class="jlc-wb-btn primary" id="jlc-wb-btn-integrity" style="width:100%;">🩺 检查断点·浏览·点击</button>'
-            + '        <pre id="jlc-wb-data-integrity" class="legacy-note" hidden style="margin-top:10px;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;font-size:12px;line-height:1.45;"></pre>'
+            + '        <h3 class="jlc-wb-section-title">数据检查</h3>'
+            + '        <div class="legacy-note jlc-wb-intro-note">查看本机断点、浏览时间与点击记录数量。</div>'
+            + '        <button type="button" class="jlc-wb-btn primary jlc-wb-block-action" id="jlc-wb-btn-integrity">🩺 检查断点·浏览·点击</button>'
+            + '        <pre id="jlc-wb-data-integrity" class="legacy-note jlc-wb-data-report" hidden></pre>'
             + '      </section>'
             + '    </div>'
             + '    <div class="jlc-wb-settings-footer">'
-            + '      <button type="button" class="jlc-wb-btn primary" id="jlc-wb-btn-save" style="width:100%;">💾 保存并应用</button>'
-            + '      <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-rescan" style="width:100%;">🔁 重扫当前页</button>'
+            + '      <button type="button" class="jlc-wb-btn primary" id="jlc-wb-btn-save">💾 保存并应用</button>'
+            + '      <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-rescan">🔁 重扫当前页</button>'
             + '    </div>'
             + '  </div>'
             + '</div>';
@@ -7906,7 +8211,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         shell.querySelector('#jlc-wb-library-root')?.addEventListener('scroll', scheduleWorkbenchScrollSave, { passive: true });
         shell.querySelector('#jlc-wb-filter-root')?.addEventListener('scroll', scheduleWorkbenchScrollSave, { passive: true });
         shell.querySelectorAll('.jlc-wb-nav button').forEach(btn => {
-            btn.addEventListener('click', () => { void activateWorkbenchNav(btn.dataset.nav || 'tracking'); });
+            btn.addEventListener('click', () => {
+                void activateWorkbenchNav(btn.dataset.nav || 'tracking', { reuseIfUnchanged: true });
+            });
         });
         shell.querySelector('#jlc-wb-close-btn')?.addEventListener('click', closeWorkbenchV3);
         shell.querySelector('#jlc-wb-min-btn')?.addEventListener('click', closeWorkbenchV3);
@@ -7916,7 +8223,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             setWorkbenchSettingsOpen(next);
             if (next) {
                 syncWorkbenchSettingsForm();
-                void refreshLibraryUI();
             }
         });
         shell.querySelector('#jlc-wb-open-mode-toggle')?.addEventListener('click', () => {
@@ -8000,7 +8306,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             if (session.settingsOpen) {
                 setWorkbenchSettingsOpen(true, session.settingsSection || '');
                 syncWorkbenchSettingsForm();
-                await refreshLibraryUI();
             }
         } else {
             await refreshWorkbenchFabBadge();
@@ -8084,15 +8389,29 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             console.warn('[Creamu] initDB', e);
         }
 
+        let startupStores = null;
         try {
-            await loadRadarData();
+            startupStores = await getAllFromStores(['emby_data', TRACKING_STORE]);
+        } catch (e) {
+            console.warn('[Creamu] startup data', e);
+        }
+
+        try {
+            await loadRadarData(startupStores?.get('emby_data'));
         } catch (e) {
             console.warn('[Creamu] radar', e);
         }
 
+        let startupTrackingRecords = null;
+        try {
+            startupTrackingRecords = await getTrackingSearches(startupStores?.get(TRACKING_STORE));
+            primeWorkbenchTrackingRecordsState(startupTrackingRecords);
+        } catch (e) {
+            console.warn('[Creamu] tracking data', e);
+        }
+
         try {
             await restoreWorkbenchSession();
-            await refreshLibraryUI();
             ensureStandaloneCommanderEntry();
             renderDetailResourceCenter();
             refreshCommanderDecorations?.(document, {
@@ -8109,7 +8428,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         } catch (_) { /* ignore */ }
 
         void Promise.resolve()
-            .then(() => syncTrackingPageState(true))
+            .then(() => syncTrackingPageState(true, { trackingRecords: startupTrackingRecords }))
             .catch((e) => console.warn('[Creamu] tracking', e));
 
         primeJavLibraryComboOptionSnapshotFromCurrentPage();
@@ -12224,8 +12543,10 @@ function isTrackingResolvableOpenUrl(url) {
         return record;
     }
 
-    async function getTrackingSearches() {
-        const list = await getAllFromStore(TRACKING_STORE);
+    async function getTrackingSearches(preloadedRows) {
+        const list = Array.isArray(preloadedRows)
+            ? preloadedRows
+            : await getAllFromStore(TRACKING_STORE);
         return (Array.isArray(list) ? list : [])
             .filter(Boolean)
             .map(record => normalizeTrackingRuntimeRecord(record))
@@ -12236,12 +12557,13 @@ function isTrackingResolvableOpenUrl(url) {
             });
     }
 
-    async function getTrackingRecordBySignature(signature, openUrl = '') {
-        const list = await getTrackingSearches();
+    async function getTrackingRecordBySignature(signature, openUrl = '', preloadedRows) {
+        const list = await getTrackingSearches(preloadedRows);
         const canonical = buildTrackingCanonicalUrl(openUrl || '');
-        return list.find(record => record.query_signature === signature)
+        const record = list.find(item => item.query_signature === signature)
             || list.find(record => buildTrackingCanonicalUrl(record.open_url || '') === canonical)
             || null;
+        return record ? { ...record } : null;
     }
 
     async function saveTrackingRecord(record) {
@@ -12253,7 +12575,11 @@ function isTrackingResolvableOpenUrl(url) {
 
     async function createOrUpdateTrackingFromContext(context = getCurrentTrackingPageContext(), options = {}) {
         if (!context) return null;
-        const existing = await getTrackingRecordBySignature(context.query_signature, context.open_url);
+        const existing = await getTrackingRecordBySignature(
+            context.query_signature,
+            context.open_url,
+            options.trackingRecords
+        );
         if (!existing && options.createIfMissing === false) return null;
         const now = new Date().toISOString();
         const firstItem = context.firstItem || getFirstTrackingPageItemInfo(document);
@@ -13559,7 +13885,7 @@ function isTrackingResolvableOpenUrl(url) {
         }, force ? 40 : 180);
     }
 
-    async function syncTrackingPageState(force = false) {
+    async function syncTrackingPageState(force = false, options = {}) {
         const context = getCurrentTrackingPageContext();
         const previousSignature = trackingPageState.signature;
         const previousPageUrl = trackingPageState.context?.pageUrl || '';
@@ -13582,7 +13908,8 @@ function isTrackingResolvableOpenUrl(url) {
             createIfMissing: false,
             touchBrowse: shouldTouchBrowse,
             checkTop: true,
-            updateCheck: shouldCheck
+            updateCheck: shouldCheck,
+            trackingRecords: options.trackingRecords
         });
         if (shouldTouchBrowse) trackingPageTouchSignature = context.query_signature;
         trackingPageState.record = record;

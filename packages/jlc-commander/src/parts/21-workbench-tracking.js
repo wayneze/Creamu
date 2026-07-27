@@ -3,6 +3,65 @@
     let WB_VIRT_ITEM_H = 112;
     let WB_VIRT_GROUP_H = 44;
     let workbenchVirtState = null;
+    let workbenchTrackingRecordsState = { revision: -1, records: null };
+    let workbenchTrackingRecordsLoad = null;
+    let workbenchTrackingRenderState = { root: null, key: '' };
+
+    function primeWorkbenchTrackingRecordsState(records) {
+        if (!Array.isArray(records)) return workbenchTrackingRecordsState;
+        workbenchTrackingRecordsLoad = null;
+        workbenchTrackingRecordsState = {
+            revision: trackingDataRevision,
+            records: records.slice()
+        };
+        return workbenchTrackingRecordsState;
+    }
+
+    async function getWorkbenchTrackingRecordsState() {
+        const revision = trackingDataRevision;
+        if (
+            workbenchTrackingRecordsState.revision === revision
+            && Array.isArray(workbenchTrackingRecordsState.records)
+        ) return workbenchTrackingRecordsState;
+        if (workbenchTrackingRecordsLoad?.revision === revision) {
+            return workbenchTrackingRecordsLoad.promise;
+        }
+        const load = { revision, promise: null };
+        load.promise = (async () => {
+            const records = await getTrackingSearches();
+            if (trackingDataRevision !== revision) return getWorkbenchTrackingRecordsState();
+            const next = { revision, records };
+            workbenchTrackingRecordsState = next;
+            return next;
+        })().finally(() => {
+            if (workbenchTrackingRecordsLoad === load) workbenchTrackingRecordsLoad = null;
+        });
+        workbenchTrackingRecordsLoad = load;
+        return load.promise;
+    }
+
+    function buildWorkbenchTrackingRenderKey(session, context) {
+        const tracking = session.tracking || {};
+        const uiState = getTrackingUiState();
+        return JSON.stringify({
+            revision: trackingDataRevision,
+            minute: Math.floor(Date.now() / 60000),
+            context: [context?.query_signature || '', context?.pageUrl || ''],
+            tracking: {
+                query: tracking.query || '',
+                filterUpdatesOnly: !!tracking.filterUpdatesOnly,
+                groupFilter: tracking.groupFilter || 'all',
+                sort: tracking.sort || 'updates_first',
+                pinCurrent: tracking.pinCurrent !== false,
+                focusRecordId: tracking.focusRecordId || '',
+                lastOpenedId: tracking.lastOpenedId || '',
+                lastOpenedAt: tracking.lastOpenedAt || ''
+            },
+            collapsed: uiState.collapsed || {},
+            refreshResume: uiState.refresh_resume || null,
+            refreshRuntime: getTrackingRefreshRuntimeState()
+        });
+    }
 
     /** 胶囊用短相对时间：刚刚 / 5分钟前 / 3小时前 / 1天前 */
     function formatCompactRelativeTime(value) {
@@ -386,12 +445,11 @@
         document.getElementById('jlc-wb-fab')?.classList.add('is-panel-open');
         applyWorkbenchShellGeometry();
         persistWorkbenchSession({ panelOpen: true, nav });
-        activateWorkbenchNav(nav, { forceRender: true });
+        activateWorkbenchNav(nav, { forceRender: true, reuseIfUnchanged: true });
         const wantSettings = !!(mapped.settings || (compactText(tabId || '') ? false : session.settingsOpen));
         if (wantSettings || mapped.settings) {
             setWorkbenchSettingsOpen(true, mapped.section || session.settingsSection || '');
             syncWorkbenchSettingsForm();
-            void refreshLibraryUI();
         } else {
             setWorkbenchSettingsOpen(false);
         }
@@ -539,7 +597,18 @@
         const session = getWorkbenchSession();
         const context = getCurrentTrackingPageContext();
         const currentSignature = context?.query_signature || '';
-        const allRecords = (await getTrackingSearches()).filter(record => !record.archived);
+        const renderKey = buildWorkbenchTrackingRenderKey(session, context);
+        if (
+            options.reuseIfUnchanged
+            && root.firstElementChild
+            && workbenchTrackingRenderState.root === root
+            && workbenchTrackingRenderState.key === renderKey
+        ) {
+            restoreWorkbenchScroll({ scrollTop: preservedScrollTop });
+            return;
+        }
+        const recordsState = await getWorkbenchTrackingRecordsState();
+        const allRecords = recordsState.records.filter(record => !record.archived);
         let list = allRecords.slice();
 
         const query = compactText(session.tracking.query || '').toLowerCase();
@@ -645,11 +714,11 @@
             + '    <button type="button" class="jlc-wb-chip" data-jlc-wb-continue>继续上次</button>'
             + '  </div>'
             + (resumePendingIds.length
-                ? '  <div class="jlc-wb-toolbar-row" style="color:#fde68a;font-size:12px;">刷新已暂停 · 待验证后继续 ' + resumePendingIds.length + ' 项'
+                ? '  <div class="jlc-wb-toolbar-row jlc-wb-tracking-alert">刷新已暂停 · 待验证后继续 ' + resumePendingIds.length + ' 项'
                 + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-open-verify>去验证</button>'
                 + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-resume>验证后继续</button></div>'
                 : '')
-            + (useVirtual ? '  <div class="jlc-wb-toolbar-row" style="color:#93c5fd;font-size:11px;">虚拟列表已启用（' + list.length + ' 项）</div>' : '')
+            + (useVirtual ? '  <div class="jlc-wb-toolbar-row jlc-wb-virtual-note">虚拟列表已启用（' + list.length + ' 项）</div>' : '')
             + '</div>';
 
         const emptyHtml = '<div class="jlc-wb-empty">' + (context ? '没有匹配的追更项。可点底部「收藏当前搜索」。' : '还没有追更项，先在列表页收藏一个搜索吧。') + '</div>';
@@ -850,4 +919,5 @@
                 scrollIntoFocus: true
             });
         }
+        workbenchTrackingRenderState = { root, key: renderKey };
     }

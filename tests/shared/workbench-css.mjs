@@ -20,6 +20,32 @@ const scoutSiteThemeSource = fs.readFileSync(
   path.join(root, 'packages/scout-commander/src/parts/26-site-theme.js'),
   'utf8'
 );
+const exhPartsRoot = path.join(root, 'packages/exh-commander/src/parts');
+const exhManifest = JSON.parse(
+  fs.readFileSync(path.join(root, 'packages/exh-commander/src/parts.manifest.json'), 'utf8')
+);
+const workbenchTemplateSources = {
+  exh: exhManifest.parts
+    .filter((filename) => /^7\d-workbench(?:-|\.)/.test(filename))
+    .map((filename) => fs.readFileSync(path.join(exhPartsRoot, filename), 'utf8'))
+    .join('\n'),
+  jlcTracking: fs.readFileSync(
+    path.join(root, 'packages/jlc-commander/src/parts/21-workbench-tracking.js'),
+    'utf8'
+  ),
+  jlcSettings: fs.readFileSync(
+    path.join(root, 'packages/jlc-commander/src/parts/22-workbench-settings.js'),
+    'utf8'
+  ),
+  jlcShell: fs.readFileSync(
+    path.join(root, 'packages/jlc-commander/src/parts/23-workbench-shell.js'),
+    'utf8'
+  ),
+};
+
+function collectInlineStyleAttributes(templateSource) {
+  return Array.from(templateSource.matchAll(/\bstyle=(["'])(.*?)\1/g), (match) => match[2]);
+}
 
 function createDocument(withHead = true) {
   const children = [];
@@ -72,6 +98,17 @@ console.log('Shared workbench styles');
   assert.ok(css.includes('#jlc-wb .jlc-wb-view-title {'));
   assert.ok(css.includes('#jlc-wb .stat-box {'));
   assert.ok(css.includes('#jlc-wb .stat-item b {'));
+  [
+    '.jlc-wb-footer-actions {',
+    '.jlc-wb-toolbar-note {',
+    '.legacy-note.jlc-wb-intro-note,',
+    '.jlc-wb-form-actions {',
+    '.jlc-wb-field-grid {',
+    '.jlc-wb-block-action,',
+    '.legacy-note.jlc-wb-data-report {',
+  ].forEach((selector) => {
+    assert.ok(css.includes(selector), 'missing shared workbench component: ' + selector);
+  });
   assert.match(css, /#jlc-wb\s*\{[^}]*box-sizing:\s*border-box/s);
   assert.ok(css.includes('#jlc-wb-fab.is-panel-open'));
   assert.ok(!css.includes('#jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-title'));
@@ -203,4 +240,28 @@ console.log('Shared workbench styles');
   console.log('  OK  Scout site theme isolates native controls from the workbench');
 }
 
-console.log('Shared workbench style tests passed (6)');
+{
+  assert.deepEqual(
+    collectInlineStyleAttributes(workbenchTemplateSources.exh),
+    [],
+    'ExH workbench templates should keep static presentation in CSS'
+  );
+  assert.deepEqual(
+    collectInlineStyleAttributes(workbenchTemplateSources.jlcSettings),
+    [],
+    'JLC settings templates should keep static presentation in CSS'
+  );
+  assert.deepEqual(
+    collectInlineStyleAttributes(workbenchTemplateSources.jlcShell),
+    [],
+    'JLC shell templates should keep static presentation in CSS'
+  );
+  assert.deepEqual(
+    collectInlineStyleAttributes(workbenchTemplateSources.jlcTracking),
+    ["height:' + row.height + 'px", "min-height:' + row.height + 'px"],
+    'JLC tracking should only inline measured virtual-row geometry'
+  );
+  console.log('  OK  ExH and JLC templates keep presentation styles at the theme boundary');
+}
+
+console.log('Shared workbench style tests passed (7)');

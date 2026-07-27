@@ -12,6 +12,8 @@
             if (!Object.prototype.hasOwnProperty.call(next, key)) next[key] = rawConfig[key];
         });
         config = next;
+        refreshKnownPersonsFromSnapshot();
+        libraryDataRevision += 1;
         GM_setValue('jlc_config_stable', config);
         // 立刻回读校验是否真的写入油猴存储
         const verify = GM_getValue('jlc_config_stable');
@@ -195,6 +197,7 @@
             // 让出主线程，避免 50MB 备份卡死页面
             await new Promise(r => setTimeout(r, 0));
         }
+        invalidateIdbStoreSnapshot(storeName);
         return written;
     }
 

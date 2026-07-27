@@ -1956,6 +1956,9 @@ function getCreamuWorkbenchCss(options = {}) {
             display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
         }
         #jlc-wb .jlc-wb-footer-summary { font-size: 12.5px; color: var(--creamu-wb-text-muted); line-height: 1.45; max-width: 52%; }
+        #jlc-wb .jlc-wb-footer-actions {
+            display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        }
 
         #jlc-wb .jlc-wb-toolbar {
             flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px;
@@ -1963,6 +1966,9 @@ function getCreamuWorkbenchCss(options = {}) {
             position: static;
         }
         #jlc-wb .jlc-wb-toolbar-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        #jlc-wb .jlc-wb-toolbar-note {
+            color: var(--creamu-wb-text-muted); font-size: 12.5px; line-height: 1.45;
+        }
         #jlc-wb .jlc-wb-list-scroll {
             flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto;
             /* 底边留白：少条目时「更多」菜单向下仍有空间；仍不够时 JS 会 is-up 上翻 */
@@ -2210,6 +2216,24 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .legacy-note,
         #jlc-wb .jlc-wb-settings .legacy-note { font-size: 13px; color: var(--creamu-wb-text-muted); line-height: 1.55; margin-top: 8px; }
+        #jlc-wb .legacy-note.jlc-wb-intro-note,
+        #jlc-wb .jlc-wb-settings .legacy-note.jlc-wb-intro-note { margin: 0 0 10px; }
+        #jlc-wb .jlc-wb-status-note { margin: 4px 0 0; }
+        #jlc-wb .jlc-wb-scroll-note { max-height: 140px; overflow: auto; }
+        #jlc-wb .jlc-wb-note-summary { margin-bottom: 4px; }
+        #jlc-wb .jlc-wb-title-link { color: inherit; text-decoration: none; }
+        #jlc-wb .jlc-wb-inline-form { display: flex; gap: 6px; align-items: stretch; }
+        #jlc-wb .jlc-wb-inline-form input {
+            flex: 1 1 auto; min-width: 0; width: auto; margin-top: 0;
+        }
+        #jlc-wb #jlc-wb-library-root .jlc-wb-inline-form input[type="text"] {
+            flex: 1 1 auto; min-width: 0; width: auto; margin-top: 0;
+        }
+        #jlc-wb .jlc-wb-list-stack { margin-top: 10px; }
+        #jlc-wb .jlc-wb-range-head {
+            display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px;
+        }
+        #jlc-wb .jlc-wb-range-value { color: var(--creamu-wb-accent); }
         #jlc-wb .jlc-wb-view-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
         #jlc-wb .jlc-wb-view-actions .jlc-wb-btn { width: 100%; justify-content: center; }
 
@@ -2243,6 +2267,27 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-settings-section.is-active { display: block; }
         #jlc-wb .jlc-wb-settings h3 {
             margin: 0 0 12px; font-size: 13px; color: var(--creamu-wb-accent); letter-spacing: 1px; text-transform: uppercase;
+        }
+        #jlc-wb .jlc-wb-settings h3.jlc-wb-section-title { margin-top: 16px; }
+        #jlc-wb .jlc-wb-form-actions {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+        }
+        #jlc-wb .jlc-wb-form-actions > .jlc-wb-btn {
+            flex: 1 1 120px; min-width: 0; justify-content: center;
+        }
+        #jlc-wb .jlc-wb-field-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-top: 6px;
+        }
+        #jlc-wb .jlc-wb-field-grid > * { min-width: 0; }
+        #jlc-wb .jlc-wb-block-action,
+        #jlc-wb .jlc-wb-save-action {
+            width: 100%; justify-content: center;
+        }
+        #jlc-wb .jlc-wb-block-action { margin-top: 8px; }
+        #jlc-wb .jlc-wb-save-action { margin-top: 14px; }
+        #jlc-wb .jlc-wb-settings .legacy-note.jlc-wb-data-report {
+            margin-top: 10px; white-space: pre-wrap; word-break: break-word;
+            max-height: 220px; overflow: auto; font-size: 12px; line-height: 1.45;
         }
         #jlc-wb .jlc-wb-settings label,
         #jlc-wb #jlc-wb-library-root label,
@@ -2339,6 +2384,7 @@ function getCreamuWorkbenchCss(options = {}) {
             flex: 0 0 auto; border-top: 1px solid var(--creamu-wb-divider); padding: 12px 14px; background: var(--creamu-wb-surface-soft);
             display: flex; flex-direction: column; gap: 8px;
         }
+        #jlc-wb .jlc-wb-settings-footer .jlc-wb-btn { width: 100%; justify-content: center; }
 
         #jlc-wb .jlc-wb-settings input[type="number"] {
             -moz-appearance: textfield;
@@ -4904,7 +4950,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
   }
 
-  async function upsertListEditions(partials) {
+  async function upsertEditionsWithSnapshot(partials) {
     const input = Array.from(partials || []);
     if (!input.length) {
       return { editions: [], snapshot: indexListStorageSnapshot({ works: [], editions: [], archives: [], links: [] }) };
@@ -5748,8 +5794,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return Array.from(all || []).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
   }
 
-  async function listTrackingSearches() {
-    const all = await idbGetAll(STORE_TRACKING);
+  async function listTrackingSearches(preloadedRows) {
+    const all = Array.isArray(preloadedRows)
+      ? preloadedRows
+      : await idbGetAll(STORE_TRACKING);
     const live = (all || []).filter((r) => !r.archived);
     // 同 site + 同搜索词的历史重复项：列表时合并（保留有断点/较新的）
     const byKey = new Map();
@@ -5801,6 +5849,31 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return (rows || []).find((r) => !r.archived) || null;
   }
 
+  async function loadTrackingRowsForContext(sig) {
+    const d = await openDb();
+    const tx = d.transaction(STORE_TRACKING, 'readonly');
+    const store = tx.objectStore(STORE_TRACKING);
+    return new Promise((resolve, reject) => {
+      let result = null;
+      tx.oncomplete = () => resolve(result || { exact: null, rows: [] });
+      tx.onerror = () => reject(tx.error || new Error('tracking lookup failed'));
+      tx.onabort = () => reject(tx.error || new Error('tracking lookup aborted'));
+
+      const exactRequest = store.index('query_signature').getAll(sig);
+      exactRequest.onsuccess = () => {
+        const exact = (exactRequest.result || []).find((record) => !record.archived) || null;
+        if (exact) {
+          result = { exact, rows: null };
+          return;
+        }
+        const allRequest = store.getAll();
+        allRequest.onsuccess = () => {
+          result = { exact: null, rows: allRequest.result || [] };
+        };
+      };
+    });
+  }
+
   function trackingFSearchKey(s) {
     if (typeof normalizeTrackingFSearch === 'function') return normalizeTrackingFSearch(s);
     return compactText(s)
@@ -5813,14 +5886,25 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
    * 按上下文找追更：先精确签名，再按 site+f_search 软匹配（吞掉旧版噪声签名重复）。
    * 若命中多条重复，合并进一条并删其余。
    */
-  async function findTrackingForContext(context) {
+  async function findTrackingForContext(context, preloadedRecords) {
     if (!context) return null;
     const sig = context.query_signature || '';
+    const hasPreloadedRecords = Array.isArray(preloadedRecords);
+    let all = hasPreloadedRecords ? preloadedRecords : null;
     if (sig) {
-      const exact = await getTrackingBySignature(sig);
+      let exact = null;
+      if (hasPreloadedRecords) {
+        exact = preloadedRecords.find(
+          (record) => record && !record.archived && record.query_signature === sig
+        ) || null;
+      } else {
+        const loaded = await loadTrackingRowsForContext(sig);
+        exact = loaded.exact;
+        if (!exact) all = await listTrackingSearches(loaded.rows);
+      }
       if (exact) return exact;
     }
-    const all = await listTrackingSearches();
+    if (!all) all = await listTrackingSearches();
     if (!all.length) return null;
     const site = context.site || '';
     const fs = trackingFSearchKey(context.f_search || '');
@@ -11665,7 +11749,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     if (!bar.parentNode) document.body.appendChild(bar);
   }
 
-  function injectTrackingBar() {
+  function refreshTrackingBarFrom(preloaded) {
+    const pending = preloaded
+      ? Promise.resolve(preloaded).then((state) => refreshTrackingBarState(state))
+      : refreshTrackingBarState();
+    void pending.catch(() => {});
+  }
+
+  function injectTrackingBar(preloaded) {
     const ctx = parseExhPageContext(location.href);
     let bar = document.getElementById('exc-tracking-bar');
     if (!ctx || !ctx.trackable) {
@@ -11680,6 +11771,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     // 同一 signature 不重建 DOM，只校正挂载位置。
     if (bar.dataset.sig === ctx.query_signature && bar.dataset.ready === '1') {
       mountTrackingBar(bar);
+      refreshTrackingBarFrom(preloaded);
       return;
     }
 
@@ -11739,7 +11831,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
       };
     }
-    void refreshTrackingBarState();
+    refreshTrackingBarFrom(preloaded);
   }
 
   async function refreshTrackingBarState(preloaded) {
@@ -11753,6 +11845,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const untrack = document.getElementById('exc-untrack');
     const meta = document.getElementById('exc-track-meta');
     if (!ctx || !ctx.trackable || !bar || !btn) return;
+    if (bar.dataset.sig && ctx.query_signature && bar.dataset.sig !== ctx.query_signature) return;
 
     const rec = preloaded && preloaded.resolved
       ? preloaded.record || null
@@ -12211,7 +12304,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     opts = opts || {};
     const partial = parseGalleryPage();
     if (!partial) return null;
-    const edition = await upsertEdition(partial);
+    const prepared = await upsertEditionsWithSnapshot([partial]);
+    const edition = prepared.editions[0];
+    if (!edition) return null;
     try {
       markGallerySeen(edition.gid);
     } catch (_) { /* ignore */ }
@@ -12221,10 +12316,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     } catch (e) {
       console.warn('[ExC] auto bp', e);
     }
-    const [storageSnapshot, prog] = await Promise.all([
-      loadLibraryStorageSnapshot(),
-      getProgress(edition.work_id),
-    ]);
+    const storageSnapshot = prepared.snapshot;
     const work = storageSnapshot.worksById.get(edition.work_id) || null;
     const lib = await resolveLibraryState(edition, storageSnapshot);
     let siblings = storageSnapshot.editionsByWork.get(edition.work_id) || [];
@@ -12480,6 +12572,28 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
   }
 
+  async function resolveListTrackingState(pageContext, preloaded) {
+    if (preloaded) {
+      try {
+        const state = await preloaded;
+        if (
+          state &&
+          state.resolved === true &&
+          state.context &&
+          state.context.query_signature === (pageContext && pageContext.query_signature)
+        ) {
+          return state;
+        }
+      } catch (_) { /* retry below */ }
+    }
+    return {
+      context: pageContext,
+      record: await loadListTrackingRecord(pageContext),
+      records: null,
+      resolved: true,
+    };
+  }
+
   function getCurrentListRuntimeItems() {
     return queryListItems()
       .map((el) => listItemRuntimeState.get(el))
@@ -12489,6 +12603,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   async function enhanceListPageNow(options) {
     const opts = options || {};
     bindListLiveRefresh();
+    const pageContext = parseExhPageContext(location.href);
+    const trackingStatePromise = resolveListTrackingState(pageContext, opts.trackingState);
     const allItems = Array.from(opts.items || queryListItems()).filter(
       (el) => el && el.isConnected !== false
     );
@@ -12500,21 +12616,21 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
 
     if (!entries.length) {
-      if (!document.getElementById('exc-tracking-bar')) injectTrackingBar();
+      injectTrackingBar(trackingStatePromise);
       if (opts.reapplyFold) applyWorkFold(getCurrentListRuntimeItems());
       return 0;
     }
 
-    injectTrackingBar();
+    injectTrackingBar(trackingStatePromise);
     let prepared = null;
     try {
-      prepared = await upsertListEditions(entries.map((entry) => entry.partial));
+      prepared = await upsertEditionsWithSnapshot(entries.map((entry) => entry.partial));
     } catch (error) {
       console.warn('[ExC] batch list storage', error);
     }
 
-    const pageContext = parseExhPageContext(location.href);
-    const trackingRecord = await loadListTrackingRecord(pageContext);
+    const trackingState = await trackingStatePromise;
+    const trackingRecord = trackingState.record || null;
     const seenGids = loadSeenGids();
     const enhanced = [];
 
@@ -12816,12 +12932,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return fab;
   }
 
-  async function updateFabBadge() {
+  async function updateFabBadge(preloaded) {
     const fab = document.getElementById('jlc-wb-fab');
     if (!fab) return;
     const badge = fab.querySelector('.jlc-wb-fab-badge');
     try {
-      const list = await listTrackingSearches();
+      const state = preloaded ? await preloaded : null;
+      const list = state && Array.isArray(state.records)
+        ? state.records
+        : await listTrackingSearches();
       // 含 top≠断点：打开列表会清 has_update，但不能因此丢掉角标
       const n = list.filter((r) =>
         typeof trackingHasPendingUpdate === 'function' ? trackingHasPendingUpdate(r) : !!r.has_update
@@ -12863,7 +12982,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       '</div>' +
       '<div class="jlc-wb-footer">' +
       '  <div class="jlc-wb-footer-summary" id="jlc-wb-footer-summary">—</div>' +
-      '  <div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+      '  <div class="jlc-wb-footer-actions">' +
       '    <button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">⭐ 收藏当前</button>' +
       '    <button type="button" class="jlc-wb-btn ghost" id="exc-check-updates" title="默认只查首页（快）；可在设置开启跨页精确未读。条目间隔 5～10 秒">检查更新</button>' +
       '    <button type="button" class="jlc-wb-btn ghost" id="exc-sync-all" title="同时同步 WebDAV 与 LRR（已配置的项）">同步</button>' +
@@ -12962,7 +13081,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
   function settingsSaveFooter() {
     return (
-      '<button type="button" class="jlc-wb-btn primary" id="exc-cfg-save" style="width:100%;margin-top:14px;">💾 保存本页</button>'
+      '<button type="button" class="jlc-wb-btn primary jlc-wb-save-action" id="exc-cfg-save">💾 保存本页</button>'
     );
   }
 
@@ -13465,7 +13584,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         .join('') +
       '    </select>' +
       '  </div>' +
-      '  <div class="jlc-wb-toolbar-row" style="color:#9a7d60;font-size:12.5px;line-height:1.45">' +
+      '  <div class="jlc-wb-toolbar-row jlc-wb-toolbar-note">' +
       '分组靠手动：菜单「设分类」。未设的在「未分类」。自由词搜索不再自动拆组。检查更新间隔 5～10 秒。' +
       '  </div>' +
       '</div>' +
@@ -14105,7 +14224,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     root.innerHTML =
       '<div class="jlc-wb-toolbar">' +
       '  <div class="jlc-wb-toolbar-row" id="exc-work-chips"></div>' +
-      '  <div class="jlc-wb-toolbar-row" style="color:#9a7d60;font-size:12.5px">在库=同步后的 LRR 档案；有更好版/抛弃依赖已浏览作品。搜索收藏请用「追更」。</div>' +
+      '  <div class="jlc-wb-toolbar-row jlc-wb-toolbar-note">在库=同步后的 LRR 档案；有更好版/抛弃依赖已浏览作品。搜索收藏请用「追更」。</div>' +
       '</div>' +
       '<div class="jlc-wb-list-scroll" id="jlc-wb-works-scroll"></div>';
 
@@ -14180,7 +14299,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           escapeHtml(w.work_id) +
           '">' +
           '<div class="jlc-wb-item-title">' +
-          (url ? '<a href="' + escapeHtml(url) + '" style="color:inherit;text-decoration:none">' + escapeHtml(title) + '</a>' : escapeHtml(title)) +
+          (url ? '<a href="' + escapeHtml(url) + '" class="jlc-wb-title-link">' + escapeHtml(title) + '</a>' : escapeHtml(title)) +
           '</div>' +
           '<div class="jlc-wb-item-actions">' +
           '<button type="button" class="jlc-wb-btn primary" data-wact="best">最佳版</button>' +
@@ -14257,7 +14376,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const chunks = [];
     if (total > limit) {
       chunks.push(
-        '<div class="legacy-note" style="margin:0 0 8px">共 ' +
+        '<div class="legacy-note jlc-wb-intro-note">共 ' +
           total +
           ' 本，先显示前 ' +
           limit +
@@ -14366,8 +14485,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         '<section class="jlc-wb-settings-section is-active">' +
         '<h3>一键同步</h3>' +
         '<div class="legacy-note">工作台底部「同步」= WebDAV + LRR（已配置的项）。本页可单独配置与触发。</div>' +
-        '<button type="button" class="jlc-wb-btn primary" id="exc-cfg-sync-both" style="width:100%;margin-top:8px;">同步 WebDAV + LRR</button>' +
-        '<h3 style="margin-top:18px">WebDAV</h3>' +
+        '<button type="button" class="jlc-wb-btn primary jlc-wb-block-action" id="exc-cfg-sync-both">同步 WebDAV + LRR</button>' +
+        '<h3 class="jlc-wb-section-title">WebDAV</h3>' +
         '<div class="legacy-note">坚果云 / Nextcloud 等。读写 {路径}/exh.vault.json。请用应用密码。</div>' +
         '<label>地址</label><input id="exc-cfg-wd-url" type="text" value="' +
         escapeHtml(config.webdav_url || '') +
@@ -14387,7 +14506,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         '<div class="legacy-row legacy-toggle"><span>打开页面时自动同步 WebDAV</span><input type="checkbox" id="exc-cfg-wd-auto" ' +
         (config.webdav_auto !== false ? 'checked' : '') +
         '></div>' +
-        '<label>冲突策略</label><select id="exc-cfg-wd-conflict" class="jlc-wb-select" style="width:100%;margin-top:6px;">' +
+        '<label>冲突策略</label><select id="exc-cfg-wd-conflict" class="jlc-wb-select">' +
         '<option value="ask"' +
         (conf === 'ask' ? ' selected' : '') +
         '>询问</option>' +
@@ -14398,18 +14517,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         (conf === 'local' ? ' selected' : '') +
         '>本机优先</option>' +
         '</select>' +
-        '<div class="legacy-note" id="exc-wd-status" style="margin-top:8px;">' +
+        '<div class="legacy-note" id="exc-wd-status">' +
         escapeHtml(syncStatus) +
         '</div>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' +
-        '<button type="button" class="jlc-wb-btn ghost" id="exc-wd-test" style="flex:1">测试连接</button>' +
-        '<button type="button" class="jlc-wb-btn ghost" id="exc-wd-sync" style="flex:1">仅同步 WebDAV</button>' +
+        '<div class="jlc-wb-form-actions">' +
+        '<button type="button" class="jlc-wb-btn ghost" id="exc-wd-test">测试连接</button>' +
+        '<button type="button" class="jlc-wb-btn ghost" id="exc-wd-sync">仅同步 WebDAV</button>' +
         '</div>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">' +
-        '<button type="button" class="jlc-wb-btn ghost" id="exc-wd-push" style="flex:1">强制推送</button>' +
-        '<button type="button" class="jlc-wb-btn ghost" id="exc-wd-pull" style="flex:1">强制拉取</button>' +
+        '<div class="jlc-wb-form-actions">' +
+        '<button type="button" class="jlc-wb-btn ghost" id="exc-wd-push">强制推送</button>' +
+        '<button type="button" class="jlc-wb-btn ghost" id="exc-wd-pull">强制拉取</button>' +
         '</div>' +
-        '<h3 style="margin-top:18px">LANraragi</h3>' +
+        '<h3 class="jlc-wb-section-title">LANraragi</h3>' +
         '<div class="legacy-note">' +
         (st.configured
           ? st.last_error
@@ -14436,7 +14555,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         '<div class="legacy-row legacy-toggle"><span>结构指纹自动链接</span><input type="checkbox" id="exc-cfg-struct" ' +
         (config.auto_link_structural ? 'checked' : '') +
         '></div>' +
-        '<button type="button" class="jlc-wb-btn ghost" id="exc-cfg-lrr-sync-now" style="width:100%;margin-top:10px;">仅同步 LRR</button>' +
+        '<button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="exc-cfg-lrr-sync-now">仅同步 LRR</button>' +
         settingsSaveFooter() +
         '</section>';
       bindSyncSettingsHandlers(body);
@@ -14465,16 +14584,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         '<div class="legacy-row legacy-toggle"><span>列表打开画廊用新标签页</span><input type="checkbox" id="exc-cfg-list-newtab" ' +
         (config.list_open_in_new_tab ? 'checked' : '') +
         '></div>' +
-        '<div class="legacy-note" style="margin:0 0 8px">开启后，列表点作品默认 target=_blank（站点本身是本页打开）。</div>' +
+        '<div class="legacy-note jlc-wb-intro-note">开启后，列表点作品默认 target=_blank（站点本身是本页打开）。</div>' +
         '<div class="legacy-row legacy-toggle"><span>列表显示重点标签流</span><input type="checkbox" id="exc-cfg-tag-stream" ' +
         (config.list_show_tag_stream !== false ? 'checked' : '') +
         '></div>' +
         '<label>标签流最多条数</label><input id="exc-cfg-tag-stream-max" type="number" min="1" max="8" step="1" value="' +
         escapeHtml(String(Math.max(1, Math.min(8, Number(config.list_tag_stream_max) || 4)))) +
         '">' +
-        '<div class="legacy-note" style="margin:0 0 8px">标签流只补标题/熟人看不出的信息：无码·全彩·内容(mother…)·角色。画师/组仅熟人徽章；在库用绿框+徽章，不进标签流。</div>' +
+        '<div class="legacy-note jlc-wb-intro-note">标签流只补标题/熟人看不出的信息：无码·全彩·内容(mother…)·角色。画师/组仅熟人徽章；在库用绿框+徽章，不进标签流。</div>' +
         '<label>折叠时主显示版本</label>' +
-        '<select id="exc-cfg-fold-mode" class="jlc-wb-select" style="width:100%;margin-top:6px;">' +
+        '<select id="exc-cfg-fold-mode" class="jlc-wb-select">' +
         '<option value="preference"' +
         (foldMode === 'preference' ? ' selected' : '') +
         '>偏好最佳（语言→码级→体积→汉化组→页数）</option>' +
@@ -14485,23 +14604,23 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         (foldMode === 'list_order' ? ' selected' : '') +
         '>列表原序（页面里更靠前）</option>' +
         '</select>' +
-        '<div class="legacy-note" style="margin-top:8px">「偏好最佳」与打开最佳版一致；「最新」看 posted；「列表原序」保留站点排序。</div>' +
+        '<div class="legacy-note">「偏好最佳」与打开最佳版一致；「最新」看 posted；「列表原序」保留站点排序。</div>' +
         '<div class="legacy-row legacy-toggle"><span>自动聚类</span><input type="checkbox" id="exc-cfg-auto-cluster" ' +
         (config.auto_cluster ? 'checked' : '') +
         '></div>' +
-        '<h3 style="margin-top:16px">库内对照容差</h3>' +
+        '<h3 class="jlc-wb-section-title">库内对照容差</h3>' +
         '<div class="legacy-note">页数/体积容差：超容差只标打包差异，不判更优。</div>' +
         '<label>页数容差比例（%）</label><input id="exc-cfg-page-tol-pct" type="number" min="0" max="100" step="1" value="' +
         escapeHtml(String(Math.round((Number(config.pages_tolerance_ratio) || 0.1) * 100))) +
         '">' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">' +
-        '<div style="flex:1;min-width:100px"><label>页数容差最小</label><input id="exc-cfg-page-tol-min" type="number" min="0" step="1" value="' +
+        '<div class="jlc-wb-field-grid">' +
+        '<div><label>页数容差最小</label><input id="exc-cfg-page-tol-min" type="number" min="0" step="1" value="' +
         escapeHtml(String(Number(config.pages_tolerance_min) || 1)) +
         '"></div>' +
-        '<div style="flex:1;min-width:100px"><label>页数容差最大</label><input id="exc-cfg-page-tol-max" type="number" min="1" step="1" value="' +
+        '<div><label>页数容差最大</label><input id="exc-cfg-page-tol-max" type="number" min="1" step="1" value="' +
         escapeHtml(String(Number(config.pages_tolerance_max) || 25)) +
         '"></div></div>' +
-        '<label style="margin-top:8px">体积容差比例（%）</label><input id="exc-cfg-size-tol-pct" type="number" min="0" max="100" step="1" value="' +
+        '<label>体积容差比例（%）</label><input id="exc-cfg-size-tol-pct" type="number" min="0" max="100" step="1" value="' +
         escapeHtml(String(Math.round((Number(config.size_tolerance_ratio) || 0.12) * 100))) +
         '">' +
         '<label>体积容差最小（MB）</label><input id="exc-cfg-size-tol-mb" type="number" min="0" step="0.5" value="' +
@@ -14520,11 +14639,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         '<section class="jlc-wb-settings-section is-active">' +
         '<h3>心动标签</h3>' +
         '<div class="legacy-note">逗号分隔。中英文都可：「母」「mother」「巨乳」等会扩别名。极简列表若无标签，需标题里出现关键词，或先点开过该本（会缓存标签）。命中后橙框 + ♥。</div>' +
-        '<textarea id="exc-cfg-fav-tags" rows="3" style="width:100%;margin-top:6px;border-radius:12px;border:1px solid #e4d4bc;padding:10px;background:#fff;color:#4a3728" placeholder="母, mother, 巨乳, pantyhose">' +
+        '<textarea id="exc-cfg-fav-tags" rows="3" placeholder="母, mother, 巨乳, pantyhose">' +
         escapeHtml((config.fav_tags || []).join(', ')) +
         '</textarea>' +
-        '<h3 style="margin-top:16px">过滤 / 屏蔽</h3>' +
-        '<label>屏蔽标签</label><textarea id="exc-cfg-hate-tags" rows="2" style="width:100%;margin-top:6px;border-radius:12px;border:1px solid #e4d4bc;padding:10px;background:#fff;color:#4a3728">' +
+        '<h3 class="jlc-wb-section-title">过滤 / 屏蔽</h3>' +
+        '<label>屏蔽标签</label><textarea id="exc-cfg-hate-tags" rows="2">' +
         escapeHtml((config.hate_tags || []).join(', ')) +
         '</textarea>' +
         '<label>标题屏蔽词</label><input id="exc-cfg-title-kw" type="text" value="' +
@@ -14533,8 +14652,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         '<div class="legacy-row legacy-toggle"><span>隐藏已屏蔽条目</span><input type="checkbox" id="exc-cfg-hide-block" ' +
         (config.hide_blocked ? 'checked' : '') +
         '></div>' +
-        '<h3 style="margin-top:16px">熟人（画师 / 团队）</h3>' +
-        '<div class="stat-box" style="margin-bottom:10px">' +
+        '<h3 class="jlc-wb-section-title">熟人（画师 / 团队）</h3>' +
+        '<div class="stat-box">' +
         '<div class="stat-item"><b>' +
         (radar.artistList || []).length +
         '</b><span>画师</span></div>' +
@@ -14548,15 +14667,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         '</b><span>LRR汇总</span></div>' +
         '</div>' +
         '<div class="legacy-note">同步 LRR / 点「刷新熟人」只汇总档案里带 <b>artist:</b> / <b>group:</b> 的标签。名单里没有的名字（如 emori uki）不会点亮——请确认 LRR 该本有 artist 标签，或手动加到手动画师。画师与团队已去重（同名优先算画师）。</div>' +
-        '<label>手动画师（补 LRR 没打上的）</label><textarea id="exc-cfg-custom-artists" rows="2" style="width:100%;margin-top:6px;border-radius:12px;border:1px solid #e4d4bc;padding:10px;background:#fff;color:#4a3728" placeholder="emori uki, other artist">' +
+        '<label>手动画师（补 LRR 没打上的）</label><textarea id="exc-cfg-custom-artists" rows="2" placeholder="emori uki, other artist">' +
         escapeHtml((config.custom_artists || []).join(', ')) +
         '</textarea>' +
-        '<label>手动团队/汉化组</label><textarea id="exc-cfg-custom-groups" rows="2" style="width:100%;margin-top:6px;border-radius:12px;border:1px solid #e4d4bc;padding:10px;background:#fff;color:#4a3728" placeholder="group name">' +
+        '<label>手动团队/汉化组</label><textarea id="exc-cfg-custom-groups" rows="2" placeholder="group name">' +
         escapeHtml((config.custom_groups || []).join(', ')) +
         '</textarea>' +
-        '<button type="button" class="jlc-wb-btn ghost" id="exc-cfg-rebuild-familiar" style="width:100%;margin-top:10px;">从本地 LRR 库刷新熟人</button>' +
-        '<div id="exc-fam-preview" class="legacy-note" style="margin-top:8px;max-height:140px;overflow:auto">' +
-        '<div style="margin-bottom:4px"><b>画师 ' +
+        '<button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="exc-cfg-rebuild-familiar">从本地 LRR 库刷新熟人</button>' +
+        '<div id="exc-fam-preview" class="legacy-note jlc-wb-scroll-note">' +
+        '<div class="jlc-wb-note-summary"><b>画师 ' +
         (radar.artistList || []).length +
         '</b> · <b>团队 ' +
         (radar.groupList || []).length +
@@ -14605,10 +14724,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       body.innerHTML =
         '<section class="jlc-wb-settings-section is-active">' +
         '<h3>备份</h3>' +
-        '<div class="legacy-note" style="margin-bottom:10px;">导出/导入本机追更、配置、作品状态等。WebDAV 请到「同步」页。</div>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-        '<button type="button" class="jlc-wb-btn ghost" id="exc-export" style="flex:1">导出到剪贴板</button>' +
-        '<button type="button" class="jlc-wb-btn ghost" id="exc-import" style="flex:1">从 JSON 导入</button>' +
+        '<div class="legacy-note jlc-wb-intro-note">导出/导入本机追更、配置、作品状态等。WebDAV 请到「同步」页。</div>' +
+        '<div class="jlc-wb-form-actions">' +
+        '<button type="button" class="jlc-wb-btn ghost" id="exc-export">导出到剪贴板</button>' +
+        '<button type="button" class="jlc-wb-btn ghost" id="exc-import">从 JSON 导入</button>' +
         '</div>' +
         '</section>';
       const exp = body.querySelector('#exc-export');
@@ -14643,8 +14762,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         (config.cream_site_theme ? 'checked' : '') +
         '></div>' +
         '<div class="legacy-note">e/exhentai 页面奶油底色。可随时关。</div>' +
-        '<label style="margin-top:12px">详情页缩略图倍率</label>' +
-        '<select id="exc-cfg-gdt-scale" class="jlc-wb-select" style="width:100%;margin-top:6px;">' +
+        '<label>详情页缩略图倍率</label>' +
+        '<select id="exc-cfg-gdt-scale" class="jlc-wb-select">' +
         [1, 1.25, 1.5, 1.75, 2]
           .map((s) => {
             const cur = clampGalleryThumbScale(config.gallery_thumb_scale);
@@ -14655,11 +14774,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           })
           .join('') +
         '</select>' +
-        '<h3 style="margin-top:16px">列表悬停预览</h3>' +
+        '<h3 class="jlc-wb-section-title">列表悬停预览</h3>' +
         '<div class="legacy-row legacy-toggle"><span>悬停显示前几张</span><input type="checkbox" id="exc-cfg-hover-preview" ' +
         (config.list_hover_preview !== false ? 'checked' : '') +
         '></div>' +
-        '<label>预览张数</label><select id="exc-cfg-hover-count" class="jlc-wb-select" style="width:100%;margin-top:6px;">' +
+        '<label>预览张数</label><select id="exc-cfg-hover-count" class="jlc-wb-select">' +
         [3, 4, 5, 6, 8]
           .map((n) => {
             const cur = clampHoverPreviewCount(config.list_hover_preview_count);
@@ -14675,7 +14794,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           })
           .join('') +
         '</select>' +
-        '<label>悬停延迟</label><select id="exc-cfg-hover-delay" class="jlc-wb-select" style="width:100%;margin-top:6px;">' +
+        '<label>悬停延迟</label><select id="exc-cfg-hover-delay" class="jlc-wb-select">' +
         [500, 1000, 2000, 3000, 4000, 5000]
           .map((n) => {
             const cur = clampHoverPreviewDelay(config.list_hover_preview_delay_ms);
@@ -14695,19 +14814,19 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           })
           .join('') +
         '</select>' +
-        '<h3 style="margin-top:16px">追更检查更新</h3>' +
+        '<h3 class="jlc-wb-section-title">追更检查更新</h3>' +
         '<div class="legacy-note">默认只请求每条追更的<strong>首页</strong>（与改跨页扫描前一样快）。断点不在首页时用断点页码估算未读（显示 +N+）。开启「跨页精确未读」才会向后翻页计数，会明显变慢。</div>' +
-        '<div class="legacy-row legacy-toggle" style="margin-top:8px"><span>跨页精确未读（较慢）</span><input type="checkbox" id="exc-cfg-deep-scan" ' +
+        '<div class="legacy-row legacy-toggle"><span>跨页精确未读（较慢）</span><input type="checkbox" id="exc-cfg-deep-scan" ' +
         (config.tracking_unread_deep_scan === true ? 'checked' : '') +
         '></div>' +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">' +
-        '<div style="flex:1;min-width:100px"><label>条目间隔最小（秒）</label><input id="exc-cfg-chk-lo" type="number" min="2" max="60" step="1" value="' +
+        '<div class="jlc-wb-field-grid">' +
+        '<div><label>条目间隔最小（秒）</label><input id="exc-cfg-chk-lo" type="number" min="2" max="60" step="1" value="' +
         escapeHtml(String(Math.round((Number(config.tracking_check_interval_min_ms) || 5000) / 1000))) +
         '"></div>' +
-        '<div style="flex:1;min-width:100px"><label>条目间隔最大（秒）</label><input id="exc-cfg-chk-hi" type="number" min="2" max="120" step="1" value="' +
+        '<div><label>条目间隔最大（秒）</label><input id="exc-cfg-chk-hi" type="number" min="2" max="120" step="1" value="' +
         escapeHtml(String(Math.round((Number(config.tracking_check_interval_max_ms) || 10000) / 1000))) +
         '"></div>' +
-        '<div style="flex:1;min-width:100px"><label>精确扫描最多页数</label><input id="exc-cfg-scan-pages" type="number" min="1" max="40" step="1" value="' +
+        '<div><label>精确扫描最多页数</label><input id="exc-cfg-scan-pages" type="number" min="1" max="40" step="1" value="' +
         escapeHtml(String(Math.max(1, Math.min(40, Number(config.tracking_unread_scan_max_pages) || 12)))) +
         '"></div></div>' +
         settingsSaveFooter() +
@@ -14883,9 +15002,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     window.__excRefreshPage = () => {
       refreshCurrentPageUi().catch(() => {});
     };
-    // 仅在列表真·首页回写 top；next=/深页不污染「最新」
     const ctx = parseExhPageContext(location.href);
-    if (ctx && ctx.trackable) {
+    const trackingState = (async () => {
+      const records = await listTrackingSearches();
+      const rec = ctx && ctx.trackable
+        ? await findTrackingForContext(ctx, records)
+        : null;
+      if (!rec) return { context: ctx, record: null, records, resolved: true };
+
+      // 仅在列表真·首页回写 top；next=/深页不污染「最新」
       const pageState =
         typeof getListPageState === 'function'
           ? getListPageState(location.href, document)
@@ -14894,36 +15019,31 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const isFirst =
         pageState.isFirst === true ||
         ctx.page_is_first === true;
-      const finder =
-        typeof findTrackingForContext === 'function'
-          ? findTrackingForContext(ctx)
-          : getTrackingBySignature(ctx.query_signature);
-      finder.then((rec) => {
-        if (!rec) return;
-        rec.last_browsed_at = nowMs();
-        rec.last_page = pageIdx;
-        if (rec.open_url && typeof canonicalizeTrackingOpenUrl === 'function') {
-          const canon = canonicalizeTrackingOpenUrl(rec.open_url);
-          if (rec.open_url !== canon) {
-            rec.open_url = canon;
-            rec.page_url = canon;
-          }
+      rec.last_browsed_at = nowMs();
+      rec.last_page = pageIdx;
+      if (rec.open_url && typeof canonicalizeTrackingOpenUrl === 'function') {
+        const canon = canonicalizeTrackingOpenUrl(rec.open_url);
+        if (rec.open_url !== canon) {
+          rec.open_url = canon;
+          rec.page_url = canon;
         }
-        // ctx.top_gid 仅首页有值；再加 isFirst 双保险
-        if (isFirst && ctx.top_gid) {
-          if (rec.top_gid && rec.top_gid !== ctx.top_gid) {
-            rec.has_update = 1;
-            rec.prev_top_gid = rec.top_gid;
-          }
-          rec.top_gid = ctx.top_gid;
-          if (ctx.top_title) rec.top_title = compactText(ctx.top_title).slice(0, 160);
-          if (ctx.top_posted_at) rec.top_posted_at = Number(ctx.top_posted_at) || 0;
-          if (ctx.top_cover) applyTrackingCoverFields(rec, ctx.top_cover);
+      }
+      // ctx.top_gid 仅首页有值；再加 isFirst 双保险
+      if (isFirst && ctx.top_gid) {
+        if (rec.top_gid && rec.top_gid !== ctx.top_gid) {
+          rec.has_update = 1;
+          rec.prev_top_gid = rec.top_gid;
         }
-        saveTrackingRecord(rec).then(() => updateFabBadge());
-      });
-    }
-    updateFabBadge();
+        rec.top_gid = ctx.top_gid;
+        if (ctx.top_title) rec.top_title = compactText(ctx.top_title).slice(0, 160);
+        if (ctx.top_posted_at) rec.top_posted_at = Number(ctx.top_posted_at) || 0;
+        if (ctx.top_cover) applyTrackingCoverFields(rec, ctx.top_cover);
+      }
+      void saveTrackingRecord(rec).catch(() => {});
+      return { context: ctx, record: rec, records, resolved: true };
+    })();
+    void updateFabBadge(trackingState);
+    return trackingState;
   }
   /** 启动：壳先可点 → DB+页面增强 → WebDAV/LRR 后台 */
   async function boot() {
@@ -14951,8 +15071,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       showDiagnosticBanner(issue);
     }
 
+    let trackingState = null;
     try {
-      createWorkbench();
+      trackingState = createWorkbench();
       logPhase('workbench-shell');
     } catch (e) {
       console.warn('[ExC] workbench shell', e);
@@ -14973,7 +15094,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       } else if (kind === 'image') {
         await enhanceImagePage();
       } else {
-        await enhanceListPage();
+        await enhanceListPage({ trackingState });
         observeListMutations();
       }
       logPhase('page-enhance');

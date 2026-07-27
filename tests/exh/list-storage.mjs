@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const partsDir = path.resolve(here, '../../packages/exh-commander/src/parts');
+const manifest = JSON.parse(
+  fs.readFileSync(path.resolve(partsDir, '../parts.manifest.json'), 'utf8')
+);
+const storageParts = manifest.parts.filter((filename) => /^3\d-.*\.js$/.test(filename));
 
 function loadStorageContext() {
   const defaults = {
@@ -38,7 +42,7 @@ function loadStorageContext() {
     uid: (prefix) => `${prefix || 'id'}_test`,
   };
   const context = createContext(sandbox);
-  for (const file of ['20-domain.js', '30-storage.js']) {
+  for (const file of ['20-domain.js', ...storageParts]) {
     const source = fs.readFileSync(path.join(partsDir, file), 'utf8');
     runInContext(source, context, { filename: file });
   }

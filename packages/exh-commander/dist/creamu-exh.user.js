@@ -621,7 +621,7 @@
         #exc-tracking-bar .exc-bp-continue {
             order: -1 !important;
         }
-        
+
         .exc-fold-tag {
             pointer-events: auto !important;
             cursor: pointer;
@@ -1806,7 +1806,6 @@ html.exc-cream-site #exc-toast-host {
 }
 `;
   }
-
 function replaceCreamuWorkbenchSelectors(css, options = {}) {
     const replacements = [
         ['#jlc-wb-dialog', options.dialogSelector || '#jlc-wb-dialog'],
@@ -9526,7 +9525,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       // 方括号更常是组；圆括号更常是画师；都挂上以便熟人匹配
       if (a || c) pushTag('group:' + raw);
       if (b) pushTag('artist:' + raw);
-      // 嵌套 [Group (Artist)] 
+      // 嵌套 [Group (Artist)]
       const nested = raw.match(/\(([^)]+)\)/);
       if (nested) {
         const an = compactText(nested[1]);

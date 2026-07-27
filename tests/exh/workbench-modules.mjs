@@ -30,7 +30,7 @@ const sources = Object.fromEntries(
     fs.readFileSync(path.join(partsRoot, filename), 'utf8'),
   ])
 );
-const pageUiSource = fs.readFileSync(path.join(partsRoot, '60-ui-page.js'), 'utf8');
+const trackingBarSource = fs.readFileSync(path.join(partsRoot, '63-tracking-bar.js'), 'utf8');
 const listRuntimeSource = fs.readFileSync(path.join(partsRoot, '65-list-runtime.js'), 'utf8');
 const responsibilities = [
   ['70-workbench.js', 'function ensureWorkbenchShell', 'async function renderTrackingPage'],
@@ -46,7 +46,7 @@ for (const [filename, ownedEntry, foreignEntry] of responsibilities) {
 }
 
 assert.match(
-  pageUiSource,
+  trackingBarSource,
   /bar\.dataset\.sig === ctx\.query_signature[\s\S]*?refreshTrackingBarFrom\(preloaded\);[\s\S]*?return;/,
   'an existing tracking bar should consume the shared tracking state'
 );

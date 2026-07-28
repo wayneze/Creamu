@@ -98,6 +98,80 @@ function getScoutSiteLayoutThemeCss() {
           opacity: 1 !important;
         }
 
+        /* 当前 URL 的临时精确过滤，不参与全局屏蔽配置。 */
+        html.scout-cream-site .scout-exact-filter-hidden {
+          display: none !important;
+        }
+        html.scout-cream-site .scout-exact-filter-pending {
+          opacity: .58 !important;
+          transition: opacity .16s ease !important;
+        }
+        html.scout-cream-site .scout-exact-filter-failed {
+          outline: 2px dashed rgba(230, 170, 70, .8) !important;
+          outline-offset: 2px !important;
+        }
+        #scout-exact-filter-bar {
+          position: relative !important;
+          z-index: 999992 !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          width: min(540px, calc(100% - 24px)) !important;
+          max-width: calc(100% - 24px) !important;
+          min-height: 32px !important;
+          margin: 8px auto 10px !important;
+          padding: 5px 6px 5px 11px !important;
+          border: 1px solid rgba(92, 196, 128, .42) !important;
+          border-radius: 7px !important;
+          background: rgba(18, 24, 21, .94) !important;
+          box-shadow: 0 5px 16px rgba(0, 0, 0, .34) !important;
+          color: #e8f5ec !important;
+          font-size: 11.5px !important;
+          line-height: 1.3 !important;
+          box-sizing: border-box !important;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+        #scout-exact-filter-bar .scout-exact-filter-text {
+          min-width: 0 !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          font-weight: 650 !important;
+        }
+        #scout-exact-filter-bar .scout-exact-filter-actions {
+          display: flex !important;
+          align-items: center !important;
+          gap: 4px !important;
+          flex: 0 0 auto !important;
+        }
+        #scout-exact-filter-bar button {
+          min-height: 22px !important;
+          padding: 2px 8px !important;
+          border: 1px solid rgba(255, 255, 255, .18) !important;
+          border-radius: 5px !important;
+          background: rgba(255, 255, 255, .09) !important;
+          color: #eef7f0 !important;
+          cursor: pointer !important;
+          font: inherit !important;
+          font-weight: 650 !important;
+          letter-spacing: 0 !important;
+        }
+        #scout-exact-filter-bar button:hover {
+          background: rgba(92, 196, 128, .2) !important;
+          border-color: rgba(92, 196, 128, .55) !important;
+        }
+        @media (max-width: 620px) {
+          #scout-exact-filter-bar {
+            width: calc(100% - 20px) !important;
+            max-width: calc(100% - 20px) !important;
+            margin: 8px 10px 10px !important;
+          }
+          #scout-exact-filter-bar .scout-exact-filter-text {
+            flex: 1 1 auto !important;
+          }
+        }
+
         /* PC：顶部超矮订阅条 */
         #scout-search-track-bar.scout-track-banner {
           position: fixed !important;

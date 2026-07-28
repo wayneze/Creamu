@@ -3,6 +3,33 @@
     return editionKey(gid, token);
   }
 
+  function mergeEditionAvailabilityState(merged, incoming, previous) {
+    if (!previous) return merged;
+    const incomingAvailabilityAt = Number(incoming.availability_checked_at) || 0;
+    const previousAvailabilityAt = Number(previous.availability_checked_at) || 0;
+    const incomingAvailability = normalizeEditionAvailabilityStatus(
+      incoming.availability_status,
+      incoming.expunged
+    );
+    const previousAvailability = normalizeEditionAvailabilityStatus(
+      previous.availability_status,
+      previous.expunged
+    );
+    const keepPreviousAvailability =
+      !incomingAvailabilityAt ||
+      previousAvailabilityAt > incomingAvailabilityAt ||
+      (previousAvailabilityAt === incomingAvailabilityAt &&
+        previousAvailability !== 'unknown' &&
+        incomingAvailability === 'unknown');
+    if (!keepPreviousAvailability) return merged;
+    merged.availability_status = previousAvailability;
+    merged.availability_checked_at = previousAvailabilityAt;
+    merged.availability_reason = compactText(previous.availability_reason || '');
+    merged.availability_error = compactText(previous.availability_error || '');
+    merged.expunged = previousAvailability === 'expunged' ? 1 : 0;
+    return merged;
+  }
+
   function mergeEditionRecord(partial, previous) {
     const rec = normalizeEditionRecord(partial);
     if (!rec.gid || !rec.token) throw new Error('edition requires gid/token');
@@ -38,6 +65,8 @@
       if (!(Number(merged.size_bytes) > 0) && Number(prev.size_bytes) > 0) {
         merged.size_bytes = prev.size_bytes;
       }
+
+      mergeEditionAvailabilityState(merged, rec, prev);
     }
     return { merged, previous: prev };
   }

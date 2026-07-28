@@ -40,16 +40,36 @@ function findTrackBySiteQuery(site, query) {
   );
 }
 
-function addTrack({ site, query, label, url }) {
+function addTrack({ site, query, label, url, recipe, recipe_id, probe_queries }) {
   const tracks = getTracks();
   const siteNorm = String(site || '');
   const queryNorm = String(query || '').trim();
-  const existing = findTrackBySiteQuery(siteNorm, queryNorm);
+  const normalizedRecipe = recipe && typeof normalizeScoutSearchRecipe === 'function'
+    ? normalizeScoutSearchRecipe(recipe)
+    : null;
+  const recipeId = compactText(
+    recipe_id || (normalizedRecipe && normalizedRecipe.id) || ''
+  );
+  const recipeFingerprint = normalizedRecipe && typeof scoutSearchRecipeFingerprint === 'function'
+    ? scoutSearchRecipeFingerprint(normalizedRecipe)
+    : '';
+  const existing = tracks.find((track) => {
+    if (!track || track.site !== siteNorm) return false;
+    if (recipeId && track.recipe_id === recipeId) return true;
+    if (recipeFingerprint && track.recipe_fingerprint === recipeFingerprint) return true;
+    return !recipeId && normalizeSearchQueryKey(track.query) === normalizeSearchQueryKey(queryNorm);
+  }) || null;
   if (existing) {
     if (label) existing.label = String(label);
     if (url) existing.url = String(url);
     // 若原先 query 写法不同，统一成当前写法便于展示
     if (queryNorm) existing.query = queryNorm;
+    if (normalizedRecipe) {
+      existing.recipe = normalizedRecipe;
+      existing.recipe_id = recipeId;
+      existing.recipe_fingerprint = recipeFingerprint;
+      existing.probe_queries = Array.isArray(probe_queries) ? probe_queries.slice() : [];
+    }
     existing.updated_at = new Date().toISOString();
     saveTracks(tracks);
     triggerWebDavDirty();
@@ -61,6 +81,10 @@ function addTrack({ site, query, label, url }) {
     query: queryNorm,
     label: String(label || queryNorm),
     url: String(url || ''),
+    recipe: normalizedRecipe,
+    recipe_id: recipeId,
+    recipe_fingerprint: recipeFingerprint,
+    probe_queries: Array.isArray(probe_queries) ? probe_queries.slice() : [],
     last_seen_item: '',
     last_seen_page: 1,
     updated_at: new Date().toISOString()
@@ -128,7 +152,13 @@ function groupTracksByQuery(tracks) {
   const map = new Map();
   list.forEach((t) => {
     if (!t) return;
-    const key = normalizeSearchQueryKey(t.query);
+    const recipe = t.recipe && typeof normalizeScoutSearchRecipe === 'function'
+      ? normalizeScoutSearchRecipe(t.recipe)
+      : null;
+    const recipeIdentity = compactText(t.recipe_id || (recipe && recipe.id) || '');
+    const key = recipeIdentity
+      ? 'recipe:' + recipeIdentity
+      : normalizeSearchQueryKey(t.query);
     if (!key) return;
     let g = map.get(key);
     if (!g) {
@@ -136,12 +166,14 @@ function groupTracksByQuery(tracks) {
         key,
         query: String(t.query || '').trim(),
         label: String(t.label || t.query || key),
+        recipe,
         tracks: [],
         updated_at: t.updated_at || ''
       };
       map.set(key, g);
     }
     g.tracks.push(t);
+    if (!g.recipe && recipe) g.recipe = recipe;
     const tAt = new Date(t.updated_at || 0).getTime();
     const gAt = new Date(g.updated_at || 0).getTime();
     if (tAt >= gAt) {
@@ -167,16 +199,51 @@ function findTrackInGroup(group, site) {
 
 /** 删除同一归一化 query 下所有站的追更 */
 function deleteTracksByQueryKey(queryKey) {
-  const key = normalizeSearchQueryKey(queryKey);
+  const rawKey = String(queryKey || '');
+  const key = rawKey.startsWith('recipe:') ? rawKey : normalizeSearchQueryKey(rawKey);
   if (!key) return 0;
   const tracks = getTracks();
-  const next = tracks.filter((t) => normalizeSearchQueryKey(t && t.query) !== key);
+  const next = tracks.filter((t) => {
+    const recipeIdentity = compactText(t && (t.recipe_id || (t.recipe && t.recipe.id)) || '');
+    const trackKey = recipeIdentity
+      ? 'recipe:' + recipeIdentity
+      : normalizeSearchQueryKey(t && t.query);
+    return trackKey !== key;
+  });
   const n = tracks.length - next.length;
   if (n > 0) {
     saveTracks(next);
     triggerWebDavDirty();
   }
   return n;
+}
+
+function addTracksForScoutRecipe(recipe, label, preparedPlan) {
+  if (typeof normalizeScoutSearchRecipe !== 'function') return [];
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const plan = preparedPlan || (
+    typeof buildScoutSearchPlan === 'function' ? buildScoutSearchPlan(normalized) : null
+  );
+  const created = [];
+  normalized.sites.forEach((site) => {
+    const probes = plan && Array.isArray(plan.probes)
+      ? plan.probes.filter((probe) => probe.site === site)
+      : [];
+    const primary = probes[0];
+    if (!primary || !primary.query) return;
+    created.push(addTrack({
+      site,
+      query: primary.query,
+      label: label || normalized.label || describeScoutSearchRecipe(normalized),
+      url: primary.url,
+      recipe: normalized,
+      recipe_id: normalized.id,
+      probe_queries: probes
+        .filter((probe) => probe.level === 'strict' || probe.level === 'alias')
+        .map((probe) => probe.query),
+    }));
+  });
+  return created;
 }
 
 /**

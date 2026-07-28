@@ -103,18 +103,73 @@
     return 'https://api.e-hentai.org/api.php';
   }
 
+  function getGdataFailureMessage(error, fallback) {
+    const value = error && (error.message || error.error || error.statusText || error);
+    return compactText(value || fallback || 'gdata request failed').slice(0, 300);
+  }
+
+  function createGalleryGdataRecord(meta, requested, checkedAt) {
+    const source = meta || {};
+    const fallback = requested || {};
+    const gid = compactText(source.gid || fallback.gid || '');
+    if (!gid) return null;
+    const token = compactText(source.token || fallback.token || '').toLowerCase();
+    const error = compactText(source.error || '');
+    const expunged = hasEditionExpungedFlag(source.expunged);
+    if (error) {
+      return {
+        gid,
+        token,
+        availability_status: 'unavailable',
+        availability_checked_at: checkedAt,
+        availability_reason: error,
+        availability_error: '',
+        expunged: 0,
+      };
+    }
+
+    const sec = Number(source.posted);
+    const pages = Number(source.filecount) || 0;
+    const size_bytes = Number(source.filesize) || 0;
+    const tags = Array.isArray(source.tags) ? source.tags.map(String) : [];
+    const title = compactText(source.title || source.title_jpn || '');
+    const language = detectLanguageFromText(title, tags);
+    const censor_tier = detectCensorTier(title, tags);
+    const group = extractGroupFromTitle(title) || extractGroupsFromTags(tags)[0] || '';
+    return {
+      gid,
+      token,
+      posted_at: Number.isFinite(sec) && sec > 0 ? Math.round(sec * 1000) : 0,
+      pages,
+      size_bytes,
+      tags,
+      title_raw: title,
+      language,
+      censor_tier,
+      group,
+      uploader: compactText(source.uploader || ''),
+      availability_status: expunged ? 'expunged' : 'active',
+      availability_checked_at: checkedAt,
+      availability_reason: expunged
+        ? compactText(source.expunged_reason || '站点标记为已清退')
+        : '',
+      availability_error: '',
+      expunged: expunged ? 1 : 0,
+    };
+  }
+
   /**
-   * EH 官方 gdata 批量：posted / 页数 / 体积 / 标签（码级语言）。
+   * EH 官方 gdata 批量结果。接口失败仅记录在 errors，不推断作品不可访问。
    * @param {{gid:string|number,token:string}[]} pairs
    * @param {object} [options]
    * @param {Function} [options.shouldContinue]
-   * @returns {Promise<Object<string, object>>} gid → meta
+   * @param {Function} [options.onProgress]
    */
-  async function fetchGalleryGdataBatch(pairs, options) {
+  async function fetchGalleryGdataBatchDetailed(pairs, options) {
     options = options || {};
     const shouldContinue =
       typeof options.shouldContinue === 'function' ? options.shouldContinue : () => true;
-    const out = Object.create(null);
+    const records = Object.create(null);
     const uniq = [];
     const seen = Object.create(null);
     for (let i = 0; i < (pairs || []).length; i++) {
@@ -125,14 +180,26 @@
       seen[g] = 1;
       uniq.push({ gid: g, token: t });
     }
-    if (!uniq.length) return out;
+    const result = {
+      records,
+      requestedCount: uniq.length,
+      successfulBatches: 0,
+      failedBatches: 0,
+      errors: [],
+      cancelled: false,
+    };
+    if (!uniq.length) return result;
     const api = getEhGdataApiUrl();
     for (let off = 0; off < uniq.length; off += 25) {
-      if (!shouldContinue()) break;
+      if (!shouldContinue()) {
+        result.cancelled = true;
+        break;
+      }
       const chunk = uniq.slice(off, off + 25);
       const gidlist = chunk.map((x) => [Number(x.gid), x.token]);
+      let res;
       try {
-        const res = await gmRequest({
+        res = await gmRequest({
           method: 'POST',
           url: api,
           headers: {
@@ -146,49 +213,128 @@
           }),
           timeout: 25000,
         });
+      } catch (error) {
+        result.failedBatches += 1;
+        result.errors.push({
+          type: 'network',
+          gids: chunk.map((item) => item.gid),
+          message: getGdataFailureMessage(error, 'gdata network failure'),
+        });
+        if (typeof options.onProgress === 'function') {
+          try {
+            options.onProgress(result);
+          } catch (_) { /* ignore */ }
+        }
+        continue;
+      }
+
+      try {
         let body = res && (res.responseText || res.response);
         if (typeof body === 'string') {
-          try {
-            body = JSON.parse(body);
-          } catch (_) {
-            body = null;
-          }
+          if (!body.trim()) throw new Error('gdata response is empty');
+          body = JSON.parse(body);
         }
         const arr = body && body.gmetadata;
-        if (!Array.isArray(arr)) continue;
+        if (!Array.isArray(arr)) throw new Error('gdata response has no gmetadata array');
+        const requestedByGid = new Map(chunk.map((item) => [String(item.gid), item]));
+        const checkedAt = nowMs();
         for (let j = 0; j < arr.length; j++) {
           const meta = arr[j];
-          if (!meta || meta.error) continue;
-          const g = compactText(meta.gid);
-          if (!g) continue;
-          const sec = Number(meta.posted);
-          const pages = Number(meta.filecount) || 0;
-          const size_bytes = Number(meta.filesize) || 0;
-          const tags = Array.isArray(meta.tags) ? meta.tags.map(String) : [];
-          const title = compactText(meta.title || meta.title_jpn || '');
-          const language = detectLanguageFromText(title, tags);
-          const censor_tier = detectCensorTier(title, tags);
-          const group =
-            extractGroupFromTitle(title) || extractGroupsFromTags(tags)[0] || '';
-          out[g] = {
-            gid: g,
-            token: compactText(meta.token || ''),
-            posted_at: Number.isFinite(sec) && sec > 0 ? Math.round(sec * 1000) : 0,
-            pages: pages,
-            size_bytes: size_bytes,
-            tags: tags,
-            title_raw: title,
-            language: language,
-            censor_tier: censor_tier,
-            group: group,
-            uploader: compactText(meta.uploader || ''),
-          };
+          if (!meta) continue;
+          let gid = compactText(meta.gid || '');
+          if (!gid && arr.length === 1 && chunk.length === 1) gid = chunk[0].gid;
+          const record = createGalleryGdataRecord(
+            Object.assign({}, meta, { gid }),
+            requestedByGid.get(String(gid)) || null,
+            checkedAt
+          );
+          if (record) records[record.gid] = record;
         }
-      } catch (_) {
-        /* ignore chunk errors */
+        result.successfulBatches += 1;
+      } catch (error) {
+        result.failedBatches += 1;
+        result.errors.push({
+          type: 'response',
+          gids: chunk.map((item) => item.gid),
+          message: getGdataFailureMessage(error, 'invalid gdata response'),
+        });
+      }
+      if (typeof options.onProgress === 'function') {
+        try {
+          options.onProgress(result);
+        } catch (_) { /* ignore */ }
       }
     }
-    return out;
+    return result;
+  }
+
+  /** gid → meta 的兼容入口。 */
+  async function fetchGalleryGdataBatch(pairs, options) {
+    const detail = await fetchGalleryGdataBatchDetailed(pairs, options);
+    return detail.records;
+  }
+
+  async function checkEditionAvailabilityBatch(editions, options) {
+    options = options || {};
+    const input = Array.from(editions || []).filter((edition) => {
+      return edition && compactText(edition.gid || '') && compactText(edition.token || '');
+    });
+    const detail = await fetchGalleryGdataBatchDetailed(
+      input.map((edition) => ({ gid: edition.gid, token: edition.token })),
+      options
+    );
+    const writes = new Map();
+    for (let i = 0; i < input.length; i++) {
+      const edition = input[i];
+      const meta = detail.records[String(edition.gid)];
+      if (!meta) continue;
+      const merged = mergeEditionRecord(Object.assign({}, edition, meta), edition).merged;
+      writes.set(merged.id, merged);
+      Object.assign(edition, merged);
+    }
+
+    const failureByGid = new Map();
+    for (let i = 0; i < detail.errors.length; i++) {
+      const failure = detail.errors[i];
+      for (let j = 0; j < (failure.gids || []).length; j++) {
+        failureByGid.set(String(failure.gids[j]), failure.message);
+      }
+    }
+    const failedWrites = new Map();
+    for (let i = 0; i < input.length; i++) {
+      const edition = input[i];
+      const id = edition.id || makeEditionId(edition.gid, edition.token);
+      if (writes.has(id)) continue;
+      const error = failureByGid.get(String(edition.gid));
+      if (!error) continue;
+      if (compactText(edition.availability_error || '') === error) continue;
+      const status = normalizeEditionAvailabilityStatus(
+        edition.availability_status,
+        edition.expunged
+      );
+      const failedEdition = Object.assign({}, edition, {
+        id,
+        availability_status: status,
+        availability_error: error,
+        expunged: status === 'expunged' ? 1 : 0,
+        updated_at: nowMs(),
+      });
+      failedWrites.set(id, failedEdition);
+      Object.assign(edition, failedEdition);
+    }
+
+    const updatedEditions = Array.from(writes.values());
+    const failedEditions = Array.from(failedWrites.values());
+    const saved = updatedEditions.concat(failedEditions);
+    if (saved.length && options.persist !== false) {
+      await idbPutBatches({ [STORE_EDITIONS]: saved });
+    }
+    return Object.assign({}, detail, {
+      editions: updatedEditions,
+      failedEditions,
+      updatedCount: updatedEditions.length,
+      errorUpdatedCount: failedEditions.length,
+    });
   }
 
   /** gdata 仅取 posted（兼容旧调用） */

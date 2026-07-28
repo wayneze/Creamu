@@ -511,6 +511,56 @@
     return 0;
   }
 
+  const EDITION_AVAILABILITY_STATUSES = new Set([
+    'active',
+    'expunged',
+    'unavailable',
+    'unknown',
+  ]);
+
+  function hasEditionExpungedFlag(value) {
+    if (value === true || value === 1) return true;
+    const normalized = compactText(value).toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+  }
+
+  function normalizeEditionAvailabilityStatus(value, expunged) {
+    if (hasEditionExpungedFlag(expunged)) return 'expunged';
+    const normalized = compactText(value).toLowerCase();
+    return EDITION_AVAILABILITY_STATUSES.has(normalized) ? normalized : 'unknown';
+  }
+
+  function isEditionAvailabilityIssue(edition) {
+    if (!edition) return false;
+    const status = normalizeEditionAvailabilityStatus(
+      edition.availability_status,
+      edition.expunged
+    );
+    return status === 'expunged' || status === 'unavailable';
+  }
+
+  function getEditionAvailabilityLabel(edition) {
+    const status = normalizeEditionAvailabilityStatus(
+      edition && edition.availability_status,
+      edition && edition.expunged
+    );
+    if (status === 'active') return '来源正常';
+    if (status === 'expunged') return '已清退';
+    if (status === 'unavailable') return '不可访问';
+    return '未检查';
+  }
+
+  function getEditionAvailabilityTone(edition) {
+    const status = normalizeEditionAvailabilityStatus(
+      edition && edition.availability_status,
+      edition && edition.expunged
+    );
+    if (status === 'active') return 'green';
+    if (status === 'expunged') return 'red';
+    if (status === 'unavailable') return 'yellow';
+    return 'gray';
+  }
+
   /**
    * 偏好排序：语言 → 码级 → 体积 → 汉化组 → 页数
    * （黑名单组仍通过 groupBonus 强惩罚 / pickBest 过滤）
@@ -518,6 +568,7 @@
   function scoreEdition(edition, cfg) {
     const c = cfg || config;
     let score = 0;
+    if (isEditionAvailabilityIssue(edition)) score -= 1e15;
     // 1e12 级：语言
     score += (10 - Math.min(9, langRank(edition.language, c.lang_order))) * 1e12;
     // 1e10 级：码级
@@ -541,9 +592,12 @@
   function pickBestEdition(editions, cfg) {
     const list = (editions || []).filter(Boolean);
     if (!list.length) return null;
-    // drop blacklisted groups when alternatives exist
     const c = cfg || config;
     let pool = list.slice();
+    // 已清退或不可访问的来源只在没有其它版本时作为兜底。
+    const available = pool.filter((ed) => !isEditionAvailabilityIssue(ed));
+    if (available.length) pool = available;
+    // drop blacklisted groups when alternatives exist
     const nonBlack = pool.filter((ed) => groupBonus(ed.group || '', c) > -500);
     if (nonBlack.length) pool = nonBlack;
     let best = pool[0];
@@ -651,6 +705,8 @@
   /** 线上相对库内是否更优：只认语言/码级（页数体积不算） */
   function isEditionBetter(remote, base, cfg) {
     if (!remote || !base) return false;
+    if (isEditionAvailabilityIssue(remote)) return false;
+    if (isEditionAvailabilityIssue(base)) return true;
     if (isLangBetter(remote.language, base.language, cfg)) return true;
     const rl = remote.language || 'other';
     const bl = base.language || 'other';
@@ -926,6 +982,7 @@
   }
 
   function normalizeEditionRecord(partial) {
+    partial = partial || {};
     const title = compactText(partial.title_raw || partial.title || '');
     const tags = Array.isArray(partial.tags) ? partial.tags.slice() : [];
     const group =
@@ -936,6 +993,10 @@
     const language = partial.language || detectLanguageFromText(title, tags);
     const censor_tier = partial.censor_tier || detectCensorTier(title, tags);
     const size_bytes = Number(partial.size_bytes) || parseSizeToBytes(partial.size_text || '') || 0;
+    const availability_status = normalizeEditionAvailabilityStatus(
+      partial.availability_status,
+      partial.expunged
+    );
     return {
       gid: String(partial.gid || ''),
       token: String(partial.token || '').toLowerCase(),
@@ -954,6 +1015,11 @@
       posted_at: Number(partial.posted_at) || 0,
       url: partial.url || '',
       thumb: partial.thumb || '',
+      availability_status,
+      availability_checked_at: Math.max(0, Number(partial.availability_checked_at) || 0),
+      availability_reason: compactText(partial.availability_reason || ''),
+      availability_error: compactText(partial.availability_error || ''),
+      expunged: availability_status === 'expunged' ? 1 : 0,
       updated_at: nowMs(),
     };
   }

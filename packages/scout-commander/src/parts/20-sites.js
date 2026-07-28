@@ -102,7 +102,92 @@ function pickListUploader(el) {
  * 详情页缩略图 URL：多源兜底（og / twitter / video poster / 播放器图）。
  * 只返回 http(s) 或 data:，相对路径会拼 origin。
  */
-function pickDetailThumbUrl() {
+function resolveScoutUrl(raw, baseUrl) {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  try {
+    return new URL(
+      value,
+      baseUrl || (typeof location !== 'undefined' ? location.href : 'https://example.invalid/')
+    ).href;
+  } catch (_) {
+    return value;
+  }
+}
+
+function parseScoutSearchCount(value) {
+  const digits = String(value == null ? '' : value).replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  const count = Number(digits);
+  return Number.isFinite(count) ? count : null;
+}
+
+function findScoutSearchTotal(texts, patterns) {
+  const values = Array.isArray(texts) ? texts : [texts];
+  for (const value of values) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    for (const pattern of patterns || []) {
+      const match = text.match(pattern);
+      const count = match && parseScoutSearchCount(match[1]);
+      if (count != null) return count;
+    }
+  }
+  return null;
+}
+
+function parseScoutSearchPagination(sourceDocument, pageUrl) {
+  const doc = sourceDocument || document;
+  const anchors = Array.from(doc.querySelectorAll(
+    '.pagination a, .numlist a, #pagination a, a.last-page, a[rel="last"]'
+  ));
+  let pageCount = 1;
+  let lastPageUrl = '';
+  let hasNext = false;
+  anchors.forEach((anchor) => {
+    const title = String(anchor.getAttribute('title') || '');
+    const text = String(anchor.textContent || '').trim();
+    const className = String(anchor.className || '');
+    const pageMatch = title.match(/\bpage\s+(\d+)\b/i) || text.match(/^\s*(\d+)\s*$/);
+    const page = pageMatch ? Number(pageMatch[1]) : 0;
+    if (page > pageCount) {
+      pageCount = page;
+      lastPageUrl = resolveScoutUrl(anchor.getAttribute('href') || '', pageUrl);
+    }
+    if (/\b(next|nmnext|next-page)\b/i.test(className) || /\bnext\b/i.test(title)) {
+      hasNext = true;
+    }
+  });
+  return {
+    page_count: pageCount,
+    last_page_url: lastPageUrl,
+    has_next: hasNext,
+  };
+}
+
+function createScoutSearchSummary(site, sourceDocument, pageUrl, reportedTotal, pageSize) {
+  const pagination = parseScoutSearchPagination(sourceDocument, pageUrl);
+  let total = reportedTotal;
+  let totalKind = 'exact';
+  if (total == null) {
+    if (pagination.page_count > 1 && pageSize > 0) {
+      total = pagination.page_count * pageSize;
+      totalKind = 'estimate';
+    } else {
+      total = Math.max(0, Number(pageSize) || 0);
+      totalKind = pagination.has_next ? 'minimum' : 'exact';
+    }
+  }
+  return Object.assign({}, pagination, {
+    site,
+    total,
+    total_kind: totalKind,
+    page_size: Math.max(0, Number(pageSize) || 0),
+  });
+}
+
+function pickDetailThumbUrl(sourceDocument, baseUrl) {
+  const doc = sourceDocument || document;
   const candidates = [];
   const push = (u) => {
     const s = String(u || '').trim();
@@ -111,34 +196,22 @@ function pickDetailThumbUrl() {
       candidates.push(s);
       return;
     }
-    if (/^https?:\/\//i.test(s)) {
-      candidates.push(s);
-      return;
-    }
-    if (s.startsWith('//')) {
-      candidates.push((location.protocol || 'https:') + s);
-      return;
-    }
-    if (s.startsWith('/')) {
-      try {
-        candidates.push(location.origin + s);
-      } catch (_) { /* ignore */ }
-    }
+    candidates.push(resolveScoutUrl(s, baseUrl));
   };
 
-  document
+  doc
     .querySelectorAll(
       'meta[property="og:image"], meta[property="og:image:secure_url"], meta[name="twitter:image"], meta[name="twitter:image:src"]'
     )
     .forEach((m) => push(m.getAttribute('content')));
 
-  document.querySelectorAll('video').forEach((v) => {
+  doc.querySelectorAll('video').forEach((v) => {
     push(v.getAttribute('poster'));
     // 部分站 poster 在 dataset
     push(v.dataset && (v.dataset.poster || v.dataset.thumb));
   });
 
-  document
+  doc
     .querySelectorAll(
       '#video-player-bg img, .video-player img, .player-container img, ' +
         '#html5video img, .xplayer img, img.thumb, img[itemprop="thumbnailUrl"], ' +
@@ -179,6 +252,25 @@ const SITE_ADAPTERS = {
     buildSearchUrl(query) {
       return `https://www.xvideos.com/?k=${encodeURIComponent(query)}`;
     },
+    parseSearchSummary(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const description = doc.querySelector('meta[name="description"]');
+      const total = findScoutSearchTotal([
+        description && description.getAttribute('content'),
+        doc.querySelector('h1, h2.page-title')?.textContent,
+        doc.title,
+      ], [
+        /(\d[\d,.\s]*)[^\d]{0,80}\b(?:videos?|results?)\s+found\b/i,
+        /\((\d[\d,.\s]*)\s+results?\)/i,
+      ]);
+      return createScoutSearchSummary(
+        'xvideos',
+        doc,
+        pageUrl,
+        total,
+        this.getVideoElements(doc).length
+      );
+    },
     parseSearchContext() {
       const sp = new URLSearchParams(location.search);
       let k = sp.get('k') || '';
@@ -188,19 +280,23 @@ const SITE_ADAPTERS = {
       }
       return {
         query: k.trim(),
-        url: location.href
+        url: typeof stripScoutExactFilterHash === 'function'
+          ? stripScoutExactFilterHash(location.href)
+          : location.href
       };
     },
-    scrapeVideoMeta() {
+    scrapeVideoMeta(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const href = pageUrl || location.href;
       // 标题含 duration/hd 标记，剥掉
-      const titleEl = document.querySelector('h2.page-title') || document.querySelector('.video-metadata .title') || document.querySelector('title');
+      const titleEl = doc.querySelector('h2.page-title') || doc.querySelector('.video-metadata .title') || doc.querySelector('title');
       let title = titleEl ? titleEl.textContent.trim() : '';
       title = title.replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s*\d+p\s*/gi, ' ').replace(/\s+/g, ' ').trim();
 
       // 标签 a.is-keyword；tagTextFromAnchor 去 ＋✕ 噪声
       const tags = [];
       const seen = new Set();
-      document.querySelectorAll(
+      doc.querySelectorAll(
         '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
         '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a'
       ).forEach((a) => {
@@ -215,10 +311,10 @@ const SITE_ADAPTERS = {
         tags.push(txt);
       });
       
-      const thumb = pickDetailThumbUrl();
+      const thumb = pickDetailThumbUrl(doc, href);
 
       // 上传者：.uploader-tag / main-uploader
-      const uploaderEl = document.querySelector(
+      const uploaderEl = doc.querySelector(
         '.video-metadata a.uploader-tag .name, .video-metadata a.uploader-tag, ' +
         '.main-uploader a, a.uploader-tag, .video-metadata .uploader a, ' +
         'a[href*="/profiles/"], a[href*="/channels/"], .video-metadata-uploader a'
@@ -228,23 +324,26 @@ const SITE_ADAPTERS = {
       
       return {
         title,
-        url: location.href,
+        url: href,
         thumb,
         tags,
         uploader
       };
     },
-    getVideoElements() {
-      return document.querySelectorAll('.mozaique .thumb-block, .mozaique [id^="video_"], .video-block');
+    getVideoElements(sourceDocument) {
+      const doc = sourceDocument || document;
+      return doc.querySelectorAll('.mozaique .thumb-block, .mozaique [id^="video_"], .video-block');
     },
-    parseVideoElement(el) {
+    parseVideoElement(el, baseUrl) {
       const picked = pickListVideoLink(el);
       if (!picked || !picked.linkEl) return null;
       let title = (picked.title || '').replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s+/g, ' ').trim();
       const href = picked.linkEl.getAttribute('href') || '';
-      const url = href.startsWith('http') ? href : location.origin + href;
+      const url = resolveScoutUrl(href, baseUrl || location.origin);
       const thumbEl = el.querySelector('img');
-      const thumb = thumbEl ? (thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '') : '';
+      const thumb = thumbEl
+        ? resolveScoutUrl(thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '', baseUrl)
+        : '';
       const uploader = pickListUploader(el);
       return { el, title, url, thumb, uploader };
     }
@@ -273,6 +372,25 @@ const SITE_ADAPTERS = {
         .replace(/%2B/gi, '+');
       return `https://www.xnxx.com/search/${enc}`;
     },
+    parseSearchSummary(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const description = doc.querySelector('meta[name="description"]');
+      const total = findScoutSearchTotal([
+        description && description.getAttribute('content'),
+        doc.querySelector('h1, h2.page-title')?.textContent,
+        doc.title,
+      ], [
+        /\((\d[\d,.\s]*)\s+results?\)/i,
+        /(\d[\d,.\s]*)\s+(?:videos?|results?)\s+found\b/i,
+      ]);
+      return createScoutSearchSummary(
+        'xnxx',
+        doc,
+        pageUrl,
+        total,
+        this.getVideoElements(doc).length
+      );
+    },
     parseSearchContext() {
       const sp = new URLSearchParams(location.search);
       let k = sp.get('k') || '';
@@ -288,17 +406,21 @@ const SITE_ADAPTERS = {
       k = decodeSearchSegment(k);
       return {
         query: k.trim(),
-        url: location.href
+        url: typeof stripScoutExactFilterHash === 'function'
+          ? stripScoutExactFilterHash(location.href)
+          : location.href
       };
     },
-    scrapeVideoMeta() {
-      const titleEl = document.querySelector('h2.page-title') || document.querySelector('.video-metadata .title') || document.querySelector('title');
+    scrapeVideoMeta(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const href = pageUrl || location.href;
+      const titleEl = doc.querySelector('h2.page-title') || doc.querySelector('.video-metadata .title') || doc.querySelector('title');
       let title = titleEl ? titleEl.textContent.trim() : '';
       title = title.replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s*\d+p\s*/gi, ' ').replace(/\s+/g, ' ').trim();
       
       const tags = [];
       const seen = new Set();
-      document.querySelectorAll(
+      doc.querySelectorAll(
         '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
         '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a, .tags a'
       ).forEach((a) => {
@@ -313,9 +435,9 @@ const SITE_ADAPTERS = {
         tags.push(txt);
       });
       
-      const thumb = pickDetailThumbUrl();
+      const thumb = pickDetailThumbUrl(doc, href);
 
-      const uploaderEl = document.querySelector(
+      const uploaderEl = doc.querySelector(
         '.video-metadata a.uploader-tag .name, .video-metadata a.uploader-tag, ' +
         '.main-uploader a, a.uploader-tag, .video-metadata .uploader a, ' +
         'a[href*="/profiles/"], a[href*="/channels/"], .video-metadata-uploader a'
@@ -325,24 +447,27 @@ const SITE_ADAPTERS = {
       
       return {
         title,
-        url: location.href,
+        url: href,
         thumb,
         tags,
         uploader
       };
     },
-    getVideoElements() {
-      return document.querySelectorAll('.mozaique .thumb-block, .mozaique [id^="video_"], .video-block');
+    getVideoElements(sourceDocument) {
+      const doc = sourceDocument || document;
+      return doc.querySelectorAll('.mozaique .thumb-block, .mozaique [id^="video_"], .video-block');
     },
-    parseVideoElement(el) {
+    parseVideoElement(el, baseUrl) {
       // xnxx：无 p.title，标题在 .thumb-under > p > a[title]；图链在前且无字
       const picked = pickListVideoLink(el);
       if (!picked || !picked.linkEl) return null;
       let title = (picked.title || '').replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s+/g, ' ').trim();
       const href = picked.linkEl.getAttribute('href') || '';
-      const url = href.startsWith('http') ? href : location.origin + href;
+      const url = resolveScoutUrl(href, baseUrl || location.origin);
       const thumbEl = el.querySelector('img');
-      const thumb = thumbEl ? (thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '') : '';
+      const thumb = thumbEl
+        ? resolveScoutUrl(thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '', baseUrl)
+        : '';
       // xnxx 上传者：div.uploader > a > span.name（非 span.uploader）
       const uploader = pickListUploader(el);
       return { el, title, url, thumb, uploader };
@@ -372,6 +497,25 @@ const SITE_ADAPTERS = {
       const slug = epornerQueryToSlug(query);
       return `https://www.eporner.com/tag/${slug}/`;
     },
+    parseSearchSummary(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const description = doc.querySelector('meta[name="description"]');
+      const total = findScoutSearchTotal([
+        description && description.getAttribute('content'),
+        doc.querySelector('h1')?.textContent,
+        doc.title,
+      ], [
+        /\b(?:have|contains?)\s+(\d[\d,.\s]*)\s+videos?\b/i,
+        /(\d[\d,.\s]*)\s+videos?\s+(?:with|found)\b/i,
+      ]);
+      return createScoutSearchSummary(
+        'eporner',
+        doc,
+        pageUrl,
+        total,
+        this.getVideoElements(doc).length
+      );
+    },
     parseSearchContext() {
       const sp = new URLSearchParams(location.search);
       let query = sp.get('search') || sp.get('key') || sp.get('q') || '';
@@ -397,11 +541,15 @@ const SITE_ADAPTERS = {
       }
       return {
         query: query.trim(),
-        url: location.href
+        url: typeof stripScoutExactFilterHash === 'function'
+          ? stripScoutExactFilterHash(location.href)
+          : location.href
       };
     },
-    scrapeVideoMeta() {
-      const titleEl = document.querySelector('h1') || document.querySelector('title');
+    scrapeVideoMeta(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const href = pageUrl || location.href;
+      const titleEl = doc.querySelector('h1') || doc.querySelector('title');
       let title = titleEl ? titleEl.textContent.trim() : '';
       title = title
         .replace(/\s*\d+\s*min\s*/gi, ' ')
@@ -412,7 +560,7 @@ const SITE_ADAPTERS = {
 
       const tags = [];
       const seen = new Set();
-      document
+      doc
         .querySelectorAll(
           'a[href^="/tag/"], a[href^="/cat/"], .vit-pornstar a, .vit-category a, ' +
             '#video-tags a, .tag-container a, a.tag'
@@ -439,9 +587,9 @@ const SITE_ADAPTERS = {
           tags.push(txt);
         });
 
-      const thumb = pickDetailThumbUrl();
+      const thumb = pickDetailThumbUrl(doc, href);
 
-      const uploaderEl = document.querySelector(
+      const uploaderEl = doc.querySelector(
         'a[href*="/profile/"][title="Uploader"], a[href*="/profile/"], ' +
           '.publisher-name, a[href*="/channel/"], .post-channel a'
       );
@@ -449,20 +597,21 @@ const SITE_ADAPTERS = {
 
       return {
         title,
-        url: location.href,
+        url: href,
         thumb,
         tags,
         uploader
       };
     },
-    getVideoElements() {
-      const modern = document.querySelectorAll('#vidresults .mb, .mb[data-id]');
+    getVideoElements(sourceDocument) {
+      const doc = sourceDocument || document;
+      const modern = doc.querySelectorAll('#vidresults .mb, .mb[data-id]');
       if (modern && modern.length) return modern;
-      return document.querySelectorAll(
+      return doc.querySelectorAll(
         '#videos-list .post, .post, .post-container, div.mb'
       );
     },
-    parseVideoElement(el) {
+    parseVideoElement(el, baseUrl) {
       const picked = pickListVideoLink(el);
       if (!picked || !picked.linkEl) return null;
       let title = (picked.title || '')
@@ -478,10 +627,13 @@ const SITE_ADAPTERS = {
         if (t2.length >= 2) title = t2;
       }
       const href = (titA && titA.getAttribute('href')) || picked.linkEl.getAttribute('href') || '';
-      const url = href.startsWith('http') ? href : location.origin + href;
+      const url = resolveScoutUrl(href, baseUrl || location.origin);
       const thumbEl = el.querySelector('img');
       const thumb = thumbEl
-        ? thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || ''
+        ? resolveScoutUrl(
+            thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '',
+            baseUrl
+          )
         : '';
       const uploader = pickListUploader(el);
       return { el, title, url, thumb, uploader };
@@ -518,24 +670,63 @@ function buildSearchUrl(site, query) {
   return `https://www.xvideos.com/?k=${encodeURIComponent(query)}`;
 }
 
+function getScoutSearchSummaryForSite(site, sourceDocument, pageUrl) {
+  const adapter = SITE_ADAPTERS[site];
+  if (!adapter) {
+    return createScoutSearchSummary(site, sourceDocument, pageUrl, null, 0);
+  }
+  if (typeof adapter.parseSearchSummary === 'function') {
+    return adapter.parseSearchSummary(sourceDocument, pageUrl);
+  }
+  return createScoutSearchSummary(
+    site,
+    sourceDocument,
+    pageUrl,
+    null,
+    adapter.getVideoElements(sourceDocument).length
+  );
+}
+
 function parseSearchContext() {
   const ad = getSiteAdapter();
-  return ad ? ad.parseSearchContext() : { query: '', url: location.href };
+  return ad ? ad.parseSearchContext() : {
+    query: '',
+    url: typeof stripScoutExactFilterHash === 'function'
+      ? stripScoutExactFilterHash(location.href)
+      : location.href,
+  };
 }
 
-function scrapeVideoMeta() {
+function scrapeVideoMeta(sourceDocument, pageUrl) {
   const ad = getSiteAdapter();
-  return ad ? ad.scrapeVideoMeta() : { title: '', url: location.href, thumb: '', tags: [], uploader: '' };
+  return ad ? ad.scrapeVideoMeta(sourceDocument, pageUrl) : { title: '', url: pageUrl || location.href, thumb: '', tags: [], uploader: '' };
 }
 
-function getVideoElements() {
-  const ad = getSiteAdapter();
-  return ad ? ad.getVideoElements() : [];
+function scrapeVideoMetaForSite(site, sourceDocument, pageUrl) {
+  const ad = SITE_ADAPTERS[site];
+  return ad
+    ? ad.scrapeVideoMeta(sourceDocument, pageUrl)
+    : { title: '', url: pageUrl || '', thumb: '', tags: [], uploader: '' };
 }
 
-function parseVideoElement(el) {
+function getVideoElements(sourceDocument) {
   const ad = getSiteAdapter();
-  return ad ? ad.parseVideoElement(el) : null;
+  return ad ? ad.getVideoElements(sourceDocument) : [];
+}
+
+function getVideoElementsForSite(site, sourceDocument) {
+  const ad = SITE_ADAPTERS[site];
+  return ad ? ad.getVideoElements(sourceDocument) : [];
+}
+
+function parseVideoElement(el, baseUrl) {
+  const ad = getSiteAdapter();
+  return ad ? ad.parseVideoElement(el, baseUrl) : null;
+}
+
+function parseVideoElementForSite(site, el, baseUrl) {
+  const ad = SITE_ADAPTERS[site];
+  return ad ? ad.parseVideoElement(el, baseUrl) : null;
 }
 
 /** 搜索路径段解码：%20 / + / - → 空格 */

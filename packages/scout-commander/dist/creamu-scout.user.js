@@ -188,6 +188,28 @@ function mergeLexiconTermFields(keep, incoming, opts) {
   if (Array.isArray(incoming.subtypes)) {
     keep.subtypes = Array.from(new Set([...(keep.subtypes || []), ...incoming.subtypes]));
   }
+  if (Array.isArray(incoming.aliases)) {
+    const aliases = Array.isArray(keep.aliases) ? keep.aliases.slice() : [];
+    const aliasIndex = new Map();
+    aliases.forEach((alias, index) => {
+      const text = typeof alias === 'string' ? alias : alias && alias.text;
+      const key = lexiconIdentityKey(text);
+      if (key && !aliasIndex.has(key)) aliasIndex.set(key, index);
+    });
+    incoming.aliases.forEach((alias) => {
+      const text = typeof alias === 'string' ? alias : alias && alias.text;
+      const key = lexiconIdentityKey(text);
+      if (!key) return;
+      const index = aliasIndex.get(key);
+      if (index == null) {
+        aliasIndex.set(key, aliases.length);
+        aliases.push(alias);
+      } else if (typeof alias === 'object' && alias) {
+        aliases[index] = Object.assign({}, aliases[index], alias);
+      }
+    });
+    keep.aliases = aliases.slice(-40);
+  }
   const existingSrc = keep.sources || [];
   const newSrc = incoming.sources || [];
   for (const ns of newSrc) {
@@ -376,6 +398,8 @@ const SCOUT_STORAGE_PAGE_DEPENDENCIES = {
   creamu_scout_tracks: ['tracks', 'settings'],
   creamu_scout_config: ['combo', 'settings'],
   creamu_scout_clicks: ['settings'],
+  creamu_scout_search_draft: ['combo'],
+  creamu_scout_search_relations: ['combo'],
   scout_combo_tokens: ['combo'],
   scout_combo_auto_track: ['combo'],
 };
@@ -466,6 +490,7 @@ function addLexiconTerm(termData) {
       note: termData.note,
       status: termData.status,
       subtypes: termData.subtypes,
+      aliases: termData.aliases,
       sources: termData.sources,
       heat: termData.heat,
       use: termData.use,
@@ -486,6 +511,7 @@ function addLexiconTerm(termData) {
     zh: compactText(termData.zh),
     type: termData.type || '未分类',
     subtypes: termData.subtypes || [],
+    aliases: termData.aliases || [],
     loved: !!termData.loved,
     status: termData.status || 'unreviewed', // unreviewed | confirmed | retired
     heat: Number(termData.heat) > 0 ? Number(termData.heat) : 1,
@@ -1373,16 +1399,36 @@ function findTrackBySiteQuery(site, query) {
   );
 }
 
-function addTrack({ site, query, label, url }) {
+function addTrack({ site, query, label, url, recipe, recipe_id, probe_queries }) {
   const tracks = getTracks();
   const siteNorm = String(site || '');
   const queryNorm = String(query || '').trim();
-  const existing = findTrackBySiteQuery(siteNorm, queryNorm);
+  const normalizedRecipe = recipe && typeof normalizeScoutSearchRecipe === 'function'
+    ? normalizeScoutSearchRecipe(recipe)
+    : null;
+  const recipeId = compactText(
+    recipe_id || (normalizedRecipe && normalizedRecipe.id) || ''
+  );
+  const recipeFingerprint = normalizedRecipe && typeof scoutSearchRecipeFingerprint === 'function'
+    ? scoutSearchRecipeFingerprint(normalizedRecipe)
+    : '';
+  const existing = tracks.find((track) => {
+    if (!track || track.site !== siteNorm) return false;
+    if (recipeId && track.recipe_id === recipeId) return true;
+    if (recipeFingerprint && track.recipe_fingerprint === recipeFingerprint) return true;
+    return !recipeId && normalizeSearchQueryKey(track.query) === normalizeSearchQueryKey(queryNorm);
+  }) || null;
   if (existing) {
     if (label) existing.label = String(label);
     if (url) existing.url = String(url);
     // 若原先 query 写法不同，统一成当前写法便于展示
     if (queryNorm) existing.query = queryNorm;
+    if (normalizedRecipe) {
+      existing.recipe = normalizedRecipe;
+      existing.recipe_id = recipeId;
+      existing.recipe_fingerprint = recipeFingerprint;
+      existing.probe_queries = Array.isArray(probe_queries) ? probe_queries.slice() : [];
+    }
     existing.updated_at = new Date().toISOString();
     saveTracks(tracks);
     triggerWebDavDirty();
@@ -1394,6 +1440,10 @@ function addTrack({ site, query, label, url }) {
     query: queryNorm,
     label: String(label || queryNorm),
     url: String(url || ''),
+    recipe: normalizedRecipe,
+    recipe_id: recipeId,
+    recipe_fingerprint: recipeFingerprint,
+    probe_queries: Array.isArray(probe_queries) ? probe_queries.slice() : [],
     last_seen_item: '',
     last_seen_page: 1,
     updated_at: new Date().toISOString()
@@ -1461,7 +1511,13 @@ function groupTracksByQuery(tracks) {
   const map = new Map();
   list.forEach((t) => {
     if (!t) return;
-    const key = normalizeSearchQueryKey(t.query);
+    const recipe = t.recipe && typeof normalizeScoutSearchRecipe === 'function'
+      ? normalizeScoutSearchRecipe(t.recipe)
+      : null;
+    const recipeIdentity = compactText(t.recipe_id || (recipe && recipe.id) || '');
+    const key = recipeIdentity
+      ? 'recipe:' + recipeIdentity
+      : normalizeSearchQueryKey(t.query);
     if (!key) return;
     let g = map.get(key);
     if (!g) {
@@ -1469,12 +1525,14 @@ function groupTracksByQuery(tracks) {
         key,
         query: String(t.query || '').trim(),
         label: String(t.label || t.query || key),
+        recipe,
         tracks: [],
         updated_at: t.updated_at || ''
       };
       map.set(key, g);
     }
     g.tracks.push(t);
+    if (!g.recipe && recipe) g.recipe = recipe;
     const tAt = new Date(t.updated_at || 0).getTime();
     const gAt = new Date(g.updated_at || 0).getTime();
     if (tAt >= gAt) {
@@ -1500,16 +1558,51 @@ function findTrackInGroup(group, site) {
 
 /** 删除同一归一化 query 下所有站的追更 */
 function deleteTracksByQueryKey(queryKey) {
-  const key = normalizeSearchQueryKey(queryKey);
+  const rawKey = String(queryKey || '');
+  const key = rawKey.startsWith('recipe:') ? rawKey : normalizeSearchQueryKey(rawKey);
   if (!key) return 0;
   const tracks = getTracks();
-  const next = tracks.filter((t) => normalizeSearchQueryKey(t && t.query) !== key);
+  const next = tracks.filter((t) => {
+    const recipeIdentity = compactText(t && (t.recipe_id || (t.recipe && t.recipe.id)) || '');
+    const trackKey = recipeIdentity
+      ? 'recipe:' + recipeIdentity
+      : normalizeSearchQueryKey(t && t.query);
+    return trackKey !== key;
+  });
   const n = tracks.length - next.length;
   if (n > 0) {
     saveTracks(next);
     triggerWebDavDirty();
   }
   return n;
+}
+
+function addTracksForScoutRecipe(recipe, label, preparedPlan) {
+  if (typeof normalizeScoutSearchRecipe !== 'function') return [];
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const plan = preparedPlan || (
+    typeof buildScoutSearchPlan === 'function' ? buildScoutSearchPlan(normalized) : null
+  );
+  const created = [];
+  normalized.sites.forEach((site) => {
+    const probes = plan && Array.isArray(plan.probes)
+      ? plan.probes.filter((probe) => probe.site === site)
+      : [];
+    const primary = probes[0];
+    if (!primary || !primary.query) return;
+    created.push(addTrack({
+      site,
+      query: primary.query,
+      label: label || normalized.label || describeScoutSearchRecipe(normalized),
+      url: primary.url,
+      recipe: normalized,
+      recipe_id: normalized.id,
+      probe_queries: probes
+        .filter((probe) => probe.level === 'strict' || probe.level === 'alias')
+        .map((probe) => probe.query),
+    }));
+  });
+  return created;
 }
 
 /**
@@ -1857,13 +1950,773 @@ function mergeClickRecords(incoming) {
   pruneClickMap(map);
   saveClickMap(map);
 }
+// @@creamu-part:15-search-recipes
+const SCOUT_SEARCH_DRAFT_KEY = 'creamu_scout_search_draft';
+const SCOUT_SEARCH_RELATIONS_KEY = 'creamu_scout_search_relations';
+const SCOUT_SEARCH_SCHEMA_VERSION = 1;
+const SCOUT_SEARCH_ROLE_ORDER = ['required', 'preference', 'excluded'];
+const SCOUT_EXACT_FILTER_HASH_PREFIX = '#creamu-exact=';
+const SCOUT_EXACT_FILTER_MAX_HASH_LENGTH = 8192;
+const SCOUT_EXACT_FILTER_MAX_CONDITIONS = 16;
+
+/**
+ * 页面级精确过滤只放在 URL hash 中：它不会进入站点请求，也不会污染全局配置。
+ * payload 只保留核验所需字段，避免把收藏名称、时间戳等状态带进地址栏。
+ */
+function getScoutExactFilterSearchScope(url) {
+  let target;
+  try {
+    target = new URL(
+      String(url || ''),
+      typeof location !== 'undefined' && location.href
+        ? location.href
+        : 'https://example.invalid/'
+    );
+  } catch (_) {
+    return '';
+  }
+
+  const host = String(target.hostname || '').toLowerCase();
+  let site = '';
+  let query = '';
+  if (/xvideos\.com$/i.test(host)) {
+    site = 'xvideos';
+    query = target.searchParams.get('k') || target.searchParams.get('q') || '';
+  } else if (/xnxx\.com$/i.test(host)) {
+    site = 'xnxx';
+    query = target.searchParams.get('k') || target.searchParams.get('q') || '';
+    if (!query && typeof parseXnxxSearchPath === 'function') {
+      query = parseXnxxSearchPath(target.pathname).query || '';
+    }
+  } else if (/eporner\.com$/i.test(host)) {
+    site = 'eporner';
+    query = target.searchParams.get('search') || target.searchParams.get('key') || target.searchParams.get('q') || '';
+    if (!query && typeof parseEpornerListPath === 'function') {
+      query = parseEpornerListPath(target.pathname).query || '';
+    }
+  }
+
+  const key = typeof normalizeSearchQueryKey === 'function'
+    ? normalizeSearchQueryKey(query)
+    : compactText(query).toLowerCase().replace(/\s+/g, ' ');
+  if (site && key) return site + ':' + key;
+  // 未识别站点仍绑定完整路径，避免 hash 被带到其它页面后误触发。
+  return host + ':' + target.pathname.replace(/\/+$/, '/') + (target.search || '');
+}
+
+function normalizeScoutExactFilterRecipe(input) {
+  if (!input || typeof input !== 'object') return null;
+  const rawConditions = Array.isArray(input.conditions) ? input.conditions : [];
+  if (!rawConditions.length || rawConditions.length > SCOUT_EXACT_FILTER_MAX_CONDITIONS) {
+    return null;
+  }
+  if (rawConditions.some((condition) => {
+    const text = condition && typeof condition === 'object'
+      ? condition.text || condition.value || condition.label
+      : condition;
+    return String(text || '').length > 96;
+  })) {
+    return null;
+  }
+  const normalized = normalizeScoutSearchRecipe({
+    schema_version: SCOUT_SEARCH_SCHEMA_VERSION,
+    sites: input.sites,
+    conditions: rawConditions,
+  });
+  if (!normalized.conditions.length) return null;
+  if (!normalized.conditions.some((condition) => condition.role !== 'excluded')) return null;
+  return normalized;
+}
+
+function buildScoutExactFilterUrl(url, recipe) {
+  const normalized = normalizeScoutExactFilterRecipe(recipe);
+  if (!normalized) return String(url || '');
+  const payload = {
+    version: 1,
+    scope: getScoutExactFilterSearchScope(url),
+    sites: normalized.sites,
+    conditions: normalized.conditions.map((condition) => ({
+      text: condition.text,
+      term_id: condition.term_id || '',
+      role: condition.role,
+      priority: condition.priority || 0,
+    })),
+  };
+  let encoded;
+  try {
+    encoded = encodeURIComponent(JSON.stringify(payload));
+  } catch (_) {
+    return String(url || '');
+  }
+  if (!encoded || encoded.length > SCOUT_EXACT_FILTER_MAX_HASH_LENGTH) {
+    return String(url || '');
+  }
+  try {
+    const target = new URL(
+      String(url || ''),
+      typeof location !== 'undefined' && location.href
+        ? location.href
+        : 'https://example.invalid/'
+    );
+    target.hash = SCOUT_EXACT_FILTER_HASH_PREFIX + encoded;
+    return target.href;
+  } catch (_) {
+    return String(url || '');
+  }
+}
+
+function stripScoutExactFilterHash(url) {
+  const href = String(url || '');
+  try {
+    const target = new URL(
+      href,
+      typeof location !== 'undefined' && location.href
+        ? location.href
+        : 'https://example.invalid/'
+    );
+    if (target.hash.startsWith(SCOUT_EXACT_FILTER_HASH_PREFIX)) target.hash = '';
+    return target.href;
+  } catch (_) {
+    return href;
+  }
+}
+
+function parseScoutExactFilterLocation(locationLike) {
+  const hash = String(
+    locationLike && typeof locationLike === 'object'
+      ? locationLike.hash || ''
+      : locationLike || ''
+  );
+  if (!hash.startsWith(SCOUT_EXACT_FILTER_HASH_PREFIX)) return null;
+  const encoded = hash.slice(SCOUT_EXACT_FILTER_HASH_PREFIX.length);
+  if (!encoded || encoded.length > SCOUT_EXACT_FILTER_MAX_HASH_LENGTH) return null;
+  let payload;
+  try {
+    payload = JSON.parse(decodeURIComponent(encoded));
+  } catch (_) {
+    return null;
+  }
+  if (!payload || payload.version !== 1 || typeof payload.scope !== 'string') return null;
+  const recipe = normalizeScoutExactFilterRecipe(payload);
+  if (!recipe) return null;
+  return {
+    recipe,
+    scope: compactText(payload.scope),
+  };
+}
+
+function normalizeScoutSearchRole(value) {
+  const role = String(value || '').toLowerCase();
+  if (SCOUT_SEARCH_ROLE_ORDER.includes(role)) return role;
+  if (role === 'optional' || role === 'preferred') return 'preference';
+  if (role === 'exclude' || role === 'blocked') return 'excluded';
+  return 'required';
+}
+
+function normalizeScoutSearchPriority(value) {
+  const priority = Math.round(Number(value) || 1);
+  return Math.min(3, Math.max(1, priority));
+}
+
+function normalizeScoutSearchSites(sites) {
+  const available = typeof SCOUT_SITE_IDS !== 'undefined'
+    ? SCOUT_SITE_IDS
+    : ['xvideos', 'xnxx', 'eporner'];
+  const source = Array.isArray(sites) && sites.length ? sites : available;
+  const selected = new Set(source.map((site) => String(site || '').toLowerCase()));
+  return available.filter((site) => selected.has(site));
+}
+
+function normalizeScoutRecipeCondition(value, fallbackRole) {
+  const source = typeof value === 'string' ? { text: value } : value || {};
+  const text = sanitizeLexiconText(source.text || source.value || source.label || '');
+  if (!text) return null;
+  const role = normalizeScoutSearchRole(source.role || fallbackRole);
+  return {
+    id: source.id || 'condition_' + uid(),
+    term_id: compactText(source.term_id || source.termId || ''),
+    text,
+    role,
+    priority: role === 'preference' ? normalizeScoutSearchPriority(source.priority) : 0,
+  };
+}
+
+function normalizeScoutSearchRecipe(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const rawConditions = [];
+  if (Array.isArray(source.conditions)) {
+    source.conditions.forEach((condition) => rawConditions.push([condition, condition && condition.role]));
+  } else {
+    (source.required || []).forEach((condition) => rawConditions.push([condition, 'required']));
+    (source.optional || source.preferences || []).forEach((condition) =>
+      rawConditions.push([condition, 'preference'])
+    );
+    (source.excluded || []).forEach((condition) => rawConditions.push([condition, 'excluded']));
+  }
+
+  const conditions = [];
+  const indexes = new Map();
+  rawConditions.forEach(([raw, fallbackRole]) => {
+    const condition = normalizeScoutRecipeCondition(raw, fallbackRole);
+    if (!condition) return;
+    const key = lexiconIdentityKey(condition.text);
+    if (!key) return;
+    if (indexes.has(key)) {
+      conditions[indexes.get(key)] = condition;
+      return;
+    }
+    indexes.set(key, conditions.length);
+    conditions.push(condition);
+  });
+
+  const now = new Date().toISOString();
+  return {
+    schema_version: SCOUT_SEARCH_SCHEMA_VERSION,
+    id: source.id || 'recipe_' + uid(),
+    label: compactText(source.label || ''),
+    sites: normalizeScoutSearchSites(source.sites),
+    conditions,
+    created_at: source.created_at || now,
+    updated_at: source.updated_at || now,
+  };
+}
+
+function getScoutSearchDraft() {
+  const stored = GM_getValue(SCOUT_SEARCH_DRAFT_KEY, null);
+  if (stored && typeof stored === 'object') return normalizeScoutSearchRecipe(stored);
+  if (typeof stored === 'string') {
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed && typeof parsed === 'object') return normalizeScoutSearchRecipe(parsed);
+    } catch (_) { /* use legacy tokens */ }
+  }
+  const legacy = GM_getValue('scout_combo_tokens', null);
+  return normalizeScoutSearchRecipe({
+    conditions: Array.isArray(legacy)
+      ? legacy.map((text) => ({ text, role: 'required' }))
+      : [],
+  });
+}
+
+function saveScoutSearchDraft(recipe) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  normalized.updated_at = new Date().toISOString();
+  GM_setValue(SCOUT_SEARCH_DRAFT_KEY, normalized);
+  GM_setValue(
+    'scout_combo_tokens',
+    normalized.conditions
+      .filter((condition) => condition.role === 'required')
+      .map((condition) => condition.text)
+  );
+  markScoutStorageChanged(SCOUT_SEARCH_DRAFT_KEY);
+  if (typeof triggerWebDavDirty === 'function') triggerWebDavDirty();
+  return normalized;
+}
+
+function getScoutRecipeConditions(recipe, role) {
+  const normalizedRole = role ? normalizeScoutSearchRole(role) : '';
+  const conditions = normalizeScoutSearchRecipe(recipe).conditions;
+  return normalizedRole
+    ? conditions.filter((condition) => condition.role === normalizedRole)
+    : conditions;
+}
+
+function putScoutRecipeCondition(recipe, value, role, priority) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const condition = normalizeScoutRecipeCondition(
+    Object.assign({}, typeof value === 'string' ? { text: value } : value, {
+      role: role || (value && value.role),
+      priority: priority || (value && value.priority),
+    })
+  );
+  if (!condition) return normalized;
+  const key = lexiconIdentityKey(condition.text);
+  const existing = normalized.conditions.findIndex(
+    (item) => lexiconIdentityKey(item.text) === key
+  );
+  if (existing >= 0) {
+    condition.id = normalized.conditions[existing].id || condition.id;
+    condition.term_id = condition.term_id || normalized.conditions[existing].term_id || '';
+    normalized.conditions[existing] = condition;
+  } else {
+    normalized.conditions.push(condition);
+  }
+  normalized.updated_at = new Date().toISOString();
+  return normalized;
+}
+
+function updateScoutRecipeCondition(recipe, conditionId, fields) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const index = normalized.conditions.findIndex((condition) => condition.id === conditionId);
+  if (index < 0) return normalized;
+  const next = normalizeScoutRecipeCondition(
+    Object.assign({}, normalized.conditions[index], fields || {})
+  );
+  if (!next) normalized.conditions.splice(index, 1);
+  else normalized.conditions[index] = next;
+  normalized.updated_at = new Date().toISOString();
+  return normalized;
+}
+
+function removeScoutRecipeCondition(recipe, conditionId) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  normalized.conditions = normalized.conditions.filter(
+    (condition) => condition.id !== conditionId
+  );
+  normalized.updated_at = new Date().toISOString();
+  return normalized;
+}
+
+function scoutSearchRecipeFingerprint(recipe) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const sites = normalized.sites.slice().sort().join(',');
+  const conditions = normalized.conditions
+    .map((condition) => [
+      condition.role,
+      condition.priority || 0,
+      lexiconIdentityKey(condition.text),
+    ].join(':'))
+    .sort()
+    .join('|');
+  return sites + '::' + conditions;
+}
+
+function describeScoutSearchRecipe(recipe) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const required = normalized.conditions.filter((condition) => condition.role === 'required');
+  const preferences = normalized.conditions.filter((condition) => condition.role === 'preference');
+  const excluded = normalized.conditions.filter((condition) => condition.role === 'excluded');
+  const bits = [];
+  if (required.length) bits.push('必须 ' + required.map((item) => item.text).join(' + '));
+  [1, 2, 3].forEach((priority) => {
+    const layer = preferences.filter((condition) => condition.priority === priority);
+    if (layer.length) bits.push('偏好' + priority + ' ' + layer.map((item) => item.text).join(' + '));
+  });
+  if (excluded.length) bits.push('排除 ' + excluded.map((item) => item.text).join(' + '));
+  return bits.join(' · ') || '尚未添加搜索条件';
+}
+
+function normalizeScoutSearchAlias(value) {
+  const source = typeof value === 'string' ? { text: value } : value || {};
+  const text = sanitizeLexiconText(source.text || '');
+  if (!text) return null;
+  return {
+    text,
+    kind: source.kind || 'manual',
+    status: source.status || 'confirmed',
+    sites: normalizeScoutSearchSites(source.sites || []),
+    evidence_count: Math.max(0, Number(source.evidence_count) || 0),
+    updated_at: source.updated_at || new Date().toISOString(),
+  };
+}
+
+function getScoutConditionTerm(condition, terms) {
+  const list = Array.isArray(terms) ? terms : getLexiconTerms();
+  if (condition && condition.term_id) {
+    const byId = list.find((term) => term && term.id === condition.term_id);
+    if (byId) return byId;
+  }
+  const key = lexiconIdentityKey(condition && condition.text);
+  return list.find((term) => lexiconIdentityKey(term && term.text) === key) || null;
+}
+
+function getScoutConditionVariants(condition, site, terms) {
+  const values = [];
+  const seen = new Set();
+  const add = (value) => {
+    const text = sanitizeLexiconText(value);
+    const key = lexiconIdentityKey(text);
+    if (!text || !key || seen.has(key)) return;
+    seen.add(key);
+    values.push(text);
+  };
+  add(condition && condition.text);
+  const canonical = sanitizeLexiconText(condition && condition.text);
+  if (/[-_]/.test(canonical)) add(canonical.replace(/[-_]+/g, ' '));
+  const term = getScoutConditionTerm(condition, terms);
+  (term && Array.isArray(term.aliases) ? term.aliases : []).forEach((rawAlias) => {
+    const alias = normalizeScoutSearchAlias(rawAlias);
+    if (!alias || alias.status !== 'confirmed') return;
+    if (alias.sites.length && site && !alias.sites.includes(site)) return;
+    add(alias.text);
+  });
+  return values;
+}
+
+function addScoutLexiconAlias(termId, aliasData) {
+  const terms = getLexiconTerms();
+  const term = terms.find((item) => item && item.id === termId);
+  const alias = normalizeScoutSearchAlias(aliasData);
+  if (!term || !alias) return null;
+  const aliases = Array.isArray(term.aliases) ? term.aliases.slice() : [];
+  const key = lexiconIdentityKey(alias.text);
+  const index = aliases.findIndex((item) => {
+    const normalized = normalizeScoutSearchAlias(item);
+    return normalized && lexiconIdentityKey(normalized.text) === key;
+  });
+  if (index >= 0) aliases[index] = Object.assign({}, aliases[index], alias);
+  else aliases.push(alias);
+  term.aliases = aliases.slice(-40);
+  term.updated_at = new Date().toISOString();
+  saveLexiconTerms(terms);
+  triggerWebDavDirty();
+  return term;
+}
+
+function compileScoutSiteQuery(site, terms) {
+  const list = [];
+  const seen = new Set();
+  (terms || []).forEach((value) => {
+    const text = compactText(value && value.text != null ? value.text : value);
+    const key = normalizeSearchQueryKey(text);
+    if (!text || !key || seen.has(key)) return;
+    seen.add(key);
+    list.push(text);
+  });
+  if (site === 'eporner') return list.join(' ');
+  return list.join(' and ');
+}
+
+function buildScoutSearchProbeSets(recipe, site, maxProbes, availableTerms) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const terms = Array.isArray(availableTerms) ? availableTerms : getLexiconTerms();
+  const searchable = normalized.conditions.filter((condition) => condition.role !== 'excluded');
+  const primary = (condition) => ({
+    condition_id: condition.id,
+    role: condition.role,
+    priority: condition.priority || 0,
+    text: getScoutConditionVariants(condition, site, terms)[0] || condition.text,
+  });
+  const strictTerms = searchable.map(primary);
+  const candidates = [{
+    level: 'strict',
+    label: '完整组合',
+    terms: strictTerms,
+    removed_condition_ids: [],
+  }];
+
+  if (searchable.length > 1) {
+    searchable
+      .slice()
+      .sort((left, right) => {
+        if (left.role !== right.role) return left.role === 'preference' ? -1 : 1;
+        return (Number(right.priority) || 0) - (Number(left.priority) || 0);
+      })
+      .forEach((condition) => {
+        candidates.push({
+          level: 'reduced',
+          label: `去掉「${condition.text}」`,
+          terms: strictTerms.filter((term) => term.condition_id !== condition.id),
+          removed_condition_ids: [condition.id],
+        });
+      });
+  }
+
+  searchable.forEach((condition, conditionIndex) => {
+    const variants = getScoutConditionVariants(condition, site, terms);
+    if (variants.length < 2) return;
+    const aliasTerms = strictTerms.map((term, index) =>
+      index === conditionIndex ? Object.assign({}, term, { text: variants[1] }) : term
+    );
+    candidates.push({
+      level: 'alias',
+      label: `将「${condition.text}」换为「${variants[1]}」`,
+      terms: aliasTerms,
+      removed_condition_ids: [],
+      replacement_condition_id: condition.id,
+      replacement_text: variants[1],
+    });
+  });
+
+  const probes = [];
+  const seen = new Set();
+  candidates.forEach((candidate) => {
+    const query = compileScoutSiteQuery(site, candidate.terms);
+    const key = normalizeSearchQueryKey(query);
+    if (!query || !key || seen.has(key) || probes.length >= maxProbes) return;
+    seen.add(key);
+    probes.push(Object.assign({}, candidate, {
+      query,
+      query_terms: candidate.terms.map((term) => term.text),
+    }));
+  });
+  return probes;
+}
+
+function buildScoutSearchPlan(recipe, options) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const maxProbes = Math.min(10, Math.max(1, Number(options && options.maxProbesPerSite) || 8));
+  const terms = options && Array.isArray(options.terms)
+    ? options.terms
+    : getLexiconTerms();
+  const probes = [];
+  normalized.sites.forEach((site) => {
+    buildScoutSearchProbeSets(normalized, site, maxProbes, terms).forEach((probe, index) => {
+      probes.push(Object.assign({}, probe, {
+        id: site + ':' + index + ':' + normalizeSearchQueryKey(probe.query),
+        site,
+        url: buildSearchUrl(site, probe.query),
+        index,
+      }));
+    });
+  });
+  return {
+    schema_version: SCOUT_SEARCH_SCHEMA_VERSION,
+    recipe: normalized,
+    fingerprint: scoutSearchRecipeFingerprint(normalized),
+    probes,
+  };
+}
+
+function scoutSearchConditionMatchesMeta(condition, site, meta, terms) {
+  const variants = getScoutConditionVariants(condition, site, terms);
+  return variants.some((variant) => {
+    if (lexiconTermHitsText(variant, meta && meta.title)) return true;
+    if (lexiconTermHitsText(variant, meta && meta.uploader)) return true;
+    return (meta && Array.isArray(meta.tags) ? meta.tags : []).some((tag) =>
+      lexiconTermHitsText(variant, tag)
+    );
+  });
+}
+
+function evaluateScoutSearchResult(recipe, result, availableTerms) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const terms = Array.isArray(availableTerms) ? availableTerms : getLexiconTerms();
+  const site = String(result && result.site || '');
+  const required = normalized.conditions.filter((condition) => condition.role === 'required');
+  const preferences = normalized.conditions.filter((condition) => condition.role === 'preference');
+  const excluded = normalized.conditions.filter((condition) => condition.role === 'excluded');
+  const hitRequired = required.filter((condition) =>
+    scoutSearchConditionMatchesMeta(condition, site, result, terms)
+  );
+  const hitPreferences = preferences.filter((condition) =>
+    scoutSearchConditionMatchesMeta(condition, site, result, terms)
+  );
+  const hitExcluded = excluded.filter((condition) =>
+    scoutSearchConditionMatchesMeta(condition, site, result, terms)
+  );
+  const missingRequired = required.filter(
+    (condition) => !hitRequired.some((hit) => hit.id === condition.id)
+  );
+  const verified = !!(result && result.verified);
+  const searchableTotal = required.length + preferences.length;
+  const searchableHit = hitRequired.length + hitPreferences.length;
+  const exactMatch = !!(
+    verified &&
+    searchableHit === searchableTotal &&
+    !hitExcluded.length
+  );
+  let state = 'candidate';
+  if (hitExcluded.length || (verified && missingRequired.length)) state = 'rejected';
+  else if (verified) state = 'verified';
+  const preferenceScore = hitPreferences.reduce((score, condition) => {
+    return score + ({ 1: 24, 2: 12, 3: 6 }[condition.priority] || 4);
+  }, 0);
+  const remoteRank = Math.max(0, 24 - (Number(result && result.remote_rank) || 0));
+  const score = hitRequired.length * 50 + preferenceScore + remoteRank - hitExcluded.length * 120;
+  return Object.assign({}, result, {
+    evaluation: {
+      state,
+      score,
+      exact_match: exactMatch,
+      searchable_total: searchableTotal,
+      searchable_hit: searchableHit,
+      required_total: required.length,
+      required_hit: hitRequired.map((condition) => condition.text),
+      required_missing: missingRequired.map((condition) => condition.text),
+      preference_hit: hitPreferences.map((condition) => condition.text),
+      excluded_hit: hitExcluded.map((condition) => condition.text),
+    },
+  });
+}
+
+function incrementScoutRecipeTermUsage(recipe, availableTerms) {
+  const terms = Array.isArray(availableTerms) ? availableTerms : getLexiconTerms();
+  const selected = new Set(
+    normalizeScoutSearchRecipe(recipe).conditions
+      .filter((condition) => condition.role !== 'excluded')
+      .map((condition) => condition.term_id || lexiconIdentityKey(condition.text))
+  );
+  if (!selected.size) return 0;
+  const now = new Date().toISOString();
+  let changed = 0;
+  terms.forEach((term) => {
+    if (!term) return;
+    if (!selected.has(term.id) && !selected.has(lexiconIdentityKey(term.text))) return;
+    term.use = (Number(term.use) || 0) + 1;
+    term.heat = (Number(term.heat) || 0) + 2;
+    term.last_used_at = now;
+    term.updated_at = now;
+    changed += 1;
+  });
+  if (changed) {
+    saveLexiconTerms(terms);
+    if (typeof triggerWebDavDirty === 'function') triggerWebDavDirty();
+  }
+  return changed;
+}
+
+function getScoutSearchRelations() {
+  const value = GM_getValue(SCOUT_SEARCH_RELATIONS_KEY, null);
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try { return JSON.parse(value); } catch (_) { return []; }
+  }
+  return [];
+}
+
+function saveScoutSearchRelations(relations) {
+  GM_setValue(SCOUT_SEARCH_RELATIONS_KEY, (relations || []).slice(-2000));
+  markScoutStorageChanged(SCOUT_SEARCH_RELATIONS_KEY);
+  if (typeof triggerWebDavDirty === 'function') triggerWebDavDirty();
+}
+
+function mergeScoutSearchRelations(incomingRelations) {
+  const relations = getScoutSearchRelations().slice();
+  const index = new Map();
+  relations.forEach((relation, position) => {
+    if (!relation) return;
+    const key = compactText(relation.seed_key) + '::' + compactText(relation.candidate_key);
+    if (key !== '::' && !index.has(key)) index.set(key, position);
+  });
+  (Array.isArray(incomingRelations) ? incomingRelations : []).forEach((incoming) => {
+    if (!incoming) return;
+    const seedKey = lexiconIdentityKey(incoming.seed_key || incoming.seed_text);
+    const candidateKey = lexiconIdentityKey(incoming.candidate_key || incoming.candidate);
+    if (!seedKey || !candidateKey || seedKey === candidateKey) return;
+    const key = seedKey + '::' + candidateKey;
+    const normalized = {
+      id: incoming.id || 'relation_' + uid(),
+      seed_key: seedKey,
+      seed_text: sanitizeLexiconText(incoming.seed_text || incoming.seed_key),
+      candidate_key: candidateKey,
+      candidate: sanitizeLexiconText(incoming.candidate || incoming.candidate_key),
+      count: Math.max(1, Number(incoming.count) || 1),
+      status: incoming.status === 'rejected' ? 'rejected' : 'related',
+      sites: normalizeScoutSearchSites(incoming.sites),
+      updated_at: incoming.updated_at || new Date().toISOString(),
+    };
+    if (!normalized.seed_text || !normalized.candidate) return;
+    const position = index.get(key);
+    if (position == null) {
+      index.set(key, relations.length);
+      relations.push(normalized);
+      return;
+    }
+    const current = relations[position];
+    const incomingAt = new Date(normalized.updated_at || 0).getTime() || 0;
+    const currentAt = new Date(current.updated_at || 0).getTime() || 0;
+    current.count = Math.max(Number(current.count) || 0, normalized.count);
+    current.sites = Array.from(new Set([...(current.sites || []), ...normalized.sites]));
+    if (incomingAt >= currentAt) {
+      current.status = normalized.status;
+      current.updated_at = normalized.updated_at;
+      current.candidate = normalized.candidate;
+      current.seed_text = normalized.seed_text;
+    }
+  });
+  saveScoutSearchRelations(relations);
+  return relations;
+}
+
+function recordScoutSearchRelations(recipe, result) {
+  if (!result || !Array.isArray(result.tags) || !result.tags.length) return 0;
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const seeds = normalized.conditions.filter((condition) => condition.role !== 'excluded');
+  if (!seeds.length) return 0;
+  const selected = new Set(normalized.conditions.map((condition) => lexiconIdentityKey(condition.text)));
+  const candidates = result.tags
+    .map((tag) => sanitizeLexiconText(tag))
+    .filter((tag) => tag && tag.length <= 48 && !isBroadOrNoiseLexiconTag(tag))
+    .filter((tag) => !selected.has(lexiconIdentityKey(tag)))
+    .slice(0, 24);
+  if (!candidates.length) return 0;
+  const relations = getScoutSearchRelations();
+  const index = new Map(relations.map((relation, i) => [relation.seed_key + '::' + relation.candidate_key, i]));
+  let changed = 0;
+  seeds.forEach((seed) => {
+    const seedKey = lexiconIdentityKey(seed.text);
+    candidates.forEach((candidate) => {
+      const candidateKey = lexiconIdentityKey(candidate);
+      const relationKey = seedKey + '::' + candidateKey;
+      const position = index.get(relationKey);
+      if (position != null) {
+        const relation = relations[position];
+        if (relation.status === 'rejected') return;
+        relation.count = (Number(relation.count) || 0) + 1;
+        relation.sites = Array.from(new Set([...(relation.sites || []), result.site].filter(Boolean)));
+        relation.updated_at = new Date().toISOString();
+      } else {
+        index.set(relationKey, relations.length);
+        relations.push({
+          id: 'relation_' + uid(),
+          seed_key: seedKey,
+          seed_text: seed.text,
+          candidate_key: candidateKey,
+          candidate,
+          count: 1,
+          status: 'related',
+          sites: result.site ? [result.site] : [],
+          updated_at: new Date().toISOString(),
+        });
+      }
+      changed += 1;
+    });
+  });
+  if (changed) saveScoutSearchRelations(relations);
+  return changed;
+}
+
+function getScoutRelatedSearchSuggestions(recipe, limit) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const selected = new Set(normalized.conditions.map((condition) => lexiconIdentityKey(condition.text)));
+  const seeds = new Set(
+    normalized.conditions
+      .filter((condition) => condition.role !== 'excluded')
+      .map((condition) => lexiconIdentityKey(condition.text))
+  );
+  const grouped = new Map();
+  getScoutSearchRelations().forEach((relation) => {
+    if (!relation || relation.status === 'rejected' || !seeds.has(relation.seed_key)) return;
+    if (!relation.candidate_key || selected.has(relation.candidate_key)) return;
+    const current = grouped.get(relation.candidate_key) || {
+      text: relation.candidate,
+      count: 0,
+      sites: new Set(),
+    };
+    current.count += Number(relation.count) || 0;
+    (relation.sites || []).forEach((site) => current.sites.add(site));
+    grouped.set(relation.candidate_key, current);
+  });
+  return Array.from(grouped.values())
+    .sort((left, right) => right.count - left.count || left.text.localeCompare(right.text))
+    .slice(0, Math.max(1, Number(limit) || 20))
+    .map((item) => ({ text: item.text, count: item.count, sites: Array.from(item.sites) }));
+}
+
+function rejectScoutSearchRelation(recipe, candidateText) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const seeds = new Set(normalized.conditions.map((condition) => lexiconIdentityKey(condition.text)));
+  const candidateKey = lexiconIdentityKey(candidateText);
+  const relations = getScoutSearchRelations();
+  let changed = false;
+  relations.forEach((relation) => {
+    if (seeds.has(relation.seed_key) && relation.candidate_key === candidateKey) {
+      relation.status = 'rejected';
+      relation.updated_at = new Date().toISOString();
+      changed = true;
+    }
+  });
+  if (changed) saveScoutSearchRelations(relations);
+  return changed;
+}
 // 16-data-portability.js
 
 // 导入导出（完整包含 tracks/clicks/works；lex 合包仅 terms+blocks）
 function exportLexiconPackage() {
   const pkg = {
     format: "creamu-scout-lexicon",
-    version: 3,
+    version: 4,
     exported_at: new Date().toISOString(),
     site_hint: "xvideos|xnxx|eporner|mixed",
     types: getLexiconTypes(),
@@ -1872,7 +2725,11 @@ function exportLexiconPackage() {
     publishers: getPublishers(),
     tracks: getTracks(),
     clicks: getClickedList(),
-    works: getWorks()
+    works: getWorks(),
+    search_draft: typeof getScoutSearchDraft === 'function' ? getScoutSearchDraft() : null,
+    search_relations: typeof getScoutSearchRelations === 'function'
+      ? getScoutSearchRelations()
+      : []
   };
   return JSON.stringify(pkg, null, 2);
 }
@@ -2182,6 +3039,7 @@ function mergeTermsFromPackage(pkg) {
           zh: compactText(newT.zh),
           type: newT.type || '未分类',
           subtypes: newT.subtypes || [],
+          aliases: newT.aliases || [],
           loved: !!newT.loved,
           status: newT.status || 'unreviewed',
           heat: Number(newT.heat) || 1,
@@ -2334,6 +3192,7 @@ function replaceTermsFromPackage(pkg) {
         zh: compactText(newT.zh != null ? newT.zh : old.zh),
         type: (newT.type && newT.type !== '未分类') ? newT.type : (old.type || '未分类'),
         subtypes: Array.isArray(newT.subtypes) ? newT.subtypes : (old.subtypes || []),
+        aliases: Array.isArray(newT.aliases) ? newT.aliases : (old.aliases || []),
         loved: newT.loved !== undefined ? !!newT.loved : !!old.loved,
         status: newT.status || old.status || 'unreviewed',
         // 热度：本地与包取较大，避免导入 heat=0 冲掉使用记录
@@ -2354,6 +3213,7 @@ function replaceTermsFromPackage(pkg) {
         zh: compactText(newT.zh),
         type: newT.type || '未分类',
         subtypes: newT.subtypes || [],
+        aliases: newT.aliases || [],
         loved: !!newT.loved,
         status: newT.status || 'unreviewed',
         heat: pkgHeat > 0 ? pkgHeat : 1,
@@ -2558,6 +3418,7 @@ function importLexiconPackage(jsonStr) {
             zh: compactText(newT.zh),
             type: newT.type || '未分类',
             subtypes: newT.subtypes || [],
+            aliases: newT.aliases || [],
             loved: !!newT.loved,
             status: newT.status || 'unreviewed',
             heat: Number(newT.heat) || 1,
@@ -2662,6 +3523,10 @@ function importLexiconPackage(jsonStr) {
         if (existing) {
           if (newT.label) existing.label = String(newT.label);
           if (newT.url) existing.url = String(newT.url);
+          if (newT.recipe) existing.recipe = newT.recipe;
+          if (newT.recipe_id) existing.recipe_id = String(newT.recipe_id);
+          if (newT.recipe_fingerprint) existing.recipe_fingerprint = String(newT.recipe_fingerprint);
+          if (Array.isArray(newT.probe_queries)) existing.probe_queries = newT.probe_queries.slice();
           // 取更新的断点：页码更大或 updated_at 更新
           const remotePage = Number(newT.last_seen_page) || 1;
           const localPage = Number(existing.last_seen_page) || 1;
@@ -2679,6 +3544,10 @@ function importLexiconPackage(jsonStr) {
             query: queryNorm,
             label: String(newT.label || queryNorm),
             url: String(newT.url || ''),
+            recipe: newT.recipe || null,
+            recipe_id: String(newT.recipe_id || ''),
+            recipe_fingerprint: String(newT.recipe_fingerprint || ''),
+            probe_queries: Array.isArray(newT.probe_queries) ? newT.probe_queries.slice() : [],
             last_seen_item: String(newT.last_seen_item || ''),
             last_seen_page: Number(newT.last_seen_page) || 1,
             updated_at: newT.updated_at || new Date().toISOString()
@@ -2714,6 +3583,16 @@ function importLexiconPackage(jsonStr) {
         }
       });
       saveWorks(Object.values(map));
+    }
+
+    if (pkg.search_draft && typeof saveScoutSearchDraft === 'function') {
+      saveScoutSearchDraft(pkg.search_draft);
+    }
+    if (
+      Array.isArray(pkg.search_relations) &&
+      typeof mergeScoutSearchRelations === 'function'
+    ) {
+      mergeScoutSearchRelations(pkg.search_relations);
     }
 
     triggerWebDavDirty();
@@ -2756,7 +3635,11 @@ function initScoutWebDav() {
         // 已点片库（与 tracks 断点分离）
         clicks: getClickedList(),
         // 作品收藏
-        works: getWorks()
+        works: getWorks(),
+        search_draft: typeof getScoutSearchDraft === 'function' ? getScoutSearchDraft() : null,
+        search_relations: typeof getScoutSearchRelations === 'function'
+          ? getScoutSearchRelations()
+          : []
       };
     },
     async importPayload(payload) {
@@ -2785,6 +3668,15 @@ function initScoutWebDav() {
       }
       if (Array.isArray(payload.works)) {
         saveWorks(payload.works);
+      }
+      if (payload.search_draft && typeof saveScoutSearchDraft === 'function') {
+        saveScoutSearchDraft(payload.search_draft);
+      }
+      if (
+        Array.isArray(payload.search_relations) &&
+        typeof saveScoutSearchRelations === 'function'
+      ) {
+        saveScoutSearchRelations(payload.search_relations);
       }
     },
     getSettings() {
@@ -4565,7 +5457,92 @@ function pickListUploader(el) {
  * 详情页缩略图 URL：多源兜底（og / twitter / video poster / 播放器图）。
  * 只返回 http(s) 或 data:，相对路径会拼 origin。
  */
-function pickDetailThumbUrl() {
+function resolveScoutUrl(raw, baseUrl) {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  try {
+    return new URL(
+      value,
+      baseUrl || (typeof location !== 'undefined' ? location.href : 'https://example.invalid/')
+    ).href;
+  } catch (_) {
+    return value;
+  }
+}
+
+function parseScoutSearchCount(value) {
+  const digits = String(value == null ? '' : value).replace(/[^0-9]/g, '');
+  if (!digits) return null;
+  const count = Number(digits);
+  return Number.isFinite(count) ? count : null;
+}
+
+function findScoutSearchTotal(texts, patterns) {
+  const values = Array.isArray(texts) ? texts : [texts];
+  for (const value of values) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    for (const pattern of patterns || []) {
+      const match = text.match(pattern);
+      const count = match && parseScoutSearchCount(match[1]);
+      if (count != null) return count;
+    }
+  }
+  return null;
+}
+
+function parseScoutSearchPagination(sourceDocument, pageUrl) {
+  const doc = sourceDocument || document;
+  const anchors = Array.from(doc.querySelectorAll(
+    '.pagination a, .numlist a, #pagination a, a.last-page, a[rel="last"]'
+  ));
+  let pageCount = 1;
+  let lastPageUrl = '';
+  let hasNext = false;
+  anchors.forEach((anchor) => {
+    const title = String(anchor.getAttribute('title') || '');
+    const text = String(anchor.textContent || '').trim();
+    const className = String(anchor.className || '');
+    const pageMatch = title.match(/\bpage\s+(\d+)\b/i) || text.match(/^\s*(\d+)\s*$/);
+    const page = pageMatch ? Number(pageMatch[1]) : 0;
+    if (page > pageCount) {
+      pageCount = page;
+      lastPageUrl = resolveScoutUrl(anchor.getAttribute('href') || '', pageUrl);
+    }
+    if (/\b(next|nmnext|next-page)\b/i.test(className) || /\bnext\b/i.test(title)) {
+      hasNext = true;
+    }
+  });
+  return {
+    page_count: pageCount,
+    last_page_url: lastPageUrl,
+    has_next: hasNext,
+  };
+}
+
+function createScoutSearchSummary(site, sourceDocument, pageUrl, reportedTotal, pageSize) {
+  const pagination = parseScoutSearchPagination(sourceDocument, pageUrl);
+  let total = reportedTotal;
+  let totalKind = 'exact';
+  if (total == null) {
+    if (pagination.page_count > 1 && pageSize > 0) {
+      total = pagination.page_count * pageSize;
+      totalKind = 'estimate';
+    } else {
+      total = Math.max(0, Number(pageSize) || 0);
+      totalKind = pagination.has_next ? 'minimum' : 'exact';
+    }
+  }
+  return Object.assign({}, pagination, {
+    site,
+    total,
+    total_kind: totalKind,
+    page_size: Math.max(0, Number(pageSize) || 0),
+  });
+}
+
+function pickDetailThumbUrl(sourceDocument, baseUrl) {
+  const doc = sourceDocument || document;
   const candidates = [];
   const push = (u) => {
     const s = String(u || '').trim();
@@ -4574,34 +5551,22 @@ function pickDetailThumbUrl() {
       candidates.push(s);
       return;
     }
-    if (/^https?:\/\//i.test(s)) {
-      candidates.push(s);
-      return;
-    }
-    if (s.startsWith('//')) {
-      candidates.push((location.protocol || 'https:') + s);
-      return;
-    }
-    if (s.startsWith('/')) {
-      try {
-        candidates.push(location.origin + s);
-      } catch (_) { /* ignore */ }
-    }
+    candidates.push(resolveScoutUrl(s, baseUrl));
   };
 
-  document
+  doc
     .querySelectorAll(
       'meta[property="og:image"], meta[property="og:image:secure_url"], meta[name="twitter:image"], meta[name="twitter:image:src"]'
     )
     .forEach((m) => push(m.getAttribute('content')));
 
-  document.querySelectorAll('video').forEach((v) => {
+  doc.querySelectorAll('video').forEach((v) => {
     push(v.getAttribute('poster'));
     // 部分站 poster 在 dataset
     push(v.dataset && (v.dataset.poster || v.dataset.thumb));
   });
 
-  document
+  doc
     .querySelectorAll(
       '#video-player-bg img, .video-player img, .player-container img, ' +
         '#html5video img, .xplayer img, img.thumb, img[itemprop="thumbnailUrl"], ' +
@@ -4642,6 +5607,25 @@ const SITE_ADAPTERS = {
     buildSearchUrl(query) {
       return `https://www.xvideos.com/?k=${encodeURIComponent(query)}`;
     },
+    parseSearchSummary(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const description = doc.querySelector('meta[name="description"]');
+      const total = findScoutSearchTotal([
+        description && description.getAttribute('content'),
+        doc.querySelector('h1, h2.page-title')?.textContent,
+        doc.title,
+      ], [
+        /(\d[\d,.\s]*)[^\d]{0,80}\b(?:videos?|results?)\s+found\b/i,
+        /\((\d[\d,.\s]*)\s+results?\)/i,
+      ]);
+      return createScoutSearchSummary(
+        'xvideos',
+        doc,
+        pageUrl,
+        total,
+        this.getVideoElements(doc).length
+      );
+    },
     parseSearchContext() {
       const sp = new URLSearchParams(location.search);
       let k = sp.get('k') || '';
@@ -4651,19 +5635,23 @@ const SITE_ADAPTERS = {
       }
       return {
         query: k.trim(),
-        url: location.href
+        url: typeof stripScoutExactFilterHash === 'function'
+          ? stripScoutExactFilterHash(location.href)
+          : location.href
       };
     },
-    scrapeVideoMeta() {
+    scrapeVideoMeta(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const href = pageUrl || location.href;
       // 标题含 duration/hd 标记，剥掉
-      const titleEl = document.querySelector('h2.page-title') || document.querySelector('.video-metadata .title') || document.querySelector('title');
+      const titleEl = doc.querySelector('h2.page-title') || doc.querySelector('.video-metadata .title') || doc.querySelector('title');
       let title = titleEl ? titleEl.textContent.trim() : '';
       title = title.replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s*\d+p\s*/gi, ' ').replace(/\s+/g, ' ').trim();
 
       // 标签 a.is-keyword；tagTextFromAnchor 去 ＋✕ 噪声
       const tags = [];
       const seen = new Set();
-      document.querySelectorAll(
+      doc.querySelectorAll(
         '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
         '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a'
       ).forEach((a) => {
@@ -4678,10 +5666,10 @@ const SITE_ADAPTERS = {
         tags.push(txt);
       });
       
-      const thumb = pickDetailThumbUrl();
+      const thumb = pickDetailThumbUrl(doc, href);
 
       // 上传者：.uploader-tag / main-uploader
-      const uploaderEl = document.querySelector(
+      const uploaderEl = doc.querySelector(
         '.video-metadata a.uploader-tag .name, .video-metadata a.uploader-tag, ' +
         '.main-uploader a, a.uploader-tag, .video-metadata .uploader a, ' +
         'a[href*="/profiles/"], a[href*="/channels/"], .video-metadata-uploader a'
@@ -4691,23 +5679,26 @@ const SITE_ADAPTERS = {
       
       return {
         title,
-        url: location.href,
+        url: href,
         thumb,
         tags,
         uploader
       };
     },
-    getVideoElements() {
-      return document.querySelectorAll('.mozaique .thumb-block, .mozaique [id^="video_"], .video-block');
+    getVideoElements(sourceDocument) {
+      const doc = sourceDocument || document;
+      return doc.querySelectorAll('.mozaique .thumb-block, .mozaique [id^="video_"], .video-block');
     },
-    parseVideoElement(el) {
+    parseVideoElement(el, baseUrl) {
       const picked = pickListVideoLink(el);
       if (!picked || !picked.linkEl) return null;
       let title = (picked.title || '').replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s+/g, ' ').trim();
       const href = picked.linkEl.getAttribute('href') || '';
-      const url = href.startsWith('http') ? href : location.origin + href;
+      const url = resolveScoutUrl(href, baseUrl || location.origin);
       const thumbEl = el.querySelector('img');
-      const thumb = thumbEl ? (thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '') : '';
+      const thumb = thumbEl
+        ? resolveScoutUrl(thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '', baseUrl)
+        : '';
       const uploader = pickListUploader(el);
       return { el, title, url, thumb, uploader };
     }
@@ -4736,6 +5727,25 @@ const SITE_ADAPTERS = {
         .replace(/%2B/gi, '+');
       return `https://www.xnxx.com/search/${enc}`;
     },
+    parseSearchSummary(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const description = doc.querySelector('meta[name="description"]');
+      const total = findScoutSearchTotal([
+        description && description.getAttribute('content'),
+        doc.querySelector('h1, h2.page-title')?.textContent,
+        doc.title,
+      ], [
+        /\((\d[\d,.\s]*)\s+results?\)/i,
+        /(\d[\d,.\s]*)\s+(?:videos?|results?)\s+found\b/i,
+      ]);
+      return createScoutSearchSummary(
+        'xnxx',
+        doc,
+        pageUrl,
+        total,
+        this.getVideoElements(doc).length
+      );
+    },
     parseSearchContext() {
       const sp = new URLSearchParams(location.search);
       let k = sp.get('k') || '';
@@ -4751,17 +5761,21 @@ const SITE_ADAPTERS = {
       k = decodeSearchSegment(k);
       return {
         query: k.trim(),
-        url: location.href
+        url: typeof stripScoutExactFilterHash === 'function'
+          ? stripScoutExactFilterHash(location.href)
+          : location.href
       };
     },
-    scrapeVideoMeta() {
-      const titleEl = document.querySelector('h2.page-title') || document.querySelector('.video-metadata .title') || document.querySelector('title');
+    scrapeVideoMeta(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const href = pageUrl || location.href;
+      const titleEl = doc.querySelector('h2.page-title') || doc.querySelector('.video-metadata .title') || doc.querySelector('title');
       let title = titleEl ? titleEl.textContent.trim() : '';
       title = title.replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s*\d+p\s*/gi, ' ').replace(/\s+/g, ' ').trim();
       
       const tags = [];
       const seen = new Set();
-      document.querySelectorAll(
+      doc.querySelectorAll(
         '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
         '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a, .tags a'
       ).forEach((a) => {
@@ -4776,9 +5790,9 @@ const SITE_ADAPTERS = {
         tags.push(txt);
       });
       
-      const thumb = pickDetailThumbUrl();
+      const thumb = pickDetailThumbUrl(doc, href);
 
-      const uploaderEl = document.querySelector(
+      const uploaderEl = doc.querySelector(
         '.video-metadata a.uploader-tag .name, .video-metadata a.uploader-tag, ' +
         '.main-uploader a, a.uploader-tag, .video-metadata .uploader a, ' +
         'a[href*="/profiles/"], a[href*="/channels/"], .video-metadata-uploader a'
@@ -4788,24 +5802,27 @@ const SITE_ADAPTERS = {
       
       return {
         title,
-        url: location.href,
+        url: href,
         thumb,
         tags,
         uploader
       };
     },
-    getVideoElements() {
-      return document.querySelectorAll('.mozaique .thumb-block, .mozaique [id^="video_"], .video-block');
+    getVideoElements(sourceDocument) {
+      const doc = sourceDocument || document;
+      return doc.querySelectorAll('.mozaique .thumb-block, .mozaique [id^="video_"], .video-block');
     },
-    parseVideoElement(el) {
+    parseVideoElement(el, baseUrl) {
       // xnxx：无 p.title，标题在 .thumb-under > p > a[title]；图链在前且无字
       const picked = pickListVideoLink(el);
       if (!picked || !picked.linkEl) return null;
       let title = (picked.title || '').replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s+/g, ' ').trim();
       const href = picked.linkEl.getAttribute('href') || '';
-      const url = href.startsWith('http') ? href : location.origin + href;
+      const url = resolveScoutUrl(href, baseUrl || location.origin);
       const thumbEl = el.querySelector('img');
-      const thumb = thumbEl ? (thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '') : '';
+      const thumb = thumbEl
+        ? resolveScoutUrl(thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '', baseUrl)
+        : '';
       // xnxx 上传者：div.uploader > a > span.name（非 span.uploader）
       const uploader = pickListUploader(el);
       return { el, title, url, thumb, uploader };
@@ -4835,6 +5852,25 @@ const SITE_ADAPTERS = {
       const slug = epornerQueryToSlug(query);
       return `https://www.eporner.com/tag/${slug}/`;
     },
+    parseSearchSummary(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const description = doc.querySelector('meta[name="description"]');
+      const total = findScoutSearchTotal([
+        description && description.getAttribute('content'),
+        doc.querySelector('h1')?.textContent,
+        doc.title,
+      ], [
+        /\b(?:have|contains?)\s+(\d[\d,.\s]*)\s+videos?\b/i,
+        /(\d[\d,.\s]*)\s+videos?\s+(?:with|found)\b/i,
+      ]);
+      return createScoutSearchSummary(
+        'eporner',
+        doc,
+        pageUrl,
+        total,
+        this.getVideoElements(doc).length
+      );
+    },
     parseSearchContext() {
       const sp = new URLSearchParams(location.search);
       let query = sp.get('search') || sp.get('key') || sp.get('q') || '';
@@ -4860,11 +5896,15 @@ const SITE_ADAPTERS = {
       }
       return {
         query: query.trim(),
-        url: location.href
+        url: typeof stripScoutExactFilterHash === 'function'
+          ? stripScoutExactFilterHash(location.href)
+          : location.href
       };
     },
-    scrapeVideoMeta() {
-      const titleEl = document.querySelector('h1') || document.querySelector('title');
+    scrapeVideoMeta(sourceDocument, pageUrl) {
+      const doc = sourceDocument || document;
+      const href = pageUrl || location.href;
+      const titleEl = doc.querySelector('h1') || doc.querySelector('title');
       let title = titleEl ? titleEl.textContent.trim() : '';
       title = title
         .replace(/\s*\d+\s*min\s*/gi, ' ')
@@ -4875,7 +5915,7 @@ const SITE_ADAPTERS = {
 
       const tags = [];
       const seen = new Set();
-      document
+      doc
         .querySelectorAll(
           'a[href^="/tag/"], a[href^="/cat/"], .vit-pornstar a, .vit-category a, ' +
             '#video-tags a, .tag-container a, a.tag'
@@ -4902,9 +5942,9 @@ const SITE_ADAPTERS = {
           tags.push(txt);
         });
 
-      const thumb = pickDetailThumbUrl();
+      const thumb = pickDetailThumbUrl(doc, href);
 
-      const uploaderEl = document.querySelector(
+      const uploaderEl = doc.querySelector(
         'a[href*="/profile/"][title="Uploader"], a[href*="/profile/"], ' +
           '.publisher-name, a[href*="/channel/"], .post-channel a'
       );
@@ -4912,20 +5952,21 @@ const SITE_ADAPTERS = {
 
       return {
         title,
-        url: location.href,
+        url: href,
         thumb,
         tags,
         uploader
       };
     },
-    getVideoElements() {
-      const modern = document.querySelectorAll('#vidresults .mb, .mb[data-id]');
+    getVideoElements(sourceDocument) {
+      const doc = sourceDocument || document;
+      const modern = doc.querySelectorAll('#vidresults .mb, .mb[data-id]');
       if (modern && modern.length) return modern;
-      return document.querySelectorAll(
+      return doc.querySelectorAll(
         '#videos-list .post, .post, .post-container, div.mb'
       );
     },
-    parseVideoElement(el) {
+    parseVideoElement(el, baseUrl) {
       const picked = pickListVideoLink(el);
       if (!picked || !picked.linkEl) return null;
       let title = (picked.title || '')
@@ -4941,10 +5982,13 @@ const SITE_ADAPTERS = {
         if (t2.length >= 2) title = t2;
       }
       const href = (titA && titA.getAttribute('href')) || picked.linkEl.getAttribute('href') || '';
-      const url = href.startsWith('http') ? href : location.origin + href;
+      const url = resolveScoutUrl(href, baseUrl || location.origin);
       const thumbEl = el.querySelector('img');
       const thumb = thumbEl
-        ? thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || ''
+        ? resolveScoutUrl(
+            thumbEl.getAttribute('data-src') || thumbEl.getAttribute('src') || '',
+            baseUrl
+          )
         : '';
       const uploader = pickListUploader(el);
       return { el, title, url, thumb, uploader };
@@ -4981,24 +6025,63 @@ function buildSearchUrl(site, query) {
   return `https://www.xvideos.com/?k=${encodeURIComponent(query)}`;
 }
 
+function getScoutSearchSummaryForSite(site, sourceDocument, pageUrl) {
+  const adapter = SITE_ADAPTERS[site];
+  if (!adapter) {
+    return createScoutSearchSummary(site, sourceDocument, pageUrl, null, 0);
+  }
+  if (typeof adapter.parseSearchSummary === 'function') {
+    return adapter.parseSearchSummary(sourceDocument, pageUrl);
+  }
+  return createScoutSearchSummary(
+    site,
+    sourceDocument,
+    pageUrl,
+    null,
+    adapter.getVideoElements(sourceDocument).length
+  );
+}
+
 function parseSearchContext() {
   const ad = getSiteAdapter();
-  return ad ? ad.parseSearchContext() : { query: '', url: location.href };
+  return ad ? ad.parseSearchContext() : {
+    query: '',
+    url: typeof stripScoutExactFilterHash === 'function'
+      ? stripScoutExactFilterHash(location.href)
+      : location.href,
+  };
 }
 
-function scrapeVideoMeta() {
+function scrapeVideoMeta(sourceDocument, pageUrl) {
   const ad = getSiteAdapter();
-  return ad ? ad.scrapeVideoMeta() : { title: '', url: location.href, thumb: '', tags: [], uploader: '' };
+  return ad ? ad.scrapeVideoMeta(sourceDocument, pageUrl) : { title: '', url: pageUrl || location.href, thumb: '', tags: [], uploader: '' };
 }
 
-function getVideoElements() {
-  const ad = getSiteAdapter();
-  return ad ? ad.getVideoElements() : [];
+function scrapeVideoMetaForSite(site, sourceDocument, pageUrl) {
+  const ad = SITE_ADAPTERS[site];
+  return ad
+    ? ad.scrapeVideoMeta(sourceDocument, pageUrl)
+    : { title: '', url: pageUrl || '', thumb: '', tags: [], uploader: '' };
 }
 
-function parseVideoElement(el) {
+function getVideoElements(sourceDocument) {
   const ad = getSiteAdapter();
-  return ad ? ad.parseVideoElement(el) : null;
+  return ad ? ad.getVideoElements(sourceDocument) : [];
+}
+
+function getVideoElementsForSite(site, sourceDocument) {
+  const ad = SITE_ADAPTERS[site];
+  return ad ? ad.getVideoElements(sourceDocument) : [];
+}
+
+function parseVideoElement(el, baseUrl) {
+  const ad = getSiteAdapter();
+  return ad ? ad.parseVideoElement(el, baseUrl) : null;
+}
+
+function parseVideoElementForSite(site, el, baseUrl) {
+  const ad = SITE_ADAPTERS[site];
+  return ad ? ad.parseVideoElement(el, baseUrl) : null;
 }
 
 /** 搜索路径段解码：%20 / + / - → 空格 */
@@ -5218,6 +6301,337 @@ function videoIdsMatch(a, b) {
   const iy = videoIdFromUrl(y.startsWith('/') || y.includes('://') ? y : '/' + y);
   return !!(ix && iy && ix === iy);
 }
+// @@creamu-part:21-search-runtime
+const __scoutSearchPageCache = new Map();
+const __scoutSearchDetailCache = new Map();
+const SCOUT_SEARCH_PAGE_CACHE_MS = 10 * 60 * 1000;
+const SCOUT_SEARCH_DETAIL_CACHE_MS = 30 * 60 * 1000;
+
+function requestScoutSearchDocument(url, options) {
+  const href = compactText(url);
+  if (!href) return Promise.reject(new Error('搜索地址为空'));
+  const timeout = Math.max(5000, Number(options && options.timeout) || 20000);
+  return new Promise((resolve, reject) => {
+    if (typeof GM_xmlhttpRequest !== 'function') {
+      reject(new Error('GM_xmlhttpRequest unavailable'));
+      return;
+    }
+    GM_xmlhttpRequest({
+      method: 'GET',
+      url: href,
+      headers: {
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      timeout,
+      anonymous: false,
+      onload(response) {
+        const status = Number(response && response.status) || 0;
+        const text = String(response && (response.responseText || response.response) || '');
+        if (status < 200 || status >= 400) {
+          reject(new Error('HTTP ' + (status || '?')));
+          return;
+        }
+        if (/cf-chl-|challenge-platform|<title>\s*just a moment/i.test(text)) {
+          reject(new Error('站点要求浏览器验证'));
+          return;
+        }
+        const finalUrl = compactText(response && response.finalUrl) || href;
+        let doc = null;
+        try {
+          doc = new DOMParser().parseFromString(text, 'text/html');
+        } catch (_) { /* handled below */ }
+        if (!doc || !doc.documentElement) {
+          reject(new Error('搜索响应无法解析'));
+          return;
+        }
+        resolve({ doc, finalUrl, status, text });
+      },
+      onerror() {
+        reject(new Error('搜索请求失败'));
+      },
+      ontimeout() {
+        reject(new Error('搜索请求超时'));
+      },
+    });
+  });
+}
+
+function getScoutCachedValue(cache, key, maxAge) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.saved_at > maxAge) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function putScoutCachedValue(cache, key, value) {
+  cache.set(key, { saved_at: Date.now(), value });
+  if (cache.size > 240) {
+    const first = cache.keys().next();
+    if (!first.done) cache.delete(first.value);
+  }
+  return value;
+}
+
+function scoutSearchResultKey(site, url) {
+  const id = videoIdFromUrl(url);
+  return String(site || '') + ':' + String(id || url || '');
+}
+
+function normalizeScoutFetchedResult(probe, meta, rank) {
+  if (!meta || !meta.url || !compactText(meta.title)) return null;
+  return {
+    key: scoutSearchResultKey(probe.site, meta.url),
+    site: probe.site,
+    video_id: videoIdFromUrl(meta.url),
+    title: compactText(meta.title),
+    url: meta.url,
+    thumb: resolveScoutUrl(meta.thumb, probe.url),
+    uploader: compactText(meta.uploader),
+    tags: Array.isArray(meta.tags) ? meta.tags.slice() : [],
+    verified: false,
+    remote_rank: Math.max(1, Number(rank) || 1),
+    probe_ids: [probe.id],
+    probe_labels: [probe.label],
+    query: probe.query,
+  };
+}
+
+async function fetchScoutSearchProbe(probe, options) {
+  const cached = getScoutCachedValue(
+    __scoutSearchPageCache,
+    probe.url,
+    SCOUT_SEARCH_PAGE_CACHE_MS
+  );
+  if (cached) {
+    return {
+      summary: Object.assign({}, cached.summary),
+      results: cached.results.map((item) => Object.assign({}, item)),
+    };
+  }
+  const response = await requestScoutSearchDocument(probe.url, options);
+  const elements = Array.from(getVideoElementsForSite(probe.site, response.doc));
+  const results = [];
+  elements.forEach((element, index) => {
+    const meta = parseVideoElementForSite(probe.site, element, response.finalUrl || probe.url);
+    const result = normalizeScoutFetchedResult(probe, meta, index + 1);
+    if (result) results.push(result);
+  });
+  const value = putScoutCachedValue(__scoutSearchPageCache, probe.url, {
+    summary: getScoutSearchSummaryForSite(
+      probe.site,
+      response.doc,
+      response.finalUrl || probe.url
+    ),
+    results,
+  });
+  return {
+    summary: Object.assign({}, value.summary),
+    results: value.results.map((item) => Object.assign({}, item)),
+  };
+}
+
+async function runScoutSearchPlan(plan, options) {
+  const opts = options || {};
+  const shouldContinue = typeof opts.shouldContinue === 'function'
+    ? opts.shouldContinue
+    : () => true;
+  const probes = Array.isArray(plan && plan.probes) ? plan.probes.slice() : [];
+  const terms = Array.isArray(opts.terms) ? opts.terms : getLexiconTerms();
+  const normalizedRecipe = normalizeScoutSearchRecipe(plan && plan.recipe);
+  const conditions = normalizedRecipe.conditions;
+  const sampleSize = Math.min(12, Math.max(3, Number(opts.sampleSize) || 8));
+  const reports = new Array(probes.length);
+  const errors = [];
+  let cursor = 0;
+  let completed = 0;
+
+  const worker = async () => {
+    while (cursor < probes.length && shouldContinue()) {
+      const probeIndex = cursor++;
+      const probe = probes[probeIndex];
+      if (typeof opts.onProbeStart === 'function') opts.onProbeStart(probe, probeIndex);
+      try {
+        const payload = await fetchScoutSearchProbe(probe, opts);
+        const report = {
+          id: probe.id,
+          site: probe.site,
+          level: probe.level,
+          label: probe.label,
+          query: probe.query,
+          url: probe.url,
+          removed_condition_ids: Array.isArray(probe.removed_condition_ids)
+            ? probe.removed_condition_ids.slice()
+            : [],
+          replacement_condition_id: probe.replacement_condition_id || '',
+          replacement_text: probe.replacement_text || '',
+          ok: true,
+          total: payload.summary.total,
+          total_kind: payload.summary.total_kind,
+          page_count: payload.summary.page_count,
+          page_size: payload.summary.page_size,
+          list_count: payload.results.length,
+          sample_target: 0,
+          sample_verified: 0,
+          sample_exact: 0,
+          sample_failed: 0,
+          condition_stats: conditions.map((condition) => ({
+            id: condition.id,
+            text: condition.text,
+            role: condition.role,
+            priority: condition.priority || 0,
+            hits: 0,
+          })),
+          sample_results: probe.level === 'strict'
+            ? payload.results.slice(0, sampleSize)
+            : [],
+        };
+        report.sample_target = report.sample_results.length;
+        reports[probeIndex] = report;
+        if (typeof opts.onReport === 'function') opts.onReport(report, probeIndex);
+        if (typeof opts.onProbeComplete === 'function') {
+          opts.onProbeComplete(probe, report);
+        }
+      } catch (error) {
+        const message = error && error.message ? error.message : String(error);
+        errors.push({ site: probe.site, query: probe.query, message });
+        const report = {
+          id: probe.id,
+          site: probe.site,
+          level: probe.level,
+          label: probe.label,
+          query: probe.query,
+          url: probe.url,
+          removed_condition_ids: Array.isArray(probe.removed_condition_ids)
+            ? probe.removed_condition_ids.slice()
+            : [],
+          replacement_condition_id: probe.replacement_condition_id || '',
+          replacement_text: probe.replacement_text || '',
+          ok: false,
+          error: message,
+          total: null,
+          total_kind: 'unknown',
+          page_count: 0,
+          page_size: 0,
+          list_count: 0,
+          sample_target: 0,
+          sample_verified: 0,
+          sample_exact: 0,
+          sample_failed: 0,
+          condition_stats: [],
+          sample_results: [],
+        };
+        reports[probeIndex] = report;
+        if (typeof opts.onReport === 'function') opts.onReport(report, probeIndex);
+        if (typeof opts.onProbeComplete === 'function') {
+          opts.onProbeComplete(probe, report);
+        }
+      } finally {
+        completed += 1;
+        if (typeof opts.onProgress === 'function') {
+          opts.onProgress({ phase: 'search', completed, total: probes.length });
+        }
+      }
+    }
+  };
+
+  const concurrency = Math.min(3, Math.max(1, Number(opts.concurrency) || 2));
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+  const verificationTasks = [];
+  reports.forEach((report) => {
+    if (!report || !report.ok || report.level !== 'strict') return;
+    report.sample_results.forEach((result) => verificationTasks.push({ report, result }));
+  });
+  let verificationCursor = 0;
+  let verificationCompleted = 0;
+  const verificationWorker = async () => {
+    while (verificationCursor < verificationTasks.length && shouldContinue()) {
+      const task = verificationTasks[verificationCursor++];
+      try {
+        const verified = await verifyScoutSearchResult(normalizedRecipe, task.result, {
+          timeout: opts.detailTimeout || 16000,
+          terms,
+        });
+        if (!shouldContinue()) return;
+        task.report.sample_verified += 1;
+        if (verified.evaluation && verified.evaluation.exact_match) {
+          task.report.sample_exact += 1;
+        }
+        task.report.condition_stats.forEach((stat) => {
+          const condition = conditions.find((item) => item.id === stat.id);
+          if (condition && scoutSearchConditionMatchesMeta(condition, task.report.site, verified, terms)) {
+            stat.hits += 1;
+          }
+        });
+      } catch (_) {
+        if (!shouldContinue()) return;
+        task.report.sample_failed += 1;
+      } finally {
+        verificationCompleted += 1;
+        if (typeof opts.onReport === 'function') opts.onReport(task.report);
+        if (typeof opts.onProgress === 'function') {
+          opts.onProgress({
+            phase: 'verify',
+            completed: verificationCompleted,
+            total: verificationTasks.length,
+          });
+        }
+      }
+    }
+  };
+  const detailConcurrency = Math.min(4, Math.max(1, Number(opts.detailConcurrency) || 3));
+  await Promise.all(Array.from({ length: detailConcurrency }, () => verificationWorker()));
+
+  return {
+    reports: reports.filter(Boolean).map((report) => {
+      const output = Object.assign({}, report);
+      delete output.sample_results;
+      return output;
+    }),
+    errors,
+    completed,
+    total: probes.length,
+    verification_completed: verificationCompleted,
+    verification_total: verificationTasks.length,
+  };
+}
+
+async function verifyScoutSearchResult(recipe, result, options) {
+  if (!result || !result.url || !result.site) return result;
+  const cached = getScoutCachedValue(
+    __scoutSearchDetailCache,
+    result.key || result.url,
+    SCOUT_SEARCH_DETAIL_CACHE_MS
+  );
+  const terms = options && Array.isArray(options.terms)
+    ? options.terms
+    : getLexiconTerms();
+  if (cached) return evaluateScoutSearchResult(recipe, Object.assign({}, result, cached), terms);
+  const response = await requestScoutSearchDocument(result.url, options);
+  const detail = scrapeVideoMetaForSite(result.site, response.doc, response.finalUrl || result.url);
+  const verified = {
+    title: compactText(detail.title) || result.title,
+    url: detail.url || result.url,
+    thumb: detail.thumb || result.thumb,
+    uploader: compactText(detail.uploader) || result.uploader,
+    tags: Array.isArray(detail.tags) ? detail.tags : [],
+    verified: true,
+    verified_at: new Date().toISOString(),
+  };
+  putScoutCachedValue(__scoutSearchDetailCache, result.key || result.url, verified);
+  const evaluated = evaluateScoutSearchResult(recipe, Object.assign({}, result, verified), terms);
+  if (
+    options?.recordRelations !== false &&
+    evaluated.evaluation &&
+    evaluated.evaluation.state !== 'rejected'
+  ) {
+    recordScoutSearchRelations(recipe, evaluated);
+  }
+  return evaluated;
+}
 // 25-theme.js
 
 function getScoutThemeCss() {
@@ -5369,7 +6783,7 @@ function getScoutWorkbenchThemeCss() {
           height: 100%;
         }
 
-        /* 组合页底栏：宽度跟工作台走，一行流式自适应 */
+        /* 搜索页 */
         #jlc-wb [data-jlc-wb-page="combo"] {
           display: flex !important;
           flex-direction: column !important;
@@ -5378,239 +6792,625 @@ function getScoutWorkbenchThemeCss() {
           max-width: 100% !important;
           box-sizing: border-box !important;
         }
-        #jlc-wb [data-jlc-wb-page="combo"] > .jlc-wb-footer.scout-combo-dock,
-        #jlc-wb .scout-combo-dock {
+        #jlc-wb .jlc-wb-list-scroll.scout-combo-scroll {
+          padding: 4px 14px 36px !important;
+          overflow-x: hidden !important;
+        }
+        #jlc-wb .scout-search-builder-head,
+        #jlc-wb .scout-search-results-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          min-width: 0;
+          padding: 8px 0 10px;
+        }
+        #jlc-wb .scout-search-builder-head > div:first-child,
+        #jlc-wb .scout-search-results-head > div:first-child {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+        #jlc-wb .scout-search-builder-head strong,
+        #jlc-wb .scout-search-results-head strong {
+          color: #4a3728;
+          font-size: 14px;
+          letter-spacing: 0;
+        }
+        #jlc-wb .scout-search-builder-head span,
+        #jlc-wb .scout-search-results-head span {
+          overflow: hidden;
+          color: #876b52;
+          font-size: 11.5px;
+          line-height: 1.35;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #jlc-wb .scout-search-role-switch,
+        #jlc-wb .scout-search-priority-switch {
+          display: inline-grid;
+          grid-auto-flow: column;
+          grid-auto-columns: minmax(44px, 1fr);
+          flex: 0 0 auto;
+          overflow: hidden;
+          border: 1px solid #dcc8aa;
+          border-radius: 7px;
+          background: #f4eadb;
+        }
+        #jlc-wb .scout-search-role-switch button,
+        #jlc-wb .scout-search-priority-switch button {
+          min-width: 0;
+          min-height: 30px;
+          padding: 5px 9px;
+          border: 0;
+          border-right: 1px solid #dcc8aa;
+          border-radius: 0;
+          background: transparent;
+          color: #72583f;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0;
+        }
+        #jlc-wb .scout-search-role-switch button:last-child,
+        #jlc-wb .scout-search-priority-switch button:last-child {
+          border-right: 0;
+        }
+        #jlc-wb .scout-search-role-switch button.is-active,
+        #jlc-wb .scout-search-priority-switch button.is-active {
+          background: var(--scout-theme-color);
+          color: #fff;
+        }
+        #jlc-wb .scout-search-add-row {
+          display: flex;
+          align-items: stretch;
+          gap: 7px;
+          padding-bottom: 12px;
+        }
+        #jlc-wb .scout-search-add-row > .jlc-wb-search {
+          min-height: 36px;
+          padding: 7px 10px;
+          border-radius: 7px;
+          font-size: 13px;
+        }
+        #jlc-wb .scout-search-priority-switch[hidden] {
+          display: none !important;
+        }
+        #jlc-wb .scout-search-add-row > .jlc-wb-btn {
+          min-width: 60px;
+          min-height: 36px;
+          padding: 7px 11px;
+          border-radius: 7px;
+        }
+        #jlc-wb .scout-search-builder-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+          border-top: 1px solid #eadac3;
+          border-bottom: 1px solid #eadac3;
+        }
+        #jlc-wb .scout-search-condition-column,
+        #jlc-wb .scout-search-pool-column {
+          min-width: 0;
+          padding: 12px 0;
+        }
+        #jlc-wb .scout-search-pool-column {
+          padding-left: 14px;
+          border-left: 1px solid #eadac3;
+        }
+        #jlc-wb .scout-search-condition-group + .scout-search-condition-group,
+        #jlc-wb .scout-search-related,
+        #jlc-wb .scout-search-current-tags {
+          margin-top: 12px;
+        }
+        #jlc-wb .scout-search-section-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          min-height: 24px;
+          margin-bottom: 5px;
+          color: #5d4632;
+          font-size: 12px;
+        }
+        #jlc-wb .scout-search-section-head strong {
+          font-size: 12px;
+          letter-spacing: 0;
+        }
+        #jlc-wb .scout-search-section-head span {
+          color: #9a7d60;
+          font-size: 11px;
+        }
+        #jlc-wb .scout-search-condition-list {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+        #jlc-wb .scout-search-condition {
+          display: grid;
+          grid-template-columns: minmax(72px, 1fr) 68px 64px 28px;
+          align-items: center;
+          gap: 5px;
+          min-height: 34px;
+          padding: 4px 5px 4px 8px;
+          border-left: 3px solid #9d8b76;
+          border-radius: 0 6px 6px 0;
+          background: #f8f1e7;
+        }
+        #jlc-wb .scout-search-condition.is-required { border-left-color: #2e70a8; }
+        #jlc-wb .scout-search-condition.is-preference { border-left-color: #2f8450; }
+        #jlc-wb .scout-search-condition.is-excluded { border-left-color: #b44940; }
+        #jlc-wb .scout-search-condition-text {
+          overflow: hidden;
+          min-width: 0;
+          color: #4a3728;
+          font-size: 12px;
+          font-weight: 650;
+          line-height: 1.3;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #jlc-wb .scout-search-condition .jlc-wb-select {
+          width: 100%;
+          min-width: 0;
+          height: 28px;
+          padding: 3px 4px;
+          border-radius: 5px;
+          font-size: 11px;
+          box-shadow: none;
+        }
+        #jlc-wb .scout-search-condition-priority[hidden] {
+          visibility: hidden;
+        }
+        #jlc-wb .scout-search-condition-remove {
+          width: 28px;
+          height: 28px;
+          border-radius: 6px;
+          box-shadow: none;
+          color: #a23e35;
+          font-size: 15px;
+        }
+        #jlc-wb .scout-search-condition-empty,
+        #jlc-wb .scout-search-pool-empty {
+          min-height: 32px;
+          padding: 8px;
+          color: #a18468;
+          font-size: 11.5px;
+        }
+        #jlc-wb .scout-search-pool-toolbar {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 92px;
+          gap: 6px;
+          margin-bottom: 8px;
+        }
+        #jlc-wb .scout-search-pool-toolbar .jlc-wb-search,
+        #jlc-wb .scout-search-pool-toolbar .jlc-wb-select {
+          width: 100%;
+          min-width: 0;
+          height: 32px;
+          padding: 5px 8px;
+          border-radius: 6px;
+          font-size: 11.5px;
+        }
+        #jlc-wb .scout-search-pool,
+        #jlc-wb .scout-search-related-list,
+        #jlc-wb .scout-search-current-tag-list {
+          display: flex;
+          flex-wrap: wrap;
+          align-content: flex-start;
+          gap: 5px;
+          max-height: 152px;
+          overflow-x: hidden;
+          overflow-y: auto;
+        }
+        #jlc-wb .scout-search-pool-term,
+        #jlc-wb .scout-search-related-add,
+        #jlc-wb .scout-search-current-tag {
+          max-width: 100%;
+          min-height: 28px;
+          overflow: hidden;
+          padding: 5px 8px;
+          border-radius: 6px;
+          font-size: 11.5px;
+          letter-spacing: 0;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #jlc-wb .scout-search-related-item {
+          display: inline-flex;
+          align-items: center;
+          min-width: 0;
+        }
+        #jlc-wb .scout-search-related-add {
+          border-radius: 6px 0 0 6px;
+        }
+        #jlc-wb .scout-search-related-dismiss {
+          align-self: stretch;
+          width: 24px;
+          padding: 0;
+          border: 1px solid #ddc9ac;
+          border-left: 0;
+          border-radius: 0 6px 6px 0;
+          background: #f4eadb;
+          color: #9a544d;
+          cursor: pointer;
+          font-size: 13px;
+        }
+        #jlc-wb .scout-search-site-plan {
+          padding: 12px 0;
+          border-bottom: 1px solid #eadac3;
+        }
+        #jlc-wb .scout-search-site-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        #jlc-wb .scout-combo-site {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          min-height: 30px;
+          padding: 4px 8px;
+          border: 1px solid #ddc9ac;
+          border-radius: 6px;
+          background: #fffaf3;
+          color: #67503b;
+          cursor: pointer;
+          font-size: 11.5px;
+          font-weight: 650;
+          letter-spacing: 0;
+        }
+        #jlc-wb .scout-combo-site input {
+          width: 14px;
+          height: 14px;
+          margin: 0;
+          accent-color: var(--scout-theme-color);
+        }
+        #jlc-wb .scout-combo-site:has(input:checked) {
+          border-color: var(--scout-theme-color);
+          background: color-mix(in srgb, var(--scout-theme-light) 75%, white);
+          color: var(--scout-theme-dark);
+        }
+        #jlc-wb .scout-search-plan {
+          margin-top: 8px;
+          color: #72583f;
+          font-size: 11.5px;
+        }
+        #jlc-wb .scout-search-plan summary,
+        #jlc-wb .scout-search-errors summary {
+          cursor: pointer;
+          font-weight: 700;
+        }
+        #jlc-wb .scout-search-plan-list {
+          display: flex;
+          flex-direction: column;
+          gap: 7px;
+          margin-top: 7px;
+        }
+        #jlc-wb .scout-search-plan-site {
+          display: grid;
+          grid-template-columns: 34px minmax(0, 1fr);
+          align-items: start;
+          gap: 7px;
+        }
+        #jlc-wb .scout-search-plan-probes {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px 8px;
+          min-width: 0;
+        }
+        #jlc-wb .scout-search-plan-probes a {
+          overflow: hidden;
+          max-width: 100%;
+          color: #476b91;
+          text-decoration: none;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #jlc-wb .scout-search-results-section {
+          padding-top: 8px;
+        }
+        #jlc-wb .scout-search-errors {
+          margin-bottom: 8px;
+          padding: 7px 9px;
+          border-left: 3px solid #b44940;
+          background: #f8e9e7;
+          color: #7e3731;
+          font-size: 11px;
+          line-height: 1.45;
+        }
+        #jlc-wb .scout-search-errors[hidden] { display: none !important; }
+        #jlc-wb .scout-search-assessments {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        #jlc-wb .scout-search-assessment-site {
+          overflow: hidden;
+          border: 1px solid #ead8bd;
+          border-radius: 8px;
+          background: #fffdf9;
+          box-shadow: 0 2px 0 #ead7bb;
+        }
+        #jlc-wb .scout-search-assessment-site-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          min-width: 0;
+          padding: 8px 10px;
+          border-bottom: 1px solid #ead8bd;
+          background: #fff8ed;
+        }
+        #jlc-wb .scout-search-assessment-site-head > div {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          min-width: 0;
+        }
+        #jlc-wb .scout-search-assessment-site-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 5px;
+          flex: 0 0 auto;
+        }
+        #jlc-wb .scout-search-assessment-site-actions .scout-search-exact-open {
+          border-color: #2f8450;
+          background: #2f8450;
+          color: #fff;
+          font-weight: 800;
+        }
+        #jlc-wb .scout-search-assessment-site-state {
+          overflow: hidden;
+          color: #846c55;
+          font-size: 11px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #jlc-wb .scout-search-assessment-metrics {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          border-bottom: 1px solid #eee1ce;
+        }
+        #jlc-wb .scout-search-assessment-metrics > div {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+          padding: 10px;
+          border-right: 1px solid #eee1ce;
+        }
+        #jlc-wb .scout-search-assessment-metrics > div:last-child { border-right: 0; }
+        #jlc-wb .scout-search-assessment-metrics span,
+        #jlc-wb .scout-search-assessment-metrics small {
+          overflow: hidden;
+          color: #8b7259;
+          font-size: 10px;
+          line-height: 1.3;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #jlc-wb .scout-search-assessment-metrics b {
+          overflow-wrap: anywhere;
+          color: #443327;
+          font-size: 18px;
+          line-height: 1.2;
+        }
+        #jlc-wb .scout-search-assessment-terms,
+        #jlc-wb .scout-search-assessment-variants {
+          padding: 8px 10px 10px;
+        }
+        #jlc-wb .scout-search-assessment-variants { border-top: 1px solid #eee1ce; }
+        #jlc-wb .scout-search-condition-stats {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+        }
+        #jlc-wb .scout-search-condition-stat {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          min-width: 0;
+          padding: 3px 6px;
+          border: 1px solid #dfd0bc;
+          border-radius: 5px;
+          background: #f7f1e8;
+          color: #6c5540;
+          font-size: 10.5px;
+        }
+        #jlc-wb .scout-search-condition-stat.is-complete {
+          border-color: #9fc8ad;
+          background: #e8f3eb;
+          color: #28683f;
+        }
+        #jlc-wb .scout-search-condition-stat.is-warning {
+          border-color: #d8a39e;
+          background: #f7e7e5;
+          color: #8a3933;
+        }
+        #jlc-wb .scout-search-condition-stat span {
+          overflow: hidden;
+          max-width: 150px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #jlc-wb .scout-search-assessment-pending {
+          color: #8c735b;
+          font-size: 11px;
+        }
+        #jlc-wb .scout-search-assessment-variants {
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+        #jlc-wb .scout-search-assessment-variant {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(74px, auto) 72px;
+          align-items: center;
+          gap: 8px;
+          min-width: 0;
+          padding: 6px 0;
+          border-top: 1px solid #f0e5d4;
+        }
+        #jlc-wb .scout-search-assessment-variant-copy,
+        #jlc-wb .scout-search-assessment-variant-count {
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+          min-width: 0;
+        }
+        #jlc-wb .scout-search-assessment-variant-copy strong {
+          color: #4c392b;
+          font-size: 11.5px;
+        }
+        #jlc-wb .scout-search-assessment-variant-copy span,
+        #jlc-wb .scout-search-assessment-variant-count span {
+          overflow: hidden;
+          color: #8a7159;
+          font-size: 10px;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        #jlc-wb .scout-search-assessment-variant-count b {
+          color: #4a3728;
+          font-size: 12.5px;
+        }
+        #jlc-wb .scout-search-assessment-variant-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 4px;
+        }
+        #jlc-wb .scout-search-assessment-variant-actions .jlc-wb-btn,
+        #jlc-wb .scout-search-assessment-variant-actions .jlc-wb-open-btn,
+        #jlc-wb .scout-search-assessment-site-head .jlc-wb-open-btn {
+          min-width: 30px;
+          min-height: 28px;
+          padding: 4px 7px;
+          border-radius: 6px;
+          font-size: 10.5px;
+          box-sizing: border-box;
+        }
+        #jlc-wb #scout-search-results-empty {
+          padding: 26px 8px;
+        }
+        #jlc-wb #scout-search-results-empty[hidden] { display: none !important; }
+        #jlc-wb [data-jlc-wb-page="combo"] > .scout-combo-dock {
           flex: 0 0 auto !important;
           width: 100% !important;
           max-width: 100% !important;
           min-width: 0 !important;
           margin: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 7px !important;
           padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
           box-sizing: border-box !important;
           border-top: 1px solid #ead7bb !important;
           background: #fffaf3 !important;
           box-shadow: 0 -4px 12px rgba(80, 50, 20, 0.06) !important;
         }
-        #jlc-wb .scout-combo-dock-inner {
-          display: flex !important;
-          flex-wrap: wrap !important;
-          align-items: center !important;
-          gap: 8px !important;
+        #jlc-wb .scout-search-savebar,
+        #jlc-wb .scout-combo-dock-actions {
+          display: flex;
+          align-items: stretch;
+          gap: 6px;
           width: 100% !important;
           max-width: 100% !important;
           min-width: 0 !important;
           box-sizing: border-box !important;
         }
-        #jlc-wb .scout-combo-dock-sites {
-          display: flex !important;
-          flex-wrap: wrap !important;
-          align-items: center !important;
-          gap: 4px !important;
-          flex: 0 1 auto !important;
-          min-width: 0 !important;
+        #jlc-wb .scout-search-savebar[hidden] { display: none !important; }
+        #jlc-wb .scout-search-savebar .jlc-wb-search {
+          flex: 1 1 auto;
+          min-width: 0;
+          min-height: 34px;
+          padding: 6px 9px;
+          border-radius: 7px;
+          font-size: 12px;
         }
-        #jlc-wb .scout-combo-dock-sites .scout-combo-site {
-          flex: 0 0 auto !important;
-          box-sizing: border-box !important;
-          display: inline-flex;
-          align-items: center;
-          gap: 3px;
-          margin: 0;
-          padding: 2px 6px;
-          border: 1px solid #e4d4bc;
-          border-radius: 999px;
-          font-size: 11.5px;
-          letter-spacing: 0;
-          text-transform: none;
-          cursor: pointer;
-        }
-        #jlc-wb .scout-combo-dock-sites .scout-combo-site input {
-          width: 13px;
-          height: 13px;
-          margin: 0;
-          accent-color: var(--scout-theme-color);
-        }
-        #jlc-wb .scout-combo-dock-sites .scout-combo-site:has(input:checked) {
-          border-color: var(--scout-theme-color) !important;
-          background: var(--scout-theme-light, #fff3e0) !important;
-          color: var(--scout-theme-dark, #b56e28) !important;
-          font-weight: 650;
-        }
-        #jlc-wb .scout-combo-dock-track {
-          display: inline-flex !important;
-          align-items: center !important;
-          gap: 3px !important;
-          flex: 0 0 auto !important;
-          margin: 0 !important;
-          font-size: 11.5px !important;
-          color: #6a5040 !important;
-          cursor: pointer;
-          white-space: nowrap;
-          text-transform: none !important;
-          letter-spacing: 0 !important;
-        }
-        #jlc-wb .scout-combo-dock-track input {
-          width: 14px !important;
-          height: 14px !important;
-          margin: 0 !important;
-          accent-color: var(--scout-theme-color);
-        }
-        /* 按钮区吃掉剩余宽度；窄到放不下则整行 100% */
-        #jlc-wb .scout-combo-dock-actions {
-          display: flex !important;
-          flex: 1 1 200px !important;
-          gap: 6px !important;
-          min-width: min(100%, 200px) !important;
-          max-width: 100% !important;
-          box-sizing: border-box !important;
+        #jlc-wb .scout-search-savebar .jlc-wb-btn,
+        #jlc-wb .scout-search-savebar .jlc-wb-icon-btn {
+          min-height: 34px;
+          border-radius: 7px;
         }
         #jlc-wb .scout-combo-dock-actions .jlc-wb-btn {
-          flex: 1 1 0 !important;
+          flex: 1 1 0;
           width: auto !important;
           min-width: 0 !important;
           max-width: none !important;
           justify-content: center !important;
-          min-height: 34px !important;
+          min-height: 35px !important;
           padding: 6px 8px !important;
           font-size: 12.5px !important;
           box-sizing: border-box !important;
         }
-        #jlc-wb .scout-combo-dock-actions #scout-combo-search-btn {
+        #jlc-wb #scout-combo-search-btn {
           flex: 1.35 1 0 !important;
         }
-        #jlc-wb .scout-combo-dock-actions #scout-combo-clear-btn {
+        #jlc-wb #scout-combo-clear-btn {
           flex: 0.75 1 0 !important;
         }
-        /* 极窄：引擎+追更一行，按钮整行三等分 */
-        @media (max-width: 380px) {
-          #jlc-wb .scout-combo-dock-actions {
-            flex: 1 1 100% !important;
-            width: 100% !important;
-            min-width: 100% !important;
+        @media (max-width: 620px) {
+          #jlc-wb .scout-search-builder-head,
+          #jlc-wb .scout-search-results-head {
+            align-items: stretch;
+            flex-direction: column;
+          }
+          #jlc-wb .scout-search-role-switch {
+            width: 100%;
+          }
+          #jlc-wb .scout-search-builder-grid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+          #jlc-wb .scout-search-pool-column {
+            padding-left: 0;
+            border-top: 1px solid #eadac3;
+            border-left: 0;
+          }
+          #jlc-wb .scout-search-assessment-variant {
+            grid-template-columns: minmax(0, 1fr) minmax(68px, auto) 72px;
           }
         }
-
-        /* 组合页内容 */
-        #jlc-wb .jlc-wb-list-scroll.scout-combo-scroll {
-          padding-bottom: 12px;
-        }
-        #jlc-wb .scout-combo-token {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-        }
-        #jlc-wb .scout-combo-token-remove {
-          opacity: 0.8;
-        }
-        #jlc-wb .scout-combo-empty {
-          color: #9a7d60;
-          font-size: 12px;
-        }
-        #jlc-wb .scout-combo-empty.is-selected {
-          font-size: 12.5px;
-        }
-        #jlc-wb .scout-combo-filter,
-        #jlc-wb .scout-combo-pick {
-          font-size: 12px;
-        }
-        #jlc-wb .jlc-wb-chip.scout-combo-video-tag {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          margin: 2px;
-          padding: 4px 8px;
-          font-size: 12px;
-        }
-        #jlc-wb .scout-combo-pick-tag,
-        #jlc-wb .scout-add-quick {
-          color: #2f6b3a;
-          cursor: pointer;
-        }
-        #jlc-wb .scout-block-quick {
-          color: #b42318;
-          cursor: pointer;
-        }
-        #jlc-wb .jlc-wb-view-block.scout-combo-video-tags {
-          margin-top: 14px;
-        }
-        #jlc-wb .scout-combo-video-tag-list {
-          display: flex;
-          flex-wrap: wrap;
-          max-height: 120px;
-          overflow: auto;
-        }
-        #jlc-wb .scout-combo-video-tag-hint {
-          margin-top: 4px;
-          color: #9a7d60;
-          font-size: 11px;
-        }
-        #jlc-wb .scout-combo-join {
-          display: inline-flex;
-          align-items: center;
-          margin-top: 0;
-          margin-right: 10px;
-          font-size: 12.5px;
-          letter-spacing: 0;
-          text-transform: none;
-          cursor: pointer;
-        }
-        #jlc-wb .scout-combo-join input {
-          width: 15px;
-          height: 15px;
-          margin-right: 4px;
-          accent-color: var(--scout-theme-color);
-        }
-        #jlc-wb .scout-combo-selected {
-          display: flex;
-          flex-wrap: wrap;
-          min-height: 32px;
-          margin-bottom: 8px;
-        }
-        #jlc-wb .scout-combo-join-row {
-          margin-bottom: 8px;
-        }
-        #jlc-wb .scout-combo-join-title {
-          margin-right: 6px;
-          color: #9a7d60;
-          font-size: 12px;
-        }
-        #jlc-wb .scout-combo-preview {
-          margin-bottom: 10px;
-          color: #9a7d60;
-          font-size: 12px;
-          word-break: break-word;
-        }
-        #jlc-wb .scout-combo-preview-value {
-          color: var(--scout-theme-color);
-        }
-        #jlc-wb .scout-combo-help {
-          margin-bottom: 10px;
-          color: #9a7d60;
-          font-size: 11.5px;
-          line-height: 1.4;
-        }
-        #jlc-wb .scout-combo-manual {
-          display: flex;
-          gap: 6px;
-        }
-        #jlc-wb .jlc-wb-search.scout-combo-manual-input {
-          flex: 1;
-          padding: 8px 12px;
-          font-size: 13.5px;
-        }
-        #jlc-wb #scout-combo-add-btn {
-          padding: 8px 14px;
-        }
-        #jlc-wb .scout-combo-filters {
-          display: flex;
-          flex-wrap: wrap;
-          margin-bottom: 8px;
-        }
-        #jlc-wb .scout-combo-pool {
-          display: flex;
-          flex-wrap: wrap;
-          max-height: 160px;
-          overflow: auto;
+        @media (max-width: 420px) {
+          #jlc-wb .jlc-wb-list-scroll.scout-combo-scroll {
+            padding-right: 10px !important;
+            padding-left: 10px !important;
+          }
+          #jlc-wb .scout-search-add-row {
+            flex-wrap: wrap;
+          }
+          #jlc-wb .scout-search-add-row > .jlc-wb-search {
+            flex-basis: calc(100% - 72px);
+          }
+          #jlc-wb .scout-search-priority-switch {
+            order: 3;
+            width: 100%;
+          }
+          #jlc-wb .scout-search-condition {
+            grid-template-columns: minmax(64px, 1fr) 64px 58px 28px;
+          }
+          #jlc-wb .scout-search-assessment-metrics > div {
+            padding: 8px 6px;
+          }
+          #jlc-wb .scout-search-assessment-metrics b {
+            font-size: 15px;
+          }
+          #jlc-wb .scout-search-assessment-variant {
+            grid-template-columns: minmax(0, 1fr) 76px;
+          }
+          #jlc-wb .scout-search-assessment-variant-copy {
+            grid-column: 1 / -1;
+          }
+          #jlc-wb .scout-search-assessment-variant-actions {
+            grid-column: 2;
+          }
+          #jlc-wb .scout-search-savebar {
+            flex-wrap: wrap;
+          }
+          #jlc-wb .scout-search-savebar .jlc-wb-search {
+            flex-basis: calc(100% - 90px);
+          }
         }
 
         /*
@@ -7509,6 +9309,80 @@ function getScoutSiteLayoutThemeCss() {
           opacity: 1 !important;
         }
 
+        /* 当前 URL 的临时精确过滤，不参与全局屏蔽配置。 */
+        html.scout-cream-site .scout-exact-filter-hidden {
+          display: none !important;
+        }
+        html.scout-cream-site .scout-exact-filter-pending {
+          opacity: .58 !important;
+          transition: opacity .16s ease !important;
+        }
+        html.scout-cream-site .scout-exact-filter-failed {
+          outline: 2px dashed rgba(230, 170, 70, .8) !important;
+          outline-offset: 2px !important;
+        }
+        #scout-exact-filter-bar {
+          position: relative !important;
+          z-index: 999992 !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          width: min(540px, calc(100% - 24px)) !important;
+          max-width: calc(100% - 24px) !important;
+          min-height: 32px !important;
+          margin: 8px auto 10px !important;
+          padding: 5px 6px 5px 11px !important;
+          border: 1px solid rgba(92, 196, 128, .42) !important;
+          border-radius: 7px !important;
+          background: rgba(18, 24, 21, .94) !important;
+          box-shadow: 0 5px 16px rgba(0, 0, 0, .34) !important;
+          color: #e8f5ec !important;
+          font-size: 11.5px !important;
+          line-height: 1.3 !important;
+          box-sizing: border-box !important;
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+        #scout-exact-filter-bar .scout-exact-filter-text {
+          min-width: 0 !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          font-weight: 650 !important;
+        }
+        #scout-exact-filter-bar .scout-exact-filter-actions {
+          display: flex !important;
+          align-items: center !important;
+          gap: 4px !important;
+          flex: 0 0 auto !important;
+        }
+        #scout-exact-filter-bar button {
+          min-height: 22px !important;
+          padding: 2px 8px !important;
+          border: 1px solid rgba(255, 255, 255, .18) !important;
+          border-radius: 5px !important;
+          background: rgba(255, 255, 255, .09) !important;
+          color: #eef7f0 !important;
+          cursor: pointer !important;
+          font: inherit !important;
+          font-weight: 650 !important;
+          letter-spacing: 0 !important;
+        }
+        #scout-exact-filter-bar button:hover {
+          background: rgba(92, 196, 128, .2) !important;
+          border-color: rgba(92, 196, 128, .55) !important;
+        }
+        @media (max-width: 620px) {
+          #scout-exact-filter-bar {
+            width: calc(100% - 20px) !important;
+            max-width: calc(100% - 20px) !important;
+            margin: 8px 10px 10px !important;
+          }
+          #scout-exact-filter-bar .scout-exact-filter-text {
+            flex: 1 1 auto !important;
+          }
+        }
+
         /* PC：顶部超矮订阅条 */
         #scout-search-track-bar.scout-track-banner {
           position: fixed !important;
@@ -8599,336 +10473,723 @@ function enhanceListLexiconHitFlows(listEntries) {
   }
 }
 // @@creamu-part:32-combo-page
-function getComboTokens() {
-  const v = GM_getValue('scout_combo_tokens', null);
-  if (Array.isArray(v)) return v.map(s => compactText(s)).filter(Boolean);
-  return [];
+const SCOUT_SEARCH_ROLE_LABELS = {
+  required: '必须',
+  preference: '偏好',
+  excluded: '排除',
+};
+
+function createScoutSearchUiSession(previous) {
+  return {
+    runId: (previous && previous.runId ? previous.runId : 0) + 1,
+    fingerprint: '',
+    plan: null,
+    reports: new Map(),
+    running: false,
+    phase: 'idle',
+    completed: 0,
+    total: 0,
+    verificationCompleted: 0,
+    verificationTotal: 0,
+    errors: [],
+    terms: [],
+  };
 }
-function saveComboTokens(list) {
-  GM_setValue('scout_combo_tokens', list || []);
-  markScoutStorageChanged('scout_combo_tokens');
+
+let __scoutSearchUiSession = createScoutSearchUiSession(null);
+
+function resetScoutSearchUiSession() {
+  __scoutSearchUiSession = createScoutSearchUiSession(__scoutSearchUiSession);
+  return __scoutSearchUiSession;
 }
-function addComboTokens(values) {
-  const list = getComboTokens();
-  const seen = new Set(list.map((item) => item.toLowerCase()));
-  let changed = false;
-  (Array.isArray(values) ? values : [values]).forEach((value) => {
-    const text = compactText(value);
-    const key = text.toLowerCase();
-    if (!text || seen.has(key)) return;
-    seen.add(key);
-    list.push(text);
-    changed = true;
+
+function getScoutSearchTarget(container) {
+  const role = normalizeScoutSearchRole(
+    container && container.getAttribute('data-search-target-role')
+  );
+  const priority = normalizeScoutSearchPriority(
+    container && container.getAttribute('data-search-target-priority')
+  );
+  return { role, priority };
+}
+
+function setScoutSearchTarget(container, role, priority) {
+  if (!container) return;
+  container.setAttribute('data-search-target-role', normalizeScoutSearchRole(role));
+  container.setAttribute(
+    'data-search-target-priority',
+    String(normalizeScoutSearchPriority(priority))
+  );
+}
+
+function renderScoutSearchConditionOptions(selectedRole) {
+  return SCOUT_SEARCH_ROLE_ORDER.map((role) => (
+    `<option value="${role}"${role === selectedRole ? ' selected' : ''}>` +
+      `${SCOUT_SEARCH_ROLE_LABELS[role]}</option>`
+  )).join('');
+}
+
+function renderScoutSearchConditions(recipe) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  return SCOUT_SEARCH_ROLE_ORDER.map((role) => {
+    const conditions = normalized.conditions.filter((condition) => condition.role === role);
+    const rows = conditions.length
+      ? conditions.map((condition) => `
+          <div class="scout-search-condition is-${role}" data-condition-id="${escapeHtml(condition.id)}">
+            <span class="scout-search-condition-text" title="${escapeHtml(condition.text)}">${escapeHtml(condition.text)}</span>
+            <select class="jlc-wb-select scout-search-condition-role" aria-label="条件类型">
+              ${renderScoutSearchConditionOptions(role)}
+            </select>
+            <select class="jlc-wb-select scout-search-condition-priority" aria-label="偏好层级"${role === 'preference' ? '' : ' hidden'}>
+              ${[1, 2, 3].map((priority) => (
+                `<option value="${priority}"${condition.priority === priority ? ' selected' : ''}>` +
+                  `${priority} 级</option>`
+              )).join('')}
+            </select>
+            <button type="button" class="jlc-wb-icon-btn scout-search-condition-remove" title="移除" aria-label="移除 ${escapeHtml(condition.text)}">×</button>
+          </div>`).join('')
+      : '<div class="scout-search-condition-empty">暂无</div>';
+    return `
+      <section class="scout-search-condition-group is-${role}" data-condition-role="${role}">
+        <div class="scout-search-section-head">
+          <strong>${SCOUT_SEARCH_ROLE_LABELS[role]}</strong>
+          <span>${conditions.length}</span>
+        </div>
+        <div class="scout-search-condition-list">${rows}</div>
+      </section>`;
+  }).join('');
+}
+
+function getScoutSearchPoolTerms(recipe, type, query, availableTerms) {
+  const selected = new Set(
+    normalizeScoutSearchRecipe(recipe).conditions.map((condition) =>
+      lexiconIdentityKey(condition.text)
+    )
+  );
+  const queryKey = lexiconIdentityKey(query);
+  return (Array.isArray(availableTerms) ? availableTerms : getLexiconTerms())
+    .filter((term) => term && term.status !== 'retired')
+    .filter((term) => type === '全部' || term.type === type)
+    .filter((term) => !selected.has(lexiconIdentityKey(term.text)))
+    .filter((term) => {
+      if (!queryKey) return true;
+      return [term.text, term.zh, term.type].some((value) =>
+        lexiconIdentityKey(value).includes(queryKey)
+      );
+    })
+    .sort((left, right) => {
+      if (!!right.loved !== !!left.loved) return right.loved ? 1 : -1;
+      return getEffectiveHeat(right) - getEffectiveHeat(left);
+    })
+    .slice(0, 80);
+}
+
+function renderScoutSearchPoolHtml(recipe, type, query, availableTerms) {
+  const pool = getScoutSearchPoolTerms(recipe, type, query, availableTerms);
+  if (!pool.length) return '<div class="scout-search-pool-empty">没有匹配词条</div>';
+  return pool.map((term) => {
+    const suffix = term.zh ? ` · ${term.zh}` : '';
+    return `
+      <button type="button" class="jlc-wb-chip scout-search-pool-term" data-search-term="${escapeHtml(term.text)}" data-search-term-id="${escapeHtml(term.id || '')}" title="${escapeHtml(term.type || '未分类')}">
+        ${term.loved ? '★ ' : ''}${escapeHtml(term.text)}${escapeHtml(suffix)}
+      </button>`;
+  }).join('');
+}
+
+function renderScoutRelatedSuggestions(recipe) {
+  const suggestions = getScoutRelatedSearchSuggestions(recipe, 12);
+  if (!suggestions.length) return '';
+  return `
+    <section class="scout-search-related" aria-label="关联词">
+      <div class="scout-search-section-head"><strong>关联词</strong><span>${suggestions.length}</span></div>
+      <div class="scout-search-related-list">
+        ${suggestions.map((suggestion) => `
+          <span class="scout-search-related-item">
+            <button type="button" class="jlc-wb-chip scout-search-related-add" data-search-term="${escapeHtml(suggestion.text)}" title="来自 ${suggestion.count} 次标签共现">${escapeHtml(suggestion.text)}</button>
+            <button type="button" class="scout-search-related-dismiss" data-related-dismiss="${escapeHtml(suggestion.text)}" title="不再推荐" aria-label="不再推荐 ${escapeHtml(suggestion.text)}">×</button>
+          </span>`).join('')}
+      </div>
+    </section>`;
+}
+
+function renderScoutCurrentTagChoices(meta) {
+  const tags = meta && Array.isArray(meta.tags) ? meta.tags : [];
+  if (!tags.length) return '';
+  return `
+    <section class="scout-search-current-tags" aria-label="当前作品标签">
+      <div class="scout-search-section-head"><strong>当前作品标签</strong><span>${tags.length}</span></div>
+      <div class="scout-search-current-tag-list">
+        ${tags.map((tag) => `
+          <button type="button" class="jlc-wb-chip scout-search-current-tag" data-search-term="${escapeHtml(tag)}">${escapeHtml(tag)}</button>`).join('')}
+      </div>
+    </section>`;
+}
+
+function renderScoutSearchPlan(recipe, preparedPlan) {
+  const plan = preparedPlan || buildScoutSearchPlan(recipe);
+  const rows = normalizeScoutSearchRecipe(recipe).sites.map((site) => {
+    const probes = plan.probes.filter((probe) => probe.site === site);
+    return `
+      <div class="scout-search-plan-site">
+        <span class="jlc-site-pill">${escapeHtml(scoutSiteShortLabel(site))}</span>
+        <div class="scout-search-plan-probes">
+          ${probes.map((probe) => `
+            <a href="${escapeHtml(probe.url)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(probe.label)}">${escapeHtml(probe.query)}</a>`).join('') || '<span>无有效查询</span>'}
+        </div>
+      </div>`;
+  }).join('');
+  return `
+    <details class="scout-search-plan">
+      <summary>查询计划 · ${plan.probes.length} 组</summary>
+      <div class="scout-search-plan-list">${rows}</div>
+    </details>`;
+}
+
+function formatScoutAssessmentCount(value, kind) {
+  if (value == null || !Number.isFinite(Number(value))) return '未知';
+  const count = Math.max(0, Math.round(Number(value))).toLocaleString('zh-CN');
+  if (kind === 'estimate') return `约 ${count}`;
+  if (kind === 'minimum') return `至少 ${count}`;
+  return count;
+}
+
+function formatScoutAssessmentDelta(value, baseline, approximate) {
+  if (!Number.isFinite(Number(value)) || !Number.isFinite(Number(baseline))) return '';
+  const delta = Math.round(Number(value) - Number(baseline));
+  if (!delta) return '与完整组合相同';
+  const prefix = approximate ? '约 ' : '';
+  return `${prefix}${delta > 0 ? '+' : '-'}${Math.abs(delta).toLocaleString('zh-CN')}`;
+}
+
+function renderScoutSearchAssessmentStatus() {
+  const status = document.getElementById('scout-search-result-status');
+  const summary = document.getElementById('scout-search-result-summary');
+  if (!status || !summary) return;
+  const session = __scoutSearchUiSession;
+  if (session.running) {
+    status.textContent = session.phase === 'verify'
+      ? `核验样本 ${session.verificationCompleted}/${session.verificationTotal}`
+      : `读取结果 ${session.completed}/${session.total}`;
+  } else if (session.plan) {
+    status.textContent = session.errors.length
+      ? `完成 · ${session.errors.length} 组失败`
+      : '完成';
+  } else {
+    status.textContent = '未运行';
+  }
+  const siteCount = session.plan ? session.plan.recipe.sites.length : 0;
+  summary.textContent = session.plan
+    ? `${siteCount} 站 · ${session.reports.size}/${session.total} 组查询`
+    : '按站比较结果量与精确样本';
+
+  const errors = document.getElementById('scout-search-errors');
+  if (errors) {
+    errors.hidden = !session.errors.length;
+    errors.innerHTML = session.errors.length
+      ? `<summary>请求失败 ${session.errors.length}</summary>` +
+        session.errors.map((error) => (
+          `<div><b>${escapeHtml(scoutSiteShortLabel(error.site))}</b> ${escapeHtml(error.query)} · ${escapeHtml(error.message)}</div>`
+        )).join('')
+      : '';
+  }
+}
+
+function renderScoutAssessmentConditionStats(report) {
+  const verified = Math.max(0, Number(report && report.sample_verified) || 0);
+  const stats = report && Array.isArray(report.condition_stats)
+    ? report.condition_stats
+    : [];
+  if (!stats.length || !verified) {
+    return '<div class="scout-search-assessment-pending">等待详情样本</div>';
+  }
+  return `<div class="scout-search-condition-stats">${stats.map((stat) => {
+    const hits = Math.max(0, Number(stat.hits) || 0);
+    const warning = stat.role === 'excluded' && hits > 0;
+    const complete = stat.role !== 'excluded' && hits === verified;
+    return `<span class="scout-search-condition-stat is-${escapeHtml(stat.role)}${warning ? ' is-warning' : ''}${complete ? ' is-complete' : ''}" title="${escapeHtml(SCOUT_SEARCH_ROLE_LABELS[stat.role] || stat.role)}">
+      <span>${escapeHtml(stat.text)}</span><b>${hits}/${verified}</b>
+    </span>`;
+  }).join('')}</div>`;
+}
+
+function renderScoutAssessmentVariant(probe, report, strictReport) {
+  const pending = !report;
+  const total = pending ? '读取中' : (
+    report.ok ? formatScoutAssessmentCount(report.total, report.total_kind) : '失败'
+  );
+  const approximate = !!(
+    report && strictReport &&
+    (report.total_kind !== 'exact' || strictReport.total_kind !== 'exact')
+  );
+  const delta = report && report.ok && strictReport && strictReport.ok
+    ? formatScoutAssessmentDelta(report.total, strictReport.total, approximate)
+    : '';
+  const action = probe.level === 'reduced' && probe.removed_condition_ids?.length
+    ? `<button type="button" class="jlc-wb-btn ghost scout-search-variant-adopt" data-search-remove-condition="${escapeHtml(probe.removed_condition_ids[0])}">采用</button>`
+    : probe.level === 'alias' && probe.replacement_condition_id
+      ? `<button type="button" class="jlc-wb-btn ghost scout-search-variant-adopt" data-search-replace-condition="${escapeHtml(probe.replacement_condition_id)}" data-search-replacement="${escapeHtml(probe.replacement_text || '')}">替换</button>`
+      : '';
+  return `
+    <div class="scout-search-assessment-variant is-${escapeHtml(probe.level)}">
+      <div class="scout-search-assessment-variant-copy">
+        <strong>${escapeHtml(probe.label)}</strong>
+        <span title="${escapeHtml(probe.query)}">${escapeHtml(probe.query)}</span>
+      </div>
+      <div class="scout-search-assessment-variant-count">
+        <b>${escapeHtml(total)}</b>
+        <span>${escapeHtml(delta)}</span>
+      </div>
+      <div class="scout-search-assessment-variant-actions">
+        ${action}
+        <a class="jlc-wb-open-btn" href="${escapeHtml(probe.url)}" target="_blank" rel="noopener noreferrer" title="打开此搜索" aria-label="打开 ${escapeHtml(probe.label)}">↗</a>
+      </div>
+    </div>`;
+}
+
+function renderScoutSearchAssessmentSite(site) {
+  const session = __scoutSearchUiSession;
+  const probes = session.plan.probes.filter((probe) => probe.site === site);
+  const strictProbe = probes.find((probe) => probe.level === 'strict') || probes[0];
+  const strictReport = strictProbe ? session.reports.get(strictProbe.id) : null;
+  const verified = Math.max(0, Number(strictReport && strictReport.sample_verified) || 0);
+  const exact = Math.max(0, Number(strictReport && strictReport.sample_exact) || 0);
+  const failed = Math.max(0, Number(strictReport && strictReport.sample_failed) || 0);
+  const rate = verified ? Math.round((exact / verified) * 1000) / 10 : null;
+  const totalKind = strictReport && strictReport.total_kind;
+  const totalNote = totalKind === 'estimate'
+    ? '按分页估算'
+    : totalKind === 'minimum'
+      ? '当前可见下限'
+      : '站点报告';
+  const siteState = !strictReport
+    ? '读取中'
+    : !strictReport.ok
+      ? strictReport.error || '读取失败'
+      : session.running && verified + failed < strictReport.sample_target
+        ? `核验 ${verified + failed}/${strictReport.sample_target}`
+        : '已完成';
+  const variants = probes
+    .filter((probe) => probe !== strictProbe)
+    .map((probe) => renderScoutAssessmentVariant(
+      probe,
+      session.reports.get(probe.id),
+      strictReport
+    ))
+    .join('');
+  return `
+    <article class="scout-search-assessment-site" data-assessment-site="${escapeHtml(site)}">
+      <header class="scout-search-assessment-site-head">
+        <div>
+          <span class="jlc-site-pill">${escapeHtml(scoutSiteShortLabel(site))}</span>
+          <span class="scout-search-assessment-site-state">${escapeHtml(siteState)}</span>
+        </div>
+        ${strictProbe ? `
+          <div class="scout-search-assessment-site-actions">
+            <a class="jlc-wb-open-btn" href="${escapeHtml(strictProbe.url)}" target="_blank" rel="noopener noreferrer" title="打开完整组合" aria-label="在 ${escapeHtml(scoutSiteShortLabel(site))} 打开完整组合">↗</a>
+            <a class="jlc-wb-open-btn scout-search-exact-open" href="${escapeHtml(buildScoutExactFilterUrl(strictProbe.url, session.plan.recipe))}" target="_blank" rel="noopener noreferrer" title="只看同时命中的作品" aria-label="在 ${escapeHtml(scoutSiteShortLabel(site))} 只看同时命中的作品">✓</a>
+          </div>` : ''}
+      </header>
+      <div class="scout-search-assessment-metrics">
+        <div><span>搜索结果</span><b>${strictReport && strictReport.ok ? escapeHtml(formatScoutAssessmentCount(strictReport.total, totalKind)) : '--'}</b><small>${escapeHtml(totalNote)}</small></div>
+        <div><span>精确样本</span><b>${verified ? `${exact}/${verified}` : '--'}</b><small>顶部 ${strictReport ? strictReport.sample_target : 0} 条</small></div>
+        <div><span>组合命中率</span><b>${rate == null ? '--' : `${rate}%`}</b><small>${failed ? `${failed} 条核验失败` : '全部搜索词同时命中'}</small></div>
+      </div>
+      <section class="scout-search-assessment-terms" aria-label="逐词命中">
+        <div class="scout-search-section-head"><strong>逐词命中</strong><span>${verified ? `${verified} 个已核验样本` : '尚无样本'}</span></div>
+        ${renderScoutAssessmentConditionStats(strictReport)}
+      </section>
+      ${variants ? `<section class="scout-search-assessment-variants" aria-label="减词与替换结果">
+        <div class="scout-search-section-head"><strong>减词与替换</strong><span>对比完整组合结果量</span></div>
+        ${variants}
+      </section>` : ''}
+    </article>`;
+}
+
+function renderScoutSearchAssessments() {
+  const host = document.getElementById('scout-search-assessments');
+  const empty = document.getElementById('scout-search-results-empty');
+  if (!host || !empty) return;
+  const session = __scoutSearchUiSession;
+  if (!session.plan) {
+    host.innerHTML = '';
+    empty.hidden = false;
+    empty.textContent = '评估组合后在此比较三个站点';
+  } else {
+    host.innerHTML = session.plan.recipe.sites
+      .map((site) => renderScoutSearchAssessmentSite(site))
+      .join('');
+    empty.hidden = !!session.plan.recipe.sites.length;
+  }
+  renderScoutSearchAssessmentStatus();
+}
+
+function updateScoutSearchReport(report) {
+  if (!report || !report.id) return;
+  __scoutSearchUiSession.reports.set(report.id, report);
+}
+
+function renderScoutSearchRelatedSection() {
+  const host = document.getElementById('scout-search-related-host');
+  if (!host) return;
+  const recipe = __scoutSearchUiSession.plan
+    ? __scoutSearchUiSession.plan.recipe
+    : getScoutSearchDraft();
+  host.innerHTML = renderScoutRelatedSuggestions(recipe);
+}
+
+function renderScoutSearchRuntimeState() {
+  const session = __scoutSearchUiSession;
+  const runButton = document.getElementById('scout-combo-search-btn');
+  if (runButton) {
+    runButton.disabled = session.running;
+    runButton.textContent = session.running ? '评估中' : '评估组合';
+  }
+  renderScoutSearchAssessments();
+}
+
+function startScoutRecipeSearch() {
+  const recipe = getScoutSearchDraft();
+  const terms = getLexiconTerms();
+  const searchable = recipe.conditions.filter((condition) => condition.role !== 'excluded');
+  if (!searchable.length) {
+    showToast('请先添加必须或偏好条件', true);
+    return false;
+  }
+  const plan = buildScoutSearchPlan(recipe, { terms });
+  if (!plan.probes.length) {
+    showToast('当前条件无法生成查询', true);
+    return false;
+  }
+
+  incrementScoutRecipeTermUsage(recipe, terms);
+
+  const session = resetScoutSearchUiSession();
+  session.fingerprint = plan.fingerprint;
+  session.plan = plan;
+  session.terms = terms;
+  session.running = true;
+  session.phase = 'search';
+  session.total = plan.probes.length;
+  const runId = session.runId;
+  markScoutWorkbenchPageRendered('combo');
+  renderScoutSearchRuntimeState();
+
+  runScoutSearchPlan(plan, {
+    concurrency: 3,
+    detailConcurrency: 3,
+    sampleSize: 8,
+    terms,
+    shouldContinue() {
+      return __scoutSearchUiSession.runId === runId;
+    },
+    onReport(report) {
+      if (__scoutSearchUiSession.runId !== runId) return;
+      updateScoutSearchReport(report);
+      renderScoutSearchAssessments();
+    },
+    onProgress(progress) {
+      if (__scoutSearchUiSession.runId !== runId) return;
+      __scoutSearchUiSession.phase = progress.phase;
+      if (progress.phase === 'verify') {
+        __scoutSearchUiSession.verificationCompleted = progress.completed;
+        __scoutSearchUiSession.verificationTotal = progress.total;
+      } else {
+        __scoutSearchUiSession.completed = progress.completed;
+      }
+      renderScoutSearchAssessmentStatus();
+    },
+  }).then((outcome) => {
+    if (__scoutSearchUiSession.runId !== runId) return;
+    outcome.reports.forEach(updateScoutSearchReport);
+    __scoutSearchUiSession.errors = outcome.errors || [];
+    __scoutSearchUiSession.completed = outcome.completed;
+    __scoutSearchUiSession.total = outcome.total;
+    __scoutSearchUiSession.verificationCompleted = outcome.verification_completed;
+    __scoutSearchUiSession.verificationTotal = outcome.verification_total;
+    __scoutSearchUiSession.running = false;
+    __scoutSearchUiSession.phase = 'complete';
+    renderScoutSearchRuntimeState();
+    renderScoutSearchRelatedSection();
+  }).catch((error) => {
+    if (__scoutSearchUiSession.runId !== runId) return;
+    __scoutSearchUiSession.running = false;
+    __scoutSearchUiSession.phase = 'complete';
+    __scoutSearchUiSession.errors = [{ site: '', query: '', message: error.message || String(error) }];
+    renderScoutSearchRuntimeState();
   });
-  if (changed) saveComboTokens(list);
-  return list;
+  return true;
 }
-function addComboToken(text) {
-  return addComboTokens([text]);
+
+function saveScoutRecipeAndRender(recipe, options) {
+  const saved = saveScoutSearchDraft(recipe);
+  if (!options || options.resetResults !== false) resetScoutSearchUiSession();
+  renderComboPage();
+  return saved;
 }
-function removeComboToken(text) {
-  const t = compactText(text).toLowerCase();
-  const list = getComboTokens().filter(x => x.toLowerCase() !== t);
-  saveComboTokens(list);
-  return list;
+
+function addScoutSearchTerms(recipe, values, role, priority) {
+  let next = normalizeScoutSearchRecipe(recipe);
+  (Array.isArray(values) ? values : [values]).forEach((value) => {
+    const source = typeof value === 'string' ? { text: value } : value;
+    next = putScoutRecipeCondition(next, source, role, priority);
+  });
+  return next;
 }
 
 function renderComboPage() {
   const container = document.querySelector('[data-jlc-wb-page="combo"]');
   if (!container) return;
-
-  const terms = getLexiconTerms().filter(t => t.status !== 'retired');
-  const types = getLexiconTypes();
-  let tokens = getComboTokens();
-  let filterType = container.getAttribute('data-combo-filter') || '全部';
-
-  const meta = scrapeVideoMeta();
-  const currentSite = detectSite();
-  const activeSite = currentSite || 'xvideos';
-
-  // 已选 chips
-  let selectedHtml = tokens.length
-    ? tokens.map(t => `
-        <span class="jlc-wb-chip is-on scout-wb-chip scout-combo-token" data-combo-token="${escapeHtml(t)}" title="点击移除">
-          ${escapeHtml(t)} <b class="scout-combo-token-remove">×</b>
-        </span>`).join('')
-    : '<span class="scout-combo-empty is-selected">点下方词库添加，或手动输入多个词组合搜索</span>';
-
-  // 分类筛选
-  const typeFilters = ['全部', ...types];
-  let filterHtml = typeFilters.map(ty => {
-    const on = filterType === ty ? 'is-on' : '';
-    return `<span class="jlc-wb-chip scout-wb-chip scout-combo-filter ${on}" data-combo-filter="${escapeHtml(ty)}">${escapeHtml(ty)}</span>`;
-  }).join('');
-
-  // 词库快捷（未选中的）
-  let pool = terms.slice();
-  if (filterType !== '全部') pool = pool.filter(t => t.type === filterType);
-  pool.sort((a, b) => {
-    if (!!b.loved !== !!a.loved) return b.loved ? 1 : -1;
-    return getEffectiveHeat(b) - getEffectiveHeat(a);
-  });
-  const selectedLower = new Set(tokens.map(t => t.toLowerCase()));
-  pool = pool.filter(t => !selectedLower.has(t.text.toLowerCase())).slice(0, 80);
-
-  let poolHtml = pool.length
-    ? pool.map(t => {
-        const zh = t.zh ? ` · ${t.zh}` : '';
-        const heart = t.loved ? '❤️' : '';
-        return `<span class="jlc-wb-chip scout-wb-chip scout-combo-pick" data-combo-pick="${escapeHtml(t.text)}" title="${escapeHtml(t.type)}">
-          ${heart}${escapeHtml(t.text)}${escapeHtml(zh)}
-        </span>`;
-      }).join('')
-    : '<span class="scout-combo-empty">该分类暂无更多词，可手动输入</span>';
-
-  // 当前视频标签
-  let currentVideoTagsHtml = '';
-  if (meta && meta.tags && meta.tags.length > 0) {
-    const tagPills = meta.tags.map(tag => `
-      <span class="jlc-wb-chip scout-combo-video-tag" data-tag="${escapeHtml(tag)}">
-        ${escapeHtml(tag)}
-        <b class="scout-combo-pick-tag" title="加入组合">＋</b>
-        <b class="scout-add-quick">库</b>
-        <b class="scout-block-quick">✕</b>
-      </span>`).join('');
-    currentVideoTagsHtml = `
-      <div class="jlc-wb-view-block scout-combo-video-tags">
-        <div class="jlc-wb-view-title">当前视频标签</div>
-        <div class="scout-combo-video-tag-list">${tagPills}</div>
-        <div class="scout-combo-video-tag-hint">＋加入组合 · 库入库 · ✕屏蔽</div>
-      </div>`;
+  if (!container.hasAttribute('data-search-target-role')) {
+    setScoutSearchTarget(container, 'required', 1);
   }
-
-  const sites = [
-    { key: 'xvideos', name: 'XV', full: 'XVideos' },
-    { key: 'xnxx', name: 'XN', full: 'XNXX' },
-    { key: 'eporner', name: 'EP', full: 'EPorner' }
-  ];
-  const siteRadioHtml = sites.map(s => `
-    <label class="scout-combo-site" title="${escapeHtml(s.full)}">
-      <input type="radio" name="scout-search-site" value="${s.key}" ${s.key === activeSite ? 'checked' : ''}>
-      ${s.name}
-    </label>`).join('');
-
-  const searchCtx = parseSearchContext();
-  const canSavePageSearch = detectPageKind() === 'search' && !!(searchCtx && searchCtx.query);
-  const saveSearchTitle = canSavePageSearch
-    ? `收藏当前页搜索：${searchCtx.query}`
-    : '收藏当前组合为追更（不打开页面）';
-
-  const joinMode = typeof getComboJoinMode === 'function' ? getComboJoinMode() : 'and';
-  const preview = (typeof joinComboQuery === 'function'
-    ? joinComboQuery(tokens, joinMode)
-    : tokens.join(' and ')) || '（尚未选词）';
-
-  const joinOpts = [
-    { key: 'and', label: 'AND', tip: 'word1 and word2（推荐，结果更稳）' },
-    { key: 'space', label: '空格', tip: 'word1 word2（部分站会空结果）' },
-    { key: 'or', label: 'OR', tip: 'word1 or word2' }
-  ];
-  const joinHtml = joinOpts.map(o => `
-    <label class="scout-combo-join" title="${escapeHtml(o.tip)}">
-      <input type="radio" name="scout-combo-join" value="${o.key}" ${joinMode === o.key ? 'checked' : ''}>
-      ${o.label}
+  const target = getScoutSearchTarget(container);
+  const recipe = getScoutSearchDraft();
+  const terms = getLexiconTerms();
+  const types = ['全部', ...getLexiconTypes()];
+  const selectedType = container.getAttribute('data-search-pool-type') || '全部';
+  const currentMeta = scrapeVideoMeta();
+  const preparedPlan = buildScoutSearchPlan(recipe, { terms });
+  const planHtml = renderScoutSearchPlan(recipe, preparedPlan);
+  const siteSwitches = SCOUT_SITE_IDS.map((site) => `
+    <label class="scout-combo-site">
+      <input type="checkbox" value="${site}"${recipe.sites.includes(site) ? ' checked' : ''}>
+      <span>${escapeHtml(scoutSiteShortLabel(site))}</span>
     </label>`).join('');
 
   container.innerHTML = `
     <div class="jlc-wb-list-scroll scout-combo-scroll">
-      <div class="jlc-wb-view-block">
-        <div class="jlc-wb-view-title">已选词（可多个，顺序=搜索顺序）</div>
-        <div id="scout-combo-selected" class="scout-combo-selected">${selectedHtml}</div>
-        <div class="scout-combo-join-row">
-          <span class="scout-combo-join-title">连接方式</span>
-          ${joinHtml}
+      <header class="scout-search-builder-head">
+        <div>
+          <strong>搜索条件</strong>
+          <span>${escapeHtml(describeScoutSearchRecipe(recipe))}</span>
         </div>
-        <div class="scout-combo-preview">预览：<b class="scout-combo-preview-value">${escapeHtml(preview)}</b></div>
-        <div class="scout-combo-help">
-          提示：多站用空格拼词常无结果，用 <b>AND</b> 更稳。多词短语请整段添加为一个 token。
+        <div class="scout-search-role-switch" role="group" aria-label="添加目标">
+          ${SCOUT_SEARCH_ROLE_ORDER.map((role) => `
+            <button type="button" data-search-target="${role}" class="${target.role === role ? 'is-active' : ''}">${SCOUT_SEARCH_ROLE_LABELS[role]}</button>`).join('')}
         </div>
-        <div class="scout-combo-manual">
-          <input type="text" class="jlc-wb-search scout-combo-manual-input" id="scout-combo-free-input" placeholder="手动加词，回车或点添加">
-          <button class="jlc-wb-btn primary" id="scout-combo-add-btn">添加</button>
+      </header>
+
+      <div class="scout-search-add-row">
+        <input type="text" class="jlc-wb-search" id="scout-combo-free-input" placeholder="输入词或短语">
+        <div class="scout-search-priority-switch"${target.role === 'preference' ? '' : ' hidden'} role="group" aria-label="偏好层级">
+          ${[1, 2, 3].map((priority) => `
+            <button type="button" data-search-priority="${priority}" class="${target.priority === priority ? 'is-active' : ''}">${priority}</button>`).join('')}
+        </div>
+        <button type="button" class="jlc-wb-btn primary" id="scout-combo-add-btn">添加</button>
+      </div>
+
+      <div class="scout-search-builder-grid">
+        <div class="scout-search-condition-column">
+          ${renderScoutSearchConditions(recipe)}
+        </div>
+        <div class="scout-search-pool-column">
+          <div class="scout-search-pool-toolbar">
+            <input type="search" class="jlc-wb-search" id="scout-search-term-filter" placeholder="筛选词库">
+            <select class="jlc-wb-select" id="scout-search-type-filter" aria-label="词库分类">
+              ${types.map((type) => `<option value="${escapeHtml(type)}"${type === selectedType ? ' selected' : ''}>${escapeHtml(type)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="scout-search-pool" id="scout-combo-pool">${renderScoutSearchPoolHtml(recipe, selectedType, '', terms)}</div>
+          <div id="scout-search-related-host">${renderScoutRelatedSuggestions(recipe)}</div>
+          ${renderScoutCurrentTagChoices(currentMeta)}
         </div>
       </div>
 
-      <div class="jlc-wb-view-block">
-        <div class="jlc-wb-view-title">从词库点选</div>
-        <div class="scout-combo-filters">${filterHtml}</div>
-        <div id="scout-combo-pool" class="scout-combo-pool">${poolHtml}</div>
-      </div>
+      <section class="scout-search-site-plan">
+        <div class="scout-search-site-row" role="group" aria-label="搜索站点">${siteSwitches}</div>
+        ${planHtml}
+      </section>
 
-      ${currentVideoTagsHtml}
+      <section class="scout-search-results-section" aria-label="组合评估">
+        <header class="scout-search-results-head">
+          <div>
+            <strong id="scout-search-result-status">未运行</strong>
+            <span id="scout-search-result-summary">按站比较结果量与精确样本</span>
+          </div>
+        </header>
+        <details id="scout-search-errors" class="scout-search-errors" hidden></details>
+        <div id="scout-search-assessments" class="scout-search-assessments"></div>
+        <div id="scout-search-results-empty" class="jlc-wb-empty">评估组合后在此比较三个站点</div>
+      </section>
     </div>
-    <div class="jlc-wb-footer scout-combo-dock" id="scout-combo-dock">
-      <div class="scout-combo-dock-inner">
-        <div class="scout-combo-dock-sites" role="group" aria-label="搜索引擎">${siteRadioHtml}</div>
-        <label class="scout-combo-dock-track" title="搜索时自动加入追更">
-          <input type="checkbox" id="scout-combo-auto-track" ${GM_getValue('scout_combo_auto_track', true) ? 'checked' : ''}>
-          <span>追更</span>
-        </label>
-        <div class="scout-combo-dock-actions">
-          <button type="button" class="jlc-wb-btn primary" id="scout-combo-search-btn">🔍 搜索</button>
-          <button type="button" class="jlc-wb-btn ghost" id="scout-save-current-search-btn" title="${escapeHtml(saveSearchTitle)}">⭐ 收藏</button>
-          <button type="button" class="jlc-wb-btn ghost" id="scout-combo-clear-btn" title="清空已选词">清空</button>
-        </div>
+
+    <div class="jlc-wb-footer scout-combo-dock">
+      <div class="scout-search-savebar" id="scout-search-savebar" hidden>
+        <input type="text" class="jlc-wb-search" id="scout-search-label" placeholder="收藏名称" value="${escapeHtml(recipe.label || '')}">
+        <button type="button" class="jlc-wb-btn primary" id="scout-search-save-confirm">保存</button>
+        <button type="button" class="jlc-wb-icon-btn" id="scout-search-save-cancel" title="取消" aria-label="取消收藏">×</button>
+      </div>
+      <div class="scout-combo-dock-actions">
+        <button type="button" class="jlc-wb-btn primary" id="scout-combo-search-btn">评估组合</button>
+        <button type="button" class="jlc-wb-btn ghost" id="scout-save-current-search-btn">收藏配方</button>
+        <button type="button" class="jlc-wb-btn ghost" id="scout-combo-clear-btn">清空</button>
       </div>
     </div>
   `;
 
-  const refresh = () => renderComboPage();
-
-  container.querySelectorAll('[data-combo-token]').forEach(el => {
-    el.addEventListener('click', () => {
-      removeComboToken(el.getAttribute('data-combo-token'));
-      refresh();
+  container.querySelectorAll('[data-search-target]').forEach((button) => {
+    button.addEventListener('click', () => {
+      setScoutSearchTarget(container, button.getAttribute('data-search-target'), target.priority);
+      renderComboPage();
+    });
+  });
+  container.querySelectorAll('[data-search-priority]').forEach((button) => {
+    button.addEventListener('click', () => {
+      setScoutSearchTarget(container, target.role, button.getAttribute('data-search-priority'));
+      renderComboPage();
     });
   });
 
-  container.querySelectorAll('[data-combo-filter]').forEach(el => {
-    el.addEventListener('click', () => {
-      container.setAttribute('data-combo-filter', el.getAttribute('data-combo-filter') || '全部');
-      refresh();
-    });
-  });
-
-  container.querySelectorAll('[data-combo-pick]').forEach(el => {
-    el.addEventListener('click', () => {
-      addComboToken(el.getAttribute('data-combo-pick'));
-      refresh();
-    });
-  });
-
-  const freeInp = container.querySelector('#scout-combo-free-input');
-  const doAddFree = () => {
-    const v = freeInp.value.trim();
-    if (!v) return;
-    // 逗号批量；否则整段算一个 token（可含空格短语）
-    addComboTokens(/[,，;；]/.test(v) ? v.split(/[,，;；]+/) : [v]);
-    freeInp.value = '';
-    refresh();
+  const addManualTerms = () => {
+    const input = container.querySelector('#scout-combo-free-input');
+    const raw = compactText(input && input.value);
+    if (!raw) return;
+    const values = /[,，;；]/.test(raw) ? raw.split(/[,，;；]+/) : [raw];
+    saveScoutRecipeAndRender(
+      addScoutSearchTerms(recipe, values, target.role, target.priority)
+    );
   };
-  container.querySelector('#scout-combo-add-btn')?.addEventListener('click', doAddFree);
-  freeInp?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      doAddFree();
-    }
+  container.querySelector('#scout-combo-add-btn')?.addEventListener('click', addManualTerms);
+  container.querySelector('#scout-combo-free-input')?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addManualTerms();
   });
 
-  container.querySelectorAll('input[name="scout-combo-join"]').forEach((r) => {
-    r.addEventListener('change', () => {
-      if (!r.checked) return;
-      const cur = getConfig();
-      cur.combo_join = r.value || 'and';
-      saveConfig(cur);
-      refresh();
+  container.querySelectorAll('.scout-search-condition').forEach((row) => {
+    const id = row.getAttribute('data-condition-id');
+    row.querySelector('.scout-search-condition-role')?.addEventListener('change', (event) => {
+      const role = event.currentTarget.value;
+      saveScoutRecipeAndRender(updateScoutRecipeCondition(recipe, id, {
+        role,
+        priority: role === 'preference' ? 1 : 0,
+      }));
+    });
+    row.querySelector('.scout-search-condition-priority')?.addEventListener('change', (event) => {
+      saveScoutRecipeAndRender(updateScoutRecipeCondition(recipe, id, {
+        priority: event.currentTarget.value,
+      }));
+    });
+    row.querySelector('.scout-search-condition-remove')?.addEventListener('click', () => {
+      saveScoutRecipeAndRender(removeScoutRecipeCondition(recipe, id));
     });
   });
 
-  container.querySelector('#scout-combo-auto-track')?.addEventListener('change', (e) => {
-    GM_setValue('scout_combo_auto_track', !!e.currentTarget.checked);
-    markScoutStorageChanged('scout_combo_auto_track');
+  container.querySelectorAll('[data-search-term]').forEach((button) => {
+    button.addEventListener('click', () => {
+      saveScoutRecipeAndRender(addScoutSearchTerms(recipe, {
+        text: button.getAttribute('data-search-term'),
+        term_id: button.getAttribute('data-search-term-id') || '',
+      }, target.role, target.priority));
+    });
+  });
+  container.querySelectorAll('[data-related-dismiss]').forEach((button) => {
+    button.addEventListener('click', () => {
+      rejectScoutSearchRelation(recipe, button.getAttribute('data-related-dismiss'));
+      renderScoutSearchRelatedSection();
+    });
   });
 
-  container.querySelector('#scout-combo-search-btn')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    tokens = getComboTokens();
-    if (!tokens.length) {
-      showToast('请至少添加一个词（可多选人物再加行为/场景）', true);
-      return;
-    }
-    const allTerms = getLexiconTerms();
-    tokens.forEach(w => {
-      const t = allTerms.find(item => item.text.toLowerCase() === w.toLowerCase());
-      if (t) incrementTermHeat(t.id, 'use');
-    });
-    const mode = container.querySelector('input[name="scout-combo-join"]:checked')?.value
-      || (typeof getComboJoinMode === 'function' ? getComboJoinMode() : 'and');
-    const query = typeof joinComboQuery === 'function'
-      ? joinComboQuery(tokens, mode)
-      : tokens.join(' and ');
-    const site = container.querySelector('input[name="scout-search-site"]:checked')?.value || 'xvideos';
-    const url = buildSearchUrl(site, query);
-    if (!url) {
-      showToast('无法生成搜索链接', true);
-      return;
-    }
-    const autoTrack = container.querySelector('#scout-combo-auto-track')?.checked !== false;
-    if (autoTrack) {
-      addTrack({
-        site,
-        query,
-        label: query,
-        url
+  const poolFilter = container.querySelector('#scout-search-term-filter');
+  const typeFilter = container.querySelector('#scout-search-type-filter');
+  const updatePool = () => {
+    const type = typeFilter ? typeFilter.value : '全部';
+    container.setAttribute('data-search-pool-type', type);
+    const pool = container.querySelector('#scout-combo-pool');
+    if (!pool) return;
+    pool.innerHTML = renderScoutSearchPoolHtml(recipe, type, poolFilter && poolFilter.value, terms);
+    pool.querySelectorAll('[data-search-term]').forEach((button) => {
+      button.addEventListener('click', () => {
+        saveScoutRecipeAndRender(addScoutSearchTerms(recipe, {
+          text: button.getAttribute('data-search-term'),
+          term_id: button.getAttribute('data-search-term-id') || '',
+        }, target.role, target.priority));
       });
-      if (typeof setupSearchClickTracking === 'function') setupSearchClickTracking();
-    }
-    openScoutUrl(url, { newTab: true });
-    showToast(autoTrack ? '已打开搜索并加入追更：' + query : '已打开搜索：' + query);
-  });
+    });
+  };
+  poolFilter?.addEventListener('input', updatePool);
+  typeFilter?.addEventListener('change', updatePool);
 
-  container.querySelector('#scout-combo-clear-btn')?.addEventListener('click', () => {
-    saveComboTokens([]);
-    refresh();
-  });
-
-  container.querySelector('#scout-save-current-search-btn')?.addEventListener('click', () => {
-    // 在搜索页：收藏当前页查询；否则收藏当前组合预览
-    let site = detectSite() || container.querySelector('input[name="scout-search-site"]:checked')?.value || 'xvideos';
-    let query = '';
-    let url = '';
-    if (canSavePageSearch) {
-      query = searchCtx.query;
-      url = searchCtx.url || location.href;
-      site = detectSite() || site;
-    } else {
-      tokens = getComboTokens();
-      if (!tokens.length) {
-        showToast('请先选词，或打开一个搜索页再收藏', true);
+  container.querySelectorAll('.scout-search-site-row input[type="checkbox"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const selected = Array.from(
+        container.querySelectorAll('.scout-search-site-row input:checked')
+      ).map((element) => element.value);
+      if (!selected.length) {
+        input.checked = true;
+        showToast('至少保留一个搜索站点', true);
         return;
       }
-      const mode = container.querySelector('input[name="scout-combo-join"]:checked')?.value
-        || (typeof getComboJoinMode === 'function' ? getComboJoinMode() : 'and');
-      query = typeof joinComboQuery === 'function'
-        ? joinComboQuery(tokens, mode)
-        : tokens.join(' and ');
-      site = container.querySelector('input[name="scout-search-site"]:checked')?.value || site;
-      url = buildSearchUrl(site, query);
-    }
-    const label = prompt('请输入此收藏搜索的标签别名：', query);
-    if (label === null) return;
-    addTrack({ site, query, label: label.trim() || query, url });
-    if (typeof setupSearchClickTracking === 'function') setupSearchClickTracking();
-    if (typeof checkSearchTrackingBreakpoints === 'function') checkSearchTrackingBreakpoints();
-    showToast('已收藏追更：之后在该搜索点片会记断点');
-    refresh();
+      saveScoutRecipeAndRender(Object.assign({}, recipe, { sites: selected }));
+    });
   });
 
-  container.querySelectorAll('[data-tag]').forEach(chip => {
-    const tag = chip.getAttribute('data-tag');
-    chip.querySelector('.scout-combo-pick-tag')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      addComboToken(tag);
-      refresh();
-    });
-    chip.querySelector('.scout-add-quick')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      showScoutCollectDialog({
-        text: tag,
-        sources: [{ site: currentSite, url: location.href, title: meta && meta.title, at: new Date().toISOString() }],
-        onSaved() { refresh(); enhancePageTags(); }
-      });
-    });
-    chip.querySelector('.scout-block-quick')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      addBlockWord({ text: tag, mode: 'dim', match: 'word', scope: 'title', reason: '从当前视频标签快速屏蔽' });
-      showToast('已屏蔽: ' + tag, true);
-      applyListBlocks();
-      refresh();
-    });
+  container.querySelector('#scout-combo-search-btn')?.addEventListener('click', () => {
+    startScoutRecipeSearch();
   });
+  container.querySelector('#scout-combo-clear-btn')?.addEventListener('click', () => {
+    saveScoutRecipeAndRender(Object.assign({}, recipe, { conditions: [], label: '' }));
+  });
+
+  const saveBar = container.querySelector('#scout-search-savebar');
+  container.querySelector('#scout-save-current-search-btn')?.addEventListener('click', () => {
+    saveBar.hidden = false;
+    const labelInput = container.querySelector('#scout-search-label');
+    if (labelInput && !labelInput.value) {
+      labelInput.value = recipe.conditions
+        .filter((condition) => condition.role !== 'excluded')
+        .slice(0, 3)
+        .map((condition) => condition.text)
+        .join(' + ');
+    }
+    labelInput?.focus();
+  });
+  container.querySelector('#scout-search-save-cancel')?.addEventListener('click', () => {
+    saveBar.hidden = true;
+  });
+  container.querySelector('#scout-search-save-confirm')?.addEventListener('click', () => {
+    if (!recipe.conditions.some((condition) => condition.role !== 'excluded')) {
+      showToast('请先添加搜索条件', true);
+      return;
+    }
+    const label = compactText(container.querySelector('#scout-search-label')?.value) ||
+      describeScoutSearchRecipe(recipe);
+    const saved = saveScoutSearchDraft(Object.assign({}, recipe, { label }));
+    const tracks = addTracksForScoutRecipe(saved, label, buildScoutSearchPlan(saved, { terms }));
+    if (!tracks.length) {
+      showToast('当前配方无法收藏', true);
+      return;
+    }
+    if (typeof setupSearchClickTracking === 'function') setupSearchClickTracking();
+    showToast(`已收藏 ${tracks.length} 个站点`);
+    saveBar.hidden = true;
+    markScoutWorkbenchPageRendered('combo');
+  });
+
+  container.querySelector('#scout-search-assessments')?.addEventListener('click', (event) => {
+    const removeButton = event.target.closest('[data-search-remove-condition]');
+    if (removeButton) {
+      saveScoutRecipeAndRender(removeScoutRecipeCondition(
+        recipe,
+        removeButton.getAttribute('data-search-remove-condition')
+      ));
+      return;
+    }
+    const replaceButton = event.target.closest('[data-search-replace-condition]');
+    if (!replaceButton) return;
+    saveScoutRecipeAndRender(updateScoutRecipeCondition(
+      recipe,
+      replaceButton.getAttribute('data-search-replace-condition'),
+      { text: replaceButton.getAttribute('data-search-replacement') || '' }
+    ));
+  });
+
   markScoutWorkbenchPageRendered('combo');
+  renderScoutSearchRuntimeState();
+  if (window.__scoutRunSearchOnOpen) {
+    window.__scoutRunSearchOnOpen = false;
+    setTimeout(() => startScoutRecipeSearch(), 0);
+  }
 }
 // @@creamu-part:detail-enhancements
 
@@ -10316,6 +12577,15 @@ function openTrackAtBreakpoint(track, site, query) {
   openScoutUrl(target, { newTab: true });
 }
 
+function openScoutRecipeFromTracking(group) {
+  if (!group || !group.recipe || typeof saveScoutSearchDraft !== 'function') return false;
+  saveScoutSearchDraft(group.recipe);
+  window.__scoutRunSearchOnOpen = true;
+  const button = document.querySelector('#jlc-wb .jlc-wb-nav button[data-tab="combo"]');
+  if (button) button.click();
+  return !!button;
+}
+
 function renderTracksPage() {
   const container = document.querySelector('[data-jlc-wb-page="tracks"]');
   if (!container) return;
@@ -10407,14 +12677,14 @@ function renderTracksPage() {
               </div>
               <div class="scout-track-site-pills">${sitePills}</div>
               <div class="jlc-wb-item-meta-line scout-track-query">
-                查询: <b>${escapeHtml(g.query)}</b>
+                ${g.recipe ? '配方' : '查询'}: <b>${escapeHtml(g.recipe && typeof describeScoutSearchRecipe === 'function' ? describeScoutSearchRecipe(g.recipe) : g.query)}</b>
               </div>
               <div class="jlc-wb-item-meta-line scout-track-updated">
                 ${escapeHtml(curMeta)}${timeStr ? ' | ' + escapeHtml(timeStr) : ''}
               </div>
             </div>
             <div class="jlc-wb-item-side">
-              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="优先当前站断点">续看</button>
+              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="${g.recipe ? '重新运行组合结果' : '优先当前站断点'}">${g.recipe ? '结果' : '续看'}</button>
               <button type="button" class="jlc-wb-btn ghost scout-track-expand-btn">站点</button>
               <button type="button" class="jlc-wb-more-btn scout-track-more-btn">•••</button>
             </div>
@@ -10446,6 +12716,7 @@ function renderTracksPage() {
     if (!group) return;
 
     itemEl.querySelector('.scout-track-open-btn')?.addEventListener('click', () => {
+      if (group.recipe && openScoutRecipeFromTracking(group)) return;
       // 优先当前站：有订则续断点，无订则当前站搜第 1 页；无法识别站则用组内最新一条
       let site = currentSite;
       let track = site
@@ -10700,6 +12971,405 @@ function renderBlocksPage() {
 }
 
 // 
+// @@creamu-part:37-exact-search-filter
+const SCOUT_EXACT_FILTER_BAR_ID = 'scout-exact-filter-bar';
+const SCOUT_EXACT_FILTER_MAX_CONCURRENCY = 3;
+
+function createScoutExactFilterState() {
+  return {
+    runId: 0,
+    key: '',
+    site: '',
+    recipe: null,
+    terms: [],
+    records: new Map(),
+    queue: [],
+    workersRunning: false,
+  };
+}
+
+let __scoutExactFilterState = createScoutExactFilterState();
+
+function getScoutExactFilterEntries(listEntries) {
+  if (Array.isArray(listEntries)) return listEntries;
+  return typeof collectListVideoEntries === 'function'
+    ? collectListVideoEntries()
+    : [];
+}
+
+function getScoutExactFilterPageHref() {
+  try {
+    const target = new URL(location.href);
+    target.hash = '';
+    return target.href;
+  } catch (_) {
+    return String(location && location.href || '').replace(/#[^#]*$/, '');
+  }
+}
+
+function getScoutExactFilterRecordKey(meta) {
+  const url = compactText(meta && meta.url);
+  if (!url) return '';
+  const id = typeof videoIdFromUrl === 'function' ? videoIdFromUrl(url) : '';
+  return id ? String(id) + '|' + url : url;
+}
+
+function createScoutExactFilterRecord(entry, site, index) {
+  const element = entry && entry.element;
+  const meta = entry && entry.meta;
+  const url = compactText(meta && meta.url);
+  const key = getScoutExactFilterRecordKey(meta);
+  const result = {
+    key: typeof scoutSearchResultKey === 'function'
+      ? scoutSearchResultKey(site, url)
+      : site + ':' + url,
+    site,
+    video_id: typeof videoIdFromUrl === 'function' ? videoIdFromUrl(url) : '',
+    title: compactText(meta && meta.title),
+    url,
+    thumb: compactText(meta && meta.thumb),
+    uploader: compactText(meta && meta.uploader),
+    tags: [],
+    verified: false,
+    remote_rank: index + 1,
+  };
+  return {
+    element,
+    key,
+    result,
+    status: key ? 'pending' : 'failed',
+    started: false,
+    queued: false,
+    error: key ? '' : '作品链接无法识别',
+  };
+}
+
+function clearScoutExactFilterPresentation(listEntries) {
+  getScoutExactFilterEntries(listEntries).forEach((entry) => {
+    const element = entry && entry.element;
+    if (!element || !element.classList) return;
+    element.classList.remove(
+      'scout-exact-filter-pending',
+      'scout-exact-filter-match',
+      'scout-exact-filter-hidden',
+      'scout-exact-filter-failed'
+    );
+  });
+}
+
+function applyScoutExactFilterRecordPresentation(record) {
+  const element = record && record.element;
+  if (!element || !element.classList) return;
+  element.classList.remove(
+    'scout-exact-filter-pending',
+    'scout-exact-filter-match',
+    'scout-exact-filter-hidden',
+    'scout-exact-filter-failed'
+  );
+  if (record.status === 'pending') element.classList.add('scout-exact-filter-pending');
+  if (record.status === 'match') element.classList.add('scout-exact-filter-match');
+  if (record.status === 'hidden') element.classList.add('scout-exact-filter-hidden');
+  if (record.status === 'failed') element.classList.add('scout-exact-filter-failed');
+}
+
+function getScoutExactFilterCounts(state) {
+  const counts = { total: 0, pending: 0, match: 0, hidden: 0, failed: 0, retryable: 0 };
+  state.records.forEach((record) => {
+    counts.total += 1;
+    if (counts[record.status] != null) counts[record.status] += 1;
+    if (record.status === 'failed' && record.key) counts.retryable += 1;
+  });
+  return counts;
+}
+
+function removeScoutExactFilterBar() {
+  document.getElementById(SCOUT_EXACT_FILTER_BAR_ID)?.remove();
+}
+
+function clearScoutExactFilterFromLocation() {
+  try {
+    const target = new URL(location.href);
+    target.hash = '';
+    if (typeof history !== 'undefined' && typeof history.replaceState === 'function') {
+      history.replaceState(null, '', target.href);
+    } else {
+      location.hash = '';
+    }
+  } catch (_) {
+    try { location.hash = ''; } catch (__) { /* ignore */ }
+  }
+  __scoutExactFilterState.runId += 1;
+  clearScoutExactFilterPresentation();
+  restoreScoutExactFilterPagination();
+  __scoutExactFilterState = createScoutExactFilterState();
+  removeScoutExactFilterBar();
+}
+
+function retryScoutExactFilterFailures() {
+  const state = __scoutExactFilterState;
+  if (!state.recipe || !state.records.size) return;
+  const retry = [];
+  state.records.forEach((record) => {
+    if (record.status !== 'failed' || !record.key) return;
+    record.status = 'pending';
+    record.error = '';
+    record.started = false;
+    record.queued = true;
+    retry.push(record);
+    applyScoutExactFilterRecordPresentation(record);
+  });
+  if (retry.length) {
+    state.queue.push(...retry);
+    startScoutExactFilterWorkers(state);
+    renderScoutExactFilterBar(state);
+  }
+}
+
+function ensureScoutExactFilterBar() {
+  let bar = document.getElementById(SCOUT_EXACT_FILTER_BAR_ID);
+  if (bar) return bar;
+  bar = document.createElement('div');
+  bar.id = SCOUT_EXACT_FILTER_BAR_ID;
+  bar.setAttribute('data-scout-ui', '1');
+  bar.setAttribute('role', 'status');
+  bar.setAttribute('aria-live', 'polite');
+  const host = document.body || document.documentElement;
+  let listRoot = null;
+  try {
+    const firstCard = typeof getVideoElements === 'function'
+      ? Array.from(getVideoElements() || [])[0]
+      : null;
+    listRoot = firstCard && firstCard.closest
+      ? firstCard.closest('.mozaique, #vidresults, #videos-list, .videos-list, .video-list')
+      : null;
+    if (!listRoot && firstCard) listRoot = firstCard.parentElement;
+  } catch (_) { /* use body fallback */ }
+  if (listRoot && listRoot.parentNode) {
+    listRoot.parentNode.insertBefore(bar, listRoot);
+  } else if (host) {
+    host.insertBefore(bar, host.firstChild || null);
+  }
+  return bar;
+}
+
+function renderScoutExactFilterBar(state) {
+  if (!state || !state.recipe) {
+    removeScoutExactFilterBar();
+    return;
+  }
+  const bar = ensureScoutExactFilterBar();
+  if (!bar) return;
+  const counts = getScoutExactFilterCounts(state);
+  const verified = counts.match + counts.hidden;
+  const pendingText = counts.pending
+    ? ` · 核验中 ${verified}/${counts.total}`
+    : '';
+  const failedText = counts.failed
+    ? ` · ${counts.failed} 条未能核验，已保留`
+    : '';
+  bar.innerHTML = `
+    <span class="scout-exact-filter-text">只看同时命中 · 保留 ${counts.match}/${counts.total}${pendingText}${failedText}</span>
+    <span class="scout-exact-filter-actions">
+      ${counts.retryable ? '<button type="button" data-scout-exact-action="retry">重试失败</button>' : ''}
+      <button type="button" data-scout-exact-action="show-all">显示全部</button>
+    </span>`;
+  bar.querySelector('[data-scout-exact-action="retry"]')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    retryScoutExactFilterFailures();
+  });
+  bar.querySelector('[data-scout-exact-action="show-all"]')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    clearScoutExactFilterFromLocation();
+  });
+}
+
+function getScoutExactFilterPaginationAnchors() {
+  if (!document.querySelectorAll) return [];
+  const selectors = [
+    '.pagination a',
+    '.numlist a',
+    '#pagination a',
+    '.pager a',
+    'a.last-page',
+    'a[rel="last"]',
+    'a[rel="next"]',
+    'a[rel="prev"]',
+  ];
+  const seen = new Set();
+  const anchors = [];
+  selectors.forEach((selector) => {
+    document.querySelectorAll(selector).forEach((anchor) => {
+      if (!seen.has(anchor)) {
+        seen.add(anchor);
+        anchors.push(anchor);
+      }
+    });
+  });
+  return anchors;
+}
+
+function preserveScoutExactFilterPagination(recipe) {
+  getScoutExactFilterPaginationAnchors().forEach((anchor) => {
+    const href = compactText(anchor.getAttribute && anchor.getAttribute('href'));
+    if (!href || href === '#' || /^javascript:/i.test(href)) return;
+    const stored = compactText(anchor.getAttribute('data-scout-exact-original-href'));
+    const original = stored || href;
+    if (!stored) anchor.setAttribute('data-scout-exact-original-href', original);
+    const next = buildScoutExactFilterUrl(original, recipe);
+    if (next && next !== href) anchor.setAttribute('href', next);
+  });
+}
+
+function restoreScoutExactFilterPagination() {
+  if (!document.querySelectorAll) return;
+  document.querySelectorAll('[data-scout-exact-original-href]').forEach((anchor) => {
+    const original = anchor.getAttribute('data-scout-exact-original-href');
+    if (original) anchor.setAttribute('href', original);
+    anchor.removeAttribute('data-scout-exact-original-href');
+  });
+}
+
+function getScoutExactFilterRecordResult(record) {
+  return Object.assign({}, record.result, {
+    // 详情核验只需要标题、链接和上传者；列表标签不应影响严格判断。
+    tags: [],
+    verified: false,
+  });
+}
+
+async function verifyScoutExactFilterRecord(state, record) {
+  if (!record || !record.key) return;
+  const result = getScoutExactFilterRecordResult(record);
+  const evaluated = await verifyScoutSearchResult(state.recipe, result, {
+    timeout: 16000,
+    terms: state.terms,
+    recordRelations: false,
+  });
+  if (state !== __scoutExactFilterState || state.runId !== __scoutExactFilterState.runId) return;
+  if (evaluated && evaluated.evaluation && evaluated.evaluation.exact_match) {
+    record.status = 'match';
+    record.error = '';
+  } else {
+    record.status = 'hidden';
+    record.error = '';
+  }
+  applyScoutExactFilterRecordPresentation(record);
+  renderScoutExactFilterBar(state);
+}
+
+async function runScoutExactFilterWorker(state) {
+  while (state === __scoutExactFilterState && state.queue.length) {
+    const record = state.queue.shift();
+    if (record) record.queued = false;
+    if (!record || record.status !== 'pending' || record.started) continue;
+    record.started = true;
+    try {
+      await verifyScoutExactFilterRecord(state, record);
+    } catch (error) {
+      if (state !== __scoutExactFilterState || state.runId !== __scoutExactFilterState.runId) return;
+      record.status = 'failed';
+      record.error = error && error.message ? error.message : String(error);
+      applyScoutExactFilterRecordPresentation(record);
+      renderScoutExactFilterBar(state);
+    }
+  }
+}
+
+function startScoutExactFilterWorkers(state) {
+  if (!state || state.workersRunning) return;
+  state.workersRunning = true;
+  const workers = Math.min(
+    SCOUT_EXACT_FILTER_MAX_CONCURRENCY,
+    Math.max(1, state.queue.length)
+  );
+  Promise.all(Array.from({ length: workers }, () => runScoutExactFilterWorker(state)))
+    .finally(() => {
+      if (state === __scoutExactFilterState) {
+        state.workersRunning = false;
+        renderScoutExactFilterBar(state);
+        if (state.queue.length) startScoutExactFilterWorkers(state);
+      }
+    });
+}
+
+function syncScoutExactFilterRecords(state, listEntries) {
+  const active = new Set();
+  const pending = [];
+  getScoutExactFilterEntries(listEntries).forEach((entry, index) => {
+    const element = entry && entry.element;
+    if (!element) return;
+    active.add(element);
+    const meta = entry && entry.meta;
+    const key = getScoutExactFilterRecordKey(meta);
+    let record = state.records.get(element);
+    if (!record || record.key !== key) {
+      record = createScoutExactFilterRecord(entry, state.site, index);
+      state.records.set(element, record);
+    }
+    if (record.status === 'pending' && !record.started && !record.queued) {
+      record.queued = true;
+      state.queue.push(record);
+      pending.push(record);
+    }
+    applyScoutExactFilterRecordPresentation(record);
+  });
+  state.records.forEach((record, element) => {
+    if (!active.has(element)) state.records.delete(element);
+  });
+  return pending;
+}
+
+function resetScoutExactFilterState(listEntries) {
+  __scoutExactFilterState.runId += 1;
+  clearScoutExactFilterPresentation(listEntries);
+  __scoutExactFilterState = createScoutExactFilterState();
+}
+
+function applyScoutExactSearchFilter(listEntries) {
+  const site = typeof detectSite === 'function' ? detectSite() : '';
+  const kind = typeof detectPageKind === 'function' ? detectPageKind() : '';
+  const parsed = typeof parseScoutExactFilterLocation === 'function'
+    ? parseScoutExactFilterLocation(location)
+    : null;
+  if (kind !== 'search' || !site || !parsed || !parsed.recipe.sites.includes(site)) {
+    if (__scoutExactFilterState.recipe) resetScoutExactFilterState(listEntries);
+    restoreScoutExactFilterPagination();
+    removeScoutExactFilterBar();
+    return;
+  }
+
+  const currentScope = getScoutExactFilterSearchScope(location.href);
+  if (!currentScope || currentScope !== parsed.scope) {
+    if (__scoutExactFilterState.recipe) resetScoutExactFilterState(listEntries);
+    restoreScoutExactFilterPagination();
+    removeScoutExactFilterBar();
+    return;
+  }
+
+  const recipe = parsed.recipe;
+  const pageKey = [
+    site,
+    currentScope,
+    scoutSearchRecipeFingerprint(recipe),
+    getScoutExactFilterPageHref(),
+  ].join('|');
+  let state = __scoutExactFilterState;
+  if (state.key !== pageKey) {
+    if (state.recipe) resetScoutExactFilterState(listEntries);
+    state = __scoutExactFilterState;
+    state.key = pageKey;
+    state.site = site;
+    state.recipe = recipe;
+    state.terms = typeof getLexiconTerms === 'function' ? getLexiconTerms() : [];
+  }
+
+  const pending = syncScoutExactFilterRecords(state, listEntries);
+  preserveScoutExactFilterPagination(recipe);
+  renderScoutExactFilterBar(state);
+  if (pending.length) startScoutExactFilterWorkers(state);
+}
 // @@creamu-part:38-settings
 function setScoutSettingsOpen(open, tab) {
   const drawer = document.getElementById('jlc-wb-settings');
@@ -11238,7 +13908,7 @@ function initScoutWorkbench() {
       </div>
 
       <div class="jlc-wb-nav">
-        <button class="active" data-tab="combo">组合</button>
+        <button class="active" data-tab="combo">搜索</button>
         <button data-tab="lexicon">词库</button>
         <button data-tab="works">作品</button>
         <button data-tab="publishers">熟人</button>
@@ -12376,6 +15046,9 @@ function refreshPageEnhancements(reason, options) {
     if (typeof applyVideoSeekGestureMode === 'function') {
       try { applyVideoSeekGestureMode(); } catch (e) { console.warn(e); }
     }
+    if (kind !== 'search' && typeof applyScoutExactSearchFilter === 'function') {
+      try { applyScoutExactSearchFilter([]); } catch (e) { console.warn(e); }
+    }
 
     if (kind === 'video') {
       markCurrentVideoPageClicked();
@@ -12385,6 +15058,9 @@ function refreshPageEnhancements(reason, options) {
     } else if (kind === 'search') {
       if (!listEntries) listEntries = collectListVideoEntries();
       applyListBlocks(listEntries); // 内含已点 + 词库列表流
+      if (typeof applyScoutExactSearchFilter === 'function') {
+        try { applyScoutExactSearchFilter(listEntries); } catch (e) { console.warn(e); }
+      }
       // 搜索页顶栏：订阅/取消追更（不依赖打开工作台）
       if (typeof enhanceSearchTrackSubscribe === 'function') {
         try { enhanceSearchTrackSubscribe(); } catch (e) { console.warn(e); }
@@ -12434,6 +15110,7 @@ function isScoutUiNode(node) {
     node.id === 'scout-lex-hit-bar' ||
     node.id === 'scout-work-fav-bar' ||
     node.id === 'scout-search-track-bar' ||
+    node.id === 'scout-exact-filter-bar' ||
     node.id === 'scout-tags-toggle' ||
     node.id === 'scout-desc-toggle' ||
     node.id === 'scout-collect-dialog' ||
@@ -12460,7 +15137,7 @@ function isScoutUiNode(node) {
   }
   if (node.id === 'scout-seek-hud') return true;
   return !!(node.closest && node.closest(
-    '#scout-lex-hit-bar, #scout-work-fav-bar, #scout-collect-dialog, #creamu-scout-toast-container, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
+    '#scout-lex-hit-bar, #scout-work-fav-bar, #scout-exact-filter-bar, #scout-collect-dialog, #creamu-scout-toast-container, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
   ));
 }
 

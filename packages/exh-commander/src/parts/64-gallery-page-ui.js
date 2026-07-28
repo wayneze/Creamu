@@ -126,13 +126,20 @@
     return rec;
   }
 
-  /** 兄弟版本缺体积/时间/码级时 gdata 补全 */
+  /** 兄弟版本缺元数据或尚未检查来源时，用 gdata 批量补全。 */
   async function enrichSiblingEditionsMeta(siblings) {
     const list = (siblings || []).filter(Boolean);
-    if (!list.length || typeof fetchGalleryGdataBatch !== 'function') return 0;
+    if (!list.length || typeof checkEditionAvailabilityBatch !== 'function') return 0;
     const need = list.filter((ed) => {
       if (!ed.token) return false;
+      const availability = normalizeEditionAvailabilityStatus(
+        ed.availability_status,
+        ed.expunged
+      );
+      if (availability === 'expunged' || availability === 'unavailable') return false;
       return (
+        availability === 'unknown' ||
+        !(Number(ed.availability_checked_at) > 0) ||
         !(Number(ed.size_bytes) > 0) ||
         !(Number(ed.posted_at) > 0) ||
         !(Number(ed.pages) > 0) ||
@@ -143,58 +150,12 @@
       );
     });
     if (!need.length) return 0;
-    const pairs = need.slice(0, 25).map((ed) => ({ gid: ed.gid, token: ed.token }));
-    let gmap = {};
     try {
-      gmap = await fetchGalleryGdataBatch(pairs);
+      const result = await checkEditionAvailabilityBatch(need.slice(0, 25));
+      return Number(result && result.updatedCount) || 0;
     } catch (_) {
       return 0;
     }
-    let n = 0;
-    for (let i = 0; i < need.length; i++) {
-      const ed = need[i];
-      const gm = gmap[String(ed.gid)];
-      if (!gm) continue;
-      let dirty = false;
-      if (gm.posted_at && !(Number(ed.posted_at) > 0)) {
-        ed.posted_at = gm.posted_at;
-        dirty = true;
-      }
-      if (gm.pages && !(Number(ed.pages) > 0)) {
-        ed.pages = gm.pages;
-        dirty = true;
-      }
-      if (gm.size_bytes && !(Number(ed.size_bytes) > 0)) {
-        ed.size_bytes = gm.size_bytes;
-        dirty = true;
-      }
-      if (gm.censor_tier && gm.censor_tier !== 'unknown' && (!ed.censor_tier || ed.censor_tier === 'unknown')) {
-        ed.censor_tier = gm.censor_tier;
-        dirty = true;
-      }
-      if (gm.language && gm.language !== 'other' && (!ed.language || ed.language === 'other')) {
-        ed.language = gm.language;
-        dirty = true;
-      }
-      if (gm.group && !ed.group) {
-        ed.group = gm.group;
-        dirty = true;
-      }
-      if (gm.tags && gm.tags.length && !(ed.tags && ed.tags.length)) {
-        ed.tags = gm.tags;
-        dirty = true;
-      }
-      if (gm.title_raw && (!ed.title_raw || ed.title_raw.length < gm.title_raw.length)) {
-        ed.title_raw = gm.title_raw;
-        dirty = true;
-      }
-      if (dirty) {
-        ed.updated_at = nowMs();
-        await idbPut(STORE_EDITIONS, ed);
-        n++;
-      }
-    }
-    return n;
   }
 
   /** 按标题搜相关上传并入 Work；同 work 5 分钟内最多一次 */
@@ -354,6 +315,7 @@
       (work && work.blocked ? '取消抛弃' : '抛弃') +
       '</button>' +
       '<button type="button" class="jlc-wb-btn primary" data-exc-g="best">最佳版</button>' +
+      '<button type="button" class="jlc-wb-btn ghost" data-exc-g="source">检查来源</button>' +
       '<button type="button" class="jlc-wb-btn ghost" data-exc-g="bind">绑定 LRR</button>' +
       '<button type="button" class="jlc-wb-btn ghost" data-exc-g="merge">合并 Work</button>' +
       '<button type="button" class="jlc-wb-btn ghost" data-exc-g="lrrq">LRR 搜索</button>' +
@@ -410,6 +372,25 @@
           } catch (_) { /* ignore */ }
         } else if (act === 'best') {
           await openBestEdition(edition.work_id);
+          return;
+        } else if (act === 'source') {
+          btn.disabled = true;
+          btn.textContent = '检查中…';
+          const result = await checkEditionAvailabilityBatch([edition]);
+          if (result.updatedCount > 0) {
+            const checked = result.editions[0] || edition;
+            showToast('来源状态：' + getEditionAvailabilityLabel(checked));
+            await enhanceGalleryPage({ skipRelatedImport: true });
+            if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
+          } else if (result.errors && result.errors.length) {
+            showToast('来源检查失败：' + result.errors[0].message);
+            btn.disabled = false;
+            btn.textContent = '重试来源';
+          } else {
+            showToast('来源未返回可判定状态');
+            btn.disabled = false;
+            btn.textContent = '重试来源';
+          }
           return;
         } else if (act === 'bind') {
           await openBindModal(edition);

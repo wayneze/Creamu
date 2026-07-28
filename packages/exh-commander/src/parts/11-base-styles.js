@@ -319,6 +319,7 @@
         #exc-hover-preview.is-error .exc-hp-status { color: #b42318; }
 
         .exc-badge-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; margin-bottom: 2px; align-items: center; }
+        .exc-source-pill { flex: 0 0 auto; }
         .exc-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
         /* 画廊面板：小胶囊按钮，尽量一排塞得下 */
         #exc-gallery-panel .jlc-wb-btn,
@@ -609,6 +610,10 @@
             background: linear-gradient(135deg, #f3faf4 0%, #e8f5ea 100%) !important;
             box-shadow: 0 0 0 1px rgba(90,154,96,.2), 0 3px 0 #c5dfc8 !important;
         }
+        .exc-edition-list .exc-ed.is-source-issue { position: relative; overflow: hidden; }
+        .exc-edition-list .exc-ed.is-source-issue::after {
+            content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: #b42318;
+        }
         /* 当前页且是库源：橙框 + 绿底提示同源 */
         .exc-edition-list .exc-ed.is-lrr-bound.is-current {
             order: -2 !important;
@@ -826,6 +831,25 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
+        }
+        #jlc-wb .exc-source-check-row { align-items: center; justify-content: space-between; }
+        #jlc-wb .exc-source-editions {
+            display: flex; flex-direction: column; gap: 5px; margin-top: 8px; padding-left: 9px;
+            border-left: 3px solid #d96b5f;
+        }
+        #jlc-wb .exc-source-edition {
+            display: grid; grid-template-columns: max-content max-content minmax(0, 1fr);
+            gap: 6px; align-items: center; min-width: 0; color: #8a6f55; font-size: 12px;
+        }
+        #jlc-wb .exc-source-edition > a { color: #4a3728; font-weight: 750; text-decoration: none; }
+        #jlc-wb .exc-source-edition > span:last-child {
+            min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        @media (max-width: 520px) {
+            #jlc-wb .exc-source-check-row { align-items: stretch; }
+            #jlc-wb .exc-source-check-row .jlc-wb-btn { width: 100%; }
+            #jlc-wb .exc-source-edition { grid-template-columns: max-content minmax(0, 1fr); }
+            #jlc-wb .exc-source-edition > span:last-child { grid-column: 1 / -1; }
         }
         #exc-tag-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
         #exc-diag {

@@ -118,6 +118,9 @@ function refreshPageEnhancements(reason, options) {
     if (typeof applyVideoSeekGestureMode === 'function') {
       try { applyVideoSeekGestureMode(); } catch (e) { console.warn(e); }
     }
+    if (kind !== 'search' && typeof applyScoutExactSearchFilter === 'function') {
+      try { applyScoutExactSearchFilter([]); } catch (e) { console.warn(e); }
+    }
 
     if (kind === 'video') {
       markCurrentVideoPageClicked();
@@ -127,6 +130,9 @@ function refreshPageEnhancements(reason, options) {
     } else if (kind === 'search') {
       if (!listEntries) listEntries = collectListVideoEntries();
       applyListBlocks(listEntries); // 内含已点 + 词库列表流
+      if (typeof applyScoutExactSearchFilter === 'function') {
+        try { applyScoutExactSearchFilter(listEntries); } catch (e) { console.warn(e); }
+      }
       // 搜索页顶栏：订阅/取消追更（不依赖打开工作台）
       if (typeof enhanceSearchTrackSubscribe === 'function') {
         try { enhanceSearchTrackSubscribe(); } catch (e) { console.warn(e); }
@@ -176,6 +182,7 @@ function isScoutUiNode(node) {
     node.id === 'scout-lex-hit-bar' ||
     node.id === 'scout-work-fav-bar' ||
     node.id === 'scout-search-track-bar' ||
+    node.id === 'scout-exact-filter-bar' ||
     node.id === 'scout-tags-toggle' ||
     node.id === 'scout-desc-toggle' ||
     node.id === 'scout-collect-dialog' ||
@@ -202,7 +209,7 @@ function isScoutUiNode(node) {
   }
   if (node.id === 'scout-seek-hud') return true;
   return !!(node.closest && node.closest(
-    '#scout-lex-hit-bar, #scout-work-fav-bar, #scout-collect-dialog, #creamu-scout-toast-container, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
+    '#scout-lex-hit-bar, #scout-work-fav-bar, #scout-exact-filter-bar, #scout-collect-dialog, #creamu-scout-toast-container, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
   ));
 }
 

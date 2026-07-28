@@ -31,7 +31,11 @@ function initScoutWebDav() {
         // 已点片库（与 tracks 断点分离）
         clicks: getClickedList(),
         // 作品收藏
-        works: getWorks()
+        works: getWorks(),
+        search_draft: typeof getScoutSearchDraft === 'function' ? getScoutSearchDraft() : null,
+        search_relations: typeof getScoutSearchRelations === 'function'
+          ? getScoutSearchRelations()
+          : []
       };
     },
     async importPayload(payload) {
@@ -60,6 +64,15 @@ function initScoutWebDav() {
       }
       if (Array.isArray(payload.works)) {
         saveWorks(payload.works);
+      }
+      if (payload.search_draft && typeof saveScoutSearchDraft === 'function') {
+        saveScoutSearchDraft(payload.search_draft);
+      }
+      if (
+        Array.isArray(payload.search_relations) &&
+        typeof saveScoutSearchRelations === 'function'
+      ) {
+        saveScoutSearchRelations(payload.search_relations);
       }
     },
     getSettings() {

@@ -118,7 +118,7 @@ function initScoutWorkbench() {
       </div>
 
       <div class="jlc-wb-nav">
-        <button class="active" data-tab="combo">组合</button>
+        <button class="active" data-tab="combo">搜索</button>
         <button data-tab="lexicon">词库</button>
         <button data-tab="works">作品</button>
         <button data-tab="publishers">熟人</button>

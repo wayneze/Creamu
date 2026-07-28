@@ -18,6 +18,15 @@ function openTrackAtBreakpoint(track, site, query) {
   openScoutUrl(target, { newTab: true });
 }
 
+function openScoutRecipeFromTracking(group) {
+  if (!group || !group.recipe || typeof saveScoutSearchDraft !== 'function') return false;
+  saveScoutSearchDraft(group.recipe);
+  window.__scoutRunSearchOnOpen = true;
+  const button = document.querySelector('#jlc-wb .jlc-wb-nav button[data-tab="combo"]');
+  if (button) button.click();
+  return !!button;
+}
+
 function renderTracksPage() {
   const container = document.querySelector('[data-jlc-wb-page="tracks"]');
   if (!container) return;
@@ -109,14 +118,14 @@ function renderTracksPage() {
               </div>
               <div class="scout-track-site-pills">${sitePills}</div>
               <div class="jlc-wb-item-meta-line scout-track-query">
-                查询: <b>${escapeHtml(g.query)}</b>
+                ${g.recipe ? '配方' : '查询'}: <b>${escapeHtml(g.recipe && typeof describeScoutSearchRecipe === 'function' ? describeScoutSearchRecipe(g.recipe) : g.query)}</b>
               </div>
               <div class="jlc-wb-item-meta-line scout-track-updated">
                 ${escapeHtml(curMeta)}${timeStr ? ' | ' + escapeHtml(timeStr) : ''}
               </div>
             </div>
             <div class="jlc-wb-item-side">
-              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="优先当前站断点">续看</button>
+              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="${g.recipe ? '重新运行组合结果' : '优先当前站断点'}">${g.recipe ? '结果' : '续看'}</button>
               <button type="button" class="jlc-wb-btn ghost scout-track-expand-btn">站点</button>
               <button type="button" class="jlc-wb-more-btn scout-track-more-btn">•••</button>
             </div>
@@ -148,6 +157,7 @@ function renderTracksPage() {
     if (!group) return;
 
     itemEl.querySelector('.scout-track-open-btn')?.addEventListener('click', () => {
+      if (group.recipe && openScoutRecipeFromTracking(group)) return;
       // 优先当前站：有订则续断点，无订则当前站搜第 1 页；无法识别站则用组内最新一条
       let site = currentSite;
       let track = site

@@ -71,11 +71,13 @@
     const lib = listContext.libraryState ||
       (await resolveLibraryState(edition, listContext.storageSnapshot));
     const block = isBlockedEdition(edition, work);
+    const sourceIssue = isEditionAvailabilityIssue(edition);
 
     if (block.blocked) {
       el.classList.add('is-exc-blocked');
       if (config.hide_blocked) el.classList.add('exc-hide');
     }
+    el.classList.toggle('is-exc-source-issue', sourceIssue);
     // 三类框体分开打标（互不顶替，可叠加）
     // 1) 点过 2) 库内 3) 心动
     el.classList.remove('is-exc-seen', 'is-exc-lib', 'is-exc-fav', 'is-exc-familiar');
@@ -233,6 +235,22 @@
           t: '♥+' + (favHits.length - 2),
           cls: 'hot',
           title: '更多心动: ' + favHits.slice(2).join(', '),
+        });
+      }
+
+      if (sourceIssue) {
+        const availabilityStatus = normalizeEditionAvailabilityStatus(
+          edition.availability_status,
+          edition.expunged
+        );
+        topTags.unshift({
+          t: getEditionAvailabilityLabel(edition),
+          cls: 'warn source-' + availabilityStatus,
+          title:
+            [edition.availability_reason, edition.availability_error]
+              .map((value) => compactText(value || ''))
+              .filter(Boolean)
+              .join(' · ') || '最近一次来源检查未通过',
         });
       }
 
@@ -609,6 +627,7 @@
       'is-exc-lib',
       'is-exc-seen',
       'is-exc-breakpoint',
+      'is-exc-source-issue',
       'is-exc-folded-child'
     );
     return enhanceListItem(el);

@@ -180,7 +180,9 @@ console.log('Shared workbench styles');
   const pageEnhancementCss = context.getScoutPageEnhancementThemeCss();
   const siteLayoutCss = context.getScoutSiteLayoutThemeCss();
   assert.equal(css, workbenchCss + pageEnhancementCss + siteLayoutCss);
-  assert.ok(workbenchCss.includes('#jlc-wb .scout-combo-dock {'));
+  assert.ok(
+    workbenchCss.includes('#jlc-wb [data-jlc-wb-page="combo"] > .scout-combo-dock {')
+  );
   assert.ok(pageEnhancementCss.includes('.scout-breakpoint-highlight {'));
   assert.ok(pageEnhancementCss.includes('.scout-work-fav-bar {'));
   assert.ok(siteLayoutCss.includes('body.creamu-site-xvideos .mozaique .thumb-block'));

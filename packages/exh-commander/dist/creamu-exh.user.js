@@ -719,6 +719,7 @@
         #exc-hover-preview.is-error .exc-hp-status { color: #b42318; }
 
         .exc-badge-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; margin-bottom: 2px; align-items: center; }
+        .exc-source-pill { flex: 0 0 auto; }
         .exc-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
         /* 画廊面板：小胶囊按钮，尽量一排塞得下 */
         #exc-gallery-panel .jlc-wb-btn,
@@ -1009,6 +1010,10 @@
             background: linear-gradient(135deg, #f3faf4 0%, #e8f5ea 100%) !important;
             box-shadow: 0 0 0 1px rgba(90,154,96,.2), 0 3px 0 #c5dfc8 !important;
         }
+        .exc-edition-list .exc-ed.is-source-issue { position: relative; overflow: hidden; }
+        .exc-edition-list .exc-ed.is-source-issue::after {
+            content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: #b42318;
+        }
         /* 当前页且是库源：橙框 + 绿底提示同源 */
         .exc-edition-list .exc-ed.is-lrr-bound.is-current {
             order: -2 !important;
@@ -1226,6 +1231,25 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
+        }
+        #jlc-wb .exc-source-check-row { align-items: center; justify-content: space-between; }
+        #jlc-wb .exc-source-editions {
+            display: flex; flex-direction: column; gap: 5px; margin-top: 8px; padding-left: 9px;
+            border-left: 3px solid #d96b5f;
+        }
+        #jlc-wb .exc-source-edition {
+            display: grid; grid-template-columns: max-content max-content minmax(0, 1fr);
+            gap: 6px; align-items: center; min-width: 0; color: #8a6f55; font-size: 12px;
+        }
+        #jlc-wb .exc-source-edition > a { color: #4a3728; font-weight: 750; text-decoration: none; }
+        #jlc-wb .exc-source-edition > span:last-child {
+            min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        @media (max-width: 520px) {
+            #jlc-wb .exc-source-check-row { align-items: stretch; }
+            #jlc-wb .exc-source-check-row .jlc-wb-btn { width: 100%; }
+            #jlc-wb .exc-source-edition { grid-template-columns: max-content minmax(0, 1fr); }
+            #jlc-wb .exc-source-edition > span:last-child { grid-column: 1 / -1; }
         }
         #exc-tag-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
         #exc-diag {
@@ -4040,6 +4064,56 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return 0;
   }
 
+  const EDITION_AVAILABILITY_STATUSES = new Set([
+    'active',
+    'expunged',
+    'unavailable',
+    'unknown',
+  ]);
+
+  function hasEditionExpungedFlag(value) {
+    if (value === true || value === 1) return true;
+    const normalized = compactText(value).toLowerCase();
+    return normalized === '1' || normalized === 'true' || normalized === 'yes';
+  }
+
+  function normalizeEditionAvailabilityStatus(value, expunged) {
+    if (hasEditionExpungedFlag(expunged)) return 'expunged';
+    const normalized = compactText(value).toLowerCase();
+    return EDITION_AVAILABILITY_STATUSES.has(normalized) ? normalized : 'unknown';
+  }
+
+  function isEditionAvailabilityIssue(edition) {
+    if (!edition) return false;
+    const status = normalizeEditionAvailabilityStatus(
+      edition.availability_status,
+      edition.expunged
+    );
+    return status === 'expunged' || status === 'unavailable';
+  }
+
+  function getEditionAvailabilityLabel(edition) {
+    const status = normalizeEditionAvailabilityStatus(
+      edition && edition.availability_status,
+      edition && edition.expunged
+    );
+    if (status === 'active') return '来源正常';
+    if (status === 'expunged') return '已清退';
+    if (status === 'unavailable') return '不可访问';
+    return '未检查';
+  }
+
+  function getEditionAvailabilityTone(edition) {
+    const status = normalizeEditionAvailabilityStatus(
+      edition && edition.availability_status,
+      edition && edition.expunged
+    );
+    if (status === 'active') return 'green';
+    if (status === 'expunged') return 'red';
+    if (status === 'unavailable') return 'yellow';
+    return 'gray';
+  }
+
   /**
    * 偏好排序：语言 → 码级 → 体积 → 汉化组 → 页数
    * （黑名单组仍通过 groupBonus 强惩罚 / pickBest 过滤）
@@ -4047,6 +4121,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   function scoreEdition(edition, cfg) {
     const c = cfg || config;
     let score = 0;
+    if (isEditionAvailabilityIssue(edition)) score -= 1e15;
     // 1e12 级：语言
     score += (10 - Math.min(9, langRank(edition.language, c.lang_order))) * 1e12;
     // 1e10 级：码级
@@ -4070,9 +4145,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   function pickBestEdition(editions, cfg) {
     const list = (editions || []).filter(Boolean);
     if (!list.length) return null;
-    // drop blacklisted groups when alternatives exist
     const c = cfg || config;
     let pool = list.slice();
+    // 已清退或不可访问的来源只在没有其它版本时作为兜底。
+    const available = pool.filter((ed) => !isEditionAvailabilityIssue(ed));
+    if (available.length) pool = available;
+    // drop blacklisted groups when alternatives exist
     const nonBlack = pool.filter((ed) => groupBonus(ed.group || '', c) > -500);
     if (nonBlack.length) pool = nonBlack;
     let best = pool[0];
@@ -4180,6 +4258,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   /** 线上相对库内是否更优：只认语言/码级（页数体积不算） */
   function isEditionBetter(remote, base, cfg) {
     if (!remote || !base) return false;
+    if (isEditionAvailabilityIssue(remote)) return false;
+    if (isEditionAvailabilityIssue(base)) return true;
     if (isLangBetter(remote.language, base.language, cfg)) return true;
     const rl = remote.language || 'other';
     const bl = base.language || 'other';
@@ -4455,6 +4535,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   function normalizeEditionRecord(partial) {
+    partial = partial || {};
     const title = compactText(partial.title_raw || partial.title || '');
     const tags = Array.isArray(partial.tags) ? partial.tags.slice() : [];
     const group =
@@ -4465,6 +4546,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const language = partial.language || detectLanguageFromText(title, tags);
     const censor_tier = partial.censor_tier || detectCensorTier(title, tags);
     const size_bytes = Number(partial.size_bytes) || parseSizeToBytes(partial.size_text || '') || 0;
+    const availability_status = normalizeEditionAvailabilityStatus(
+      partial.availability_status,
+      partial.expunged
+    );
     return {
       gid: String(partial.gid || ''),
       token: String(partial.token || '').toLowerCase(),
@@ -4483,6 +4568,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       posted_at: Number(partial.posted_at) || 0,
       url: partial.url || '',
       thumb: partial.thumb || '',
+      availability_status,
+      availability_checked_at: Math.max(0, Number(partial.availability_checked_at) || 0),
+      availability_reason: compactText(partial.availability_reason || ''),
+      availability_error: compactText(partial.availability_error || ''),
+      expunged: availability_status === 'expunged' ? 1 : 0,
       updated_at: nowMs(),
     };
   }
@@ -4672,6 +4762,33 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return editionKey(gid, token);
   }
 
+  function mergeEditionAvailabilityState(merged, incoming, previous) {
+    if (!previous) return merged;
+    const incomingAvailabilityAt = Number(incoming.availability_checked_at) || 0;
+    const previousAvailabilityAt = Number(previous.availability_checked_at) || 0;
+    const incomingAvailability = normalizeEditionAvailabilityStatus(
+      incoming.availability_status,
+      incoming.expunged
+    );
+    const previousAvailability = normalizeEditionAvailabilityStatus(
+      previous.availability_status,
+      previous.expunged
+    );
+    const keepPreviousAvailability =
+      !incomingAvailabilityAt ||
+      previousAvailabilityAt > incomingAvailabilityAt ||
+      (previousAvailabilityAt === incomingAvailabilityAt &&
+        previousAvailability !== 'unknown' &&
+        incomingAvailability === 'unknown');
+    if (!keepPreviousAvailability) return merged;
+    merged.availability_status = previousAvailability;
+    merged.availability_checked_at = previousAvailabilityAt;
+    merged.availability_reason = compactText(previous.availability_reason || '');
+    merged.availability_error = compactText(previous.availability_error || '');
+    merged.expunged = previousAvailability === 'expunged' ? 1 : 0;
+    return merged;
+  }
+
   function mergeEditionRecord(partial, previous) {
     const rec = normalizeEditionRecord(partial);
     if (!rec.gid || !rec.token) throw new Error('edition requires gid/token');
@@ -4707,6 +4824,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       if (!(Number(merged.size_bytes) > 0) && Number(prev.size_bytes) > 0) {
         merged.size_bytes = prev.size_bytes;
       }
+
+      mergeEditionAvailabilityState(merged, rec, prev);
     }
     return { merged, previous: prev };
   }
@@ -7425,18 +7544,73 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return 'https://api.e-hentai.org/api.php';
   }
 
+  function getGdataFailureMessage(error, fallback) {
+    const value = error && (error.message || error.error || error.statusText || error);
+    return compactText(value || fallback || 'gdata request failed').slice(0, 300);
+  }
+
+  function createGalleryGdataRecord(meta, requested, checkedAt) {
+    const source = meta || {};
+    const fallback = requested || {};
+    const gid = compactText(source.gid || fallback.gid || '');
+    if (!gid) return null;
+    const token = compactText(source.token || fallback.token || '').toLowerCase();
+    const error = compactText(source.error || '');
+    const expunged = hasEditionExpungedFlag(source.expunged);
+    if (error) {
+      return {
+        gid,
+        token,
+        availability_status: 'unavailable',
+        availability_checked_at: checkedAt,
+        availability_reason: error,
+        availability_error: '',
+        expunged: 0,
+      };
+    }
+
+    const sec = Number(source.posted);
+    const pages = Number(source.filecount) || 0;
+    const size_bytes = Number(source.filesize) || 0;
+    const tags = Array.isArray(source.tags) ? source.tags.map(String) : [];
+    const title = compactText(source.title || source.title_jpn || '');
+    const language = detectLanguageFromText(title, tags);
+    const censor_tier = detectCensorTier(title, tags);
+    const group = extractGroupFromTitle(title) || extractGroupsFromTags(tags)[0] || '';
+    return {
+      gid,
+      token,
+      posted_at: Number.isFinite(sec) && sec > 0 ? Math.round(sec * 1000) : 0,
+      pages,
+      size_bytes,
+      tags,
+      title_raw: title,
+      language,
+      censor_tier,
+      group,
+      uploader: compactText(source.uploader || ''),
+      availability_status: expunged ? 'expunged' : 'active',
+      availability_checked_at: checkedAt,
+      availability_reason: expunged
+        ? compactText(source.expunged_reason || '站点标记为已清退')
+        : '',
+      availability_error: '',
+      expunged: expunged ? 1 : 0,
+    };
+  }
+
   /**
-   * EH 官方 gdata 批量：posted / 页数 / 体积 / 标签（码级语言）。
+   * EH 官方 gdata 批量结果。接口失败仅记录在 errors，不推断作品不可访问。
    * @param {{gid:string|number,token:string}[]} pairs
    * @param {object} [options]
    * @param {Function} [options.shouldContinue]
-   * @returns {Promise<Object<string, object>>} gid → meta
+   * @param {Function} [options.onProgress]
    */
-  async function fetchGalleryGdataBatch(pairs, options) {
+  async function fetchGalleryGdataBatchDetailed(pairs, options) {
     options = options || {};
     const shouldContinue =
       typeof options.shouldContinue === 'function' ? options.shouldContinue : () => true;
-    const out = Object.create(null);
+    const records = Object.create(null);
     const uniq = [];
     const seen = Object.create(null);
     for (let i = 0; i < (pairs || []).length; i++) {
@@ -7447,14 +7621,26 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       seen[g] = 1;
       uniq.push({ gid: g, token: t });
     }
-    if (!uniq.length) return out;
+    const result = {
+      records,
+      requestedCount: uniq.length,
+      successfulBatches: 0,
+      failedBatches: 0,
+      errors: [],
+      cancelled: false,
+    };
+    if (!uniq.length) return result;
     const api = getEhGdataApiUrl();
     for (let off = 0; off < uniq.length; off += 25) {
-      if (!shouldContinue()) break;
+      if (!shouldContinue()) {
+        result.cancelled = true;
+        break;
+      }
       const chunk = uniq.slice(off, off + 25);
       const gidlist = chunk.map((x) => [Number(x.gid), x.token]);
+      let res;
       try {
-        const res = await gmRequest({
+        res = await gmRequest({
           method: 'POST',
           url: api,
           headers: {
@@ -7468,49 +7654,128 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           }),
           timeout: 25000,
         });
+      } catch (error) {
+        result.failedBatches += 1;
+        result.errors.push({
+          type: 'network',
+          gids: chunk.map((item) => item.gid),
+          message: getGdataFailureMessage(error, 'gdata network failure'),
+        });
+        if (typeof options.onProgress === 'function') {
+          try {
+            options.onProgress(result);
+          } catch (_) { /* ignore */ }
+        }
+        continue;
+      }
+
+      try {
         let body = res && (res.responseText || res.response);
         if (typeof body === 'string') {
-          try {
-            body = JSON.parse(body);
-          } catch (_) {
-            body = null;
-          }
+          if (!body.trim()) throw new Error('gdata response is empty');
+          body = JSON.parse(body);
         }
         const arr = body && body.gmetadata;
-        if (!Array.isArray(arr)) continue;
+        if (!Array.isArray(arr)) throw new Error('gdata response has no gmetadata array');
+        const requestedByGid = new Map(chunk.map((item) => [String(item.gid), item]));
+        const checkedAt = nowMs();
         for (let j = 0; j < arr.length; j++) {
           const meta = arr[j];
-          if (!meta || meta.error) continue;
-          const g = compactText(meta.gid);
-          if (!g) continue;
-          const sec = Number(meta.posted);
-          const pages = Number(meta.filecount) || 0;
-          const size_bytes = Number(meta.filesize) || 0;
-          const tags = Array.isArray(meta.tags) ? meta.tags.map(String) : [];
-          const title = compactText(meta.title || meta.title_jpn || '');
-          const language = detectLanguageFromText(title, tags);
-          const censor_tier = detectCensorTier(title, tags);
-          const group =
-            extractGroupFromTitle(title) || extractGroupsFromTags(tags)[0] || '';
-          out[g] = {
-            gid: g,
-            token: compactText(meta.token || ''),
-            posted_at: Number.isFinite(sec) && sec > 0 ? Math.round(sec * 1000) : 0,
-            pages: pages,
-            size_bytes: size_bytes,
-            tags: tags,
-            title_raw: title,
-            language: language,
-            censor_tier: censor_tier,
-            group: group,
-            uploader: compactText(meta.uploader || ''),
-          };
+          if (!meta) continue;
+          let gid = compactText(meta.gid || '');
+          if (!gid && arr.length === 1 && chunk.length === 1) gid = chunk[0].gid;
+          const record = createGalleryGdataRecord(
+            Object.assign({}, meta, { gid }),
+            requestedByGid.get(String(gid)) || null,
+            checkedAt
+          );
+          if (record) records[record.gid] = record;
         }
-      } catch (_) {
-        /* ignore chunk errors */
+        result.successfulBatches += 1;
+      } catch (error) {
+        result.failedBatches += 1;
+        result.errors.push({
+          type: 'response',
+          gids: chunk.map((item) => item.gid),
+          message: getGdataFailureMessage(error, 'invalid gdata response'),
+        });
+      }
+      if (typeof options.onProgress === 'function') {
+        try {
+          options.onProgress(result);
+        } catch (_) { /* ignore */ }
       }
     }
-    return out;
+    return result;
+  }
+
+  /** gid → meta 的兼容入口。 */
+  async function fetchGalleryGdataBatch(pairs, options) {
+    const detail = await fetchGalleryGdataBatchDetailed(pairs, options);
+    return detail.records;
+  }
+
+  async function checkEditionAvailabilityBatch(editions, options) {
+    options = options || {};
+    const input = Array.from(editions || []).filter((edition) => {
+      return edition && compactText(edition.gid || '') && compactText(edition.token || '');
+    });
+    const detail = await fetchGalleryGdataBatchDetailed(
+      input.map((edition) => ({ gid: edition.gid, token: edition.token })),
+      options
+    );
+    const writes = new Map();
+    for (let i = 0; i < input.length; i++) {
+      const edition = input[i];
+      const meta = detail.records[String(edition.gid)];
+      if (!meta) continue;
+      const merged = mergeEditionRecord(Object.assign({}, edition, meta), edition).merged;
+      writes.set(merged.id, merged);
+      Object.assign(edition, merged);
+    }
+
+    const failureByGid = new Map();
+    for (let i = 0; i < detail.errors.length; i++) {
+      const failure = detail.errors[i];
+      for (let j = 0; j < (failure.gids || []).length; j++) {
+        failureByGid.set(String(failure.gids[j]), failure.message);
+      }
+    }
+    const failedWrites = new Map();
+    for (let i = 0; i < input.length; i++) {
+      const edition = input[i];
+      const id = edition.id || makeEditionId(edition.gid, edition.token);
+      if (writes.has(id)) continue;
+      const error = failureByGid.get(String(edition.gid));
+      if (!error) continue;
+      if (compactText(edition.availability_error || '') === error) continue;
+      const status = normalizeEditionAvailabilityStatus(
+        edition.availability_status,
+        edition.expunged
+      );
+      const failedEdition = Object.assign({}, edition, {
+        id,
+        availability_status: status,
+        availability_error: error,
+        expunged: status === 'expunged' ? 1 : 0,
+        updated_at: nowMs(),
+      });
+      failedWrites.set(id, failedEdition);
+      Object.assign(edition, failedEdition);
+    }
+
+    const updatedEditions = Array.from(writes.values());
+    const failedEditions = Array.from(failedWrites.values());
+    const saved = updatedEditions.concat(failedEditions);
+    if (saved.length && options.persist !== false) {
+      await idbPutBatches({ [STORE_EDITIONS]: saved });
+    }
+    return Object.assign({}, detail, {
+      editions: updatedEditions,
+      failedEditions,
+      updatedCount: updatedEditions.length,
+      errorUpdatedCount: failedEditions.length,
+    });
   }
 
   /** gdata 仅取 posted（兼容旧调用） */
@@ -8862,6 +9127,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           group: (gm && gm.group) || it.group || extractGroupFromTitle(title) || '',
           tags: (gm && gm.tags) || [],
           uploader: (gm && gm.uploader) || '',
+          availability_status: gm && gm.availability_status,
+          availability_checked_at: (gm && gm.availability_checked_at) || 0,
+          availability_reason: (gm && gm.availability_reason) || '',
+          availability_error: (gm && gm.availability_error) || '',
+          expunged: (gm && gm.expunged) || 0,
           url: it.url || '',
         };
         const id = makeEditionId(String(it.gid), String(partial.token || ''));
@@ -8890,6 +9160,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           ) {
             merged.censor_tier = prev.censor_tier;
           }
+          mergeEditionAvailabilityState(merged, rec, prev);
         }
         if (!merged.created_at) merged.created_at = nowMs();
         await idbPut(STORE_EDITIONS, merged);
@@ -10422,6 +10693,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const url = ed.url || buildGalleryUrl(location.origin, ed.gid, ed.token);
       const isPeer = peer && String(ed.gid) === String(peer.gid);
       const isLrr = isLrrGid(ed.gid);
+      const sourceIssue = isEditionAvailabilityIssue(ed);
       const sc = scoreEdition(ed, cfg);
       const curSc = scoreEdition(current, cfg);
       const marks = [];
@@ -10449,6 +10721,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         'exc-ed' +
         (isPeer ? ' is-peer' : '') +
         (isLrr ? ' is-lrr-bound' : '') +
+        (sourceIssue ? ' is-source-issue' : '') +
         (flags.isCurrent ? ' is-current' : '');
       return (
         '<div class="' +
@@ -10464,6 +10737,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         (isLrr
           ? '<span class="exc-ed-lrr-tag" title="LRR 档案绑定的 EH 源画廊">库源</span> '
           : '') +
+        editionAvailabilityBadgeHtml(ed) +
         escapeHtml(bits.join(' · ')) +
         '</a></div>'
       );
@@ -10500,6 +10774,39 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       (listHtml ? '<div class="exc-edition-list">' + listHtml + '</div>' : '') +
       actions +
       '</div>'
+    );
+  }
+
+  function editionAvailabilityBadgeHtml(edition, options) {
+    if (!edition) return '';
+    const opts = options || {};
+    const status = normalizeEditionAvailabilityStatus(
+      edition.availability_status,
+      edition.expunged
+    );
+    if (status === 'active' && !opts.showActive) return '';
+    if (status === 'unknown' && !opts.showUnknown) return '';
+    const details = [];
+    if (edition.availability_reason) details.push(edition.availability_reason);
+    if (edition.availability_error) details.push(edition.availability_error);
+    const checkedAt = Number(edition.availability_checked_at) || 0;
+    if (checkedAt) {
+      try {
+        details.push('检查于 ' + new Date(checkedAt).toLocaleString('zh-CN', { hour12: false }));
+      } catch (_) { /* ignore */ }
+    }
+    const title = details.length ? ' title="' + escapeHtml(details.join(' · ')) + '"' : '';
+    return (
+      '<span class="jlc-status-pill exc-source-pill tone-' +
+      getEditionAvailabilityTone(edition) +
+      '" data-source-status="' +
+      status +
+      '"' +
+      title +
+      '>' +
+      escapeHtml(opts.label || getEditionAvailabilityLabel(edition)) +
+      '</span>' +
+      (opts.trailingSpace === false ? '' : ' ')
     );
   }
 
@@ -10545,6 +10852,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       }
     }
     if (edition) {
+      const availabilityBadge = editionAvailabilityBadgeHtml(edition, { trailingSpace: false });
+      if (availabilityBadge) bits.push(availabilityBadge);
       try {
         if (typeof matchFamiliarRadar === 'function') {
           const fam = matchFamiliarRadar(edition.title_raw || edition.title || '', edition.tags || []);
@@ -11145,11 +11454,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const lib = listContext.libraryState ||
       (await resolveLibraryState(edition, listContext.storageSnapshot));
     const block = isBlockedEdition(edition, work);
+    const sourceIssue = isEditionAvailabilityIssue(edition);
 
     if (block.blocked) {
       el.classList.add('is-exc-blocked');
       if (config.hide_blocked) el.classList.add('exc-hide');
     }
+    el.classList.toggle('is-exc-source-issue', sourceIssue);
     // 三类框体分开打标（互不顶替，可叠加）
     // 1) 点过 2) 库内 3) 心动
     el.classList.remove('is-exc-seen', 'is-exc-lib', 'is-exc-fav', 'is-exc-familiar');
@@ -11307,6 +11618,22 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           t: '♥+' + (favHits.length - 2),
           cls: 'hot',
           title: '更多心动: ' + favHits.slice(2).join(', '),
+        });
+      }
+
+      if (sourceIssue) {
+        const availabilityStatus = normalizeEditionAvailabilityStatus(
+          edition.availability_status,
+          edition.expunged
+        );
+        topTags.unshift({
+          t: getEditionAvailabilityLabel(edition),
+          cls: 'warn source-' + availabilityStatus,
+          title:
+            [edition.availability_reason, edition.availability_error]
+              .map((value) => compactText(value || ''))
+              .filter(Boolean)
+              .join(' · ') || '最近一次来源检查未通过',
         });
       }
 
@@ -11683,6 +12010,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       'is-exc-lib',
       'is-exc-seen',
       'is-exc-breakpoint',
+      'is-exc-source-issue',
       'is-exc-folded-child'
     );
     return enhanceListItem(el);
@@ -12344,13 +12672,20 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return rec;
   }
 
-  /** 兄弟版本缺体积/时间/码级时 gdata 补全 */
+  /** 兄弟版本缺元数据或尚未检查来源时，用 gdata 批量补全。 */
   async function enrichSiblingEditionsMeta(siblings) {
     const list = (siblings || []).filter(Boolean);
-    if (!list.length || typeof fetchGalleryGdataBatch !== 'function') return 0;
+    if (!list.length || typeof checkEditionAvailabilityBatch !== 'function') return 0;
     const need = list.filter((ed) => {
       if (!ed.token) return false;
+      const availability = normalizeEditionAvailabilityStatus(
+        ed.availability_status,
+        ed.expunged
+      );
+      if (availability === 'expunged' || availability === 'unavailable') return false;
       return (
+        availability === 'unknown' ||
+        !(Number(ed.availability_checked_at) > 0) ||
         !(Number(ed.size_bytes) > 0) ||
         !(Number(ed.posted_at) > 0) ||
         !(Number(ed.pages) > 0) ||
@@ -12361,58 +12696,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       );
     });
     if (!need.length) return 0;
-    const pairs = need.slice(0, 25).map((ed) => ({ gid: ed.gid, token: ed.token }));
-    let gmap = {};
     try {
-      gmap = await fetchGalleryGdataBatch(pairs);
+      const result = await checkEditionAvailabilityBatch(need.slice(0, 25));
+      return Number(result && result.updatedCount) || 0;
     } catch (_) {
       return 0;
     }
-    let n = 0;
-    for (let i = 0; i < need.length; i++) {
-      const ed = need[i];
-      const gm = gmap[String(ed.gid)];
-      if (!gm) continue;
-      let dirty = false;
-      if (gm.posted_at && !(Number(ed.posted_at) > 0)) {
-        ed.posted_at = gm.posted_at;
-        dirty = true;
-      }
-      if (gm.pages && !(Number(ed.pages) > 0)) {
-        ed.pages = gm.pages;
-        dirty = true;
-      }
-      if (gm.size_bytes && !(Number(ed.size_bytes) > 0)) {
-        ed.size_bytes = gm.size_bytes;
-        dirty = true;
-      }
-      if (gm.censor_tier && gm.censor_tier !== 'unknown' && (!ed.censor_tier || ed.censor_tier === 'unknown')) {
-        ed.censor_tier = gm.censor_tier;
-        dirty = true;
-      }
-      if (gm.language && gm.language !== 'other' && (!ed.language || ed.language === 'other')) {
-        ed.language = gm.language;
-        dirty = true;
-      }
-      if (gm.group && !ed.group) {
-        ed.group = gm.group;
-        dirty = true;
-      }
-      if (gm.tags && gm.tags.length && !(ed.tags && ed.tags.length)) {
-        ed.tags = gm.tags;
-        dirty = true;
-      }
-      if (gm.title_raw && (!ed.title_raw || ed.title_raw.length < gm.title_raw.length)) {
-        ed.title_raw = gm.title_raw;
-        dirty = true;
-      }
-      if (dirty) {
-        ed.updated_at = nowMs();
-        await idbPut(STORE_EDITIONS, ed);
-        n++;
-      }
-    }
-    return n;
   }
 
   /** 按标题搜相关上传并入 Work；同 work 5 分钟内最多一次 */
@@ -12572,6 +12861,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       (work && work.blocked ? '取消抛弃' : '抛弃') +
       '</button>' +
       '<button type="button" class="jlc-wb-btn primary" data-exc-g="best">最佳版</button>' +
+      '<button type="button" class="jlc-wb-btn ghost" data-exc-g="source">检查来源</button>' +
       '<button type="button" class="jlc-wb-btn ghost" data-exc-g="bind">绑定 LRR</button>' +
       '<button type="button" class="jlc-wb-btn ghost" data-exc-g="merge">合并 Work</button>' +
       '<button type="button" class="jlc-wb-btn ghost" data-exc-g="lrrq">LRR 搜索</button>' +
@@ -12628,6 +12918,25 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           } catch (_) { /* ignore */ }
         } else if (act === 'best') {
           await openBestEdition(edition.work_id);
+          return;
+        } else if (act === 'source') {
+          btn.disabled = true;
+          btn.textContent = '检查中…';
+          const result = await checkEditionAvailabilityBatch([edition]);
+          if (result.updatedCount > 0) {
+            const checked = result.editions[0] || edition;
+            showToast('来源状态：' + getEditionAvailabilityLabel(checked));
+            await enhanceGalleryPage({ skipRelatedImport: true });
+            if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
+          } else if (result.errors && result.errors.length) {
+            showToast('来源检查失败：' + result.errors[0].message);
+            btn.disabled = false;
+            btn.textContent = '重试来源';
+          } else {
+            showToast('来源未返回可判定状态');
+            btn.disabled = false;
+            btn.textContent = '重试来源';
+          }
           return;
         } else if (act === 'bind') {
           await openBindModal(edition);
@@ -14502,11 +14811,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   async function renderWorksPage() {
     const root = document.getElementById('exc-wb-works-root');
     if (!root) return;
-    const tab = ['blocked', 'better', 'lrr'].includes(wbSession.workTab) ? wbSession.workTab : 'lrr';
+    const tab = ['blocked', 'better', 'availability', 'lrr'].includes(wbSession.workTab)
+      ? wbSession.workTab
+      : 'lrr';
     root.innerHTML =
       '<div class="jlc-wb-toolbar">' +
       '  <div class="jlc-wb-toolbar-row" id="exc-work-chips"></div>' +
-      '  <div class="jlc-wb-toolbar-row jlc-wb-toolbar-note">在库=同步后的 LRR 档案；有更好版/抛弃依赖已浏览作品。搜索收藏请用「追更」。</div>' +
+      (tab === 'availability'
+        ? '  <div class="jlc-wb-toolbar-row exc-source-check-row"><button type="button" class="jlc-wb-btn primary" id="exc-check-all-sources">检查全部来源</button><span class="jlc-wb-toolbar-note">接口失败不会把来源误标为不可访问。</span></div>'
+        : '  <div class="jlc-wb-toolbar-row jlc-wb-toolbar-note">在库=同步后的 LRR 档案；有更好版/抛弃依赖已浏览作品。搜索收藏请用「追更」。</div>') +
       '</div>' +
       '<div id="exc-current-work" hidden></div>' +
       '<div class="jlc-wb-list-scroll" id="jlc-wb-works-scroll"></div>';
@@ -14514,6 +14827,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const chips = [
       { id: 'lrr', label: 'LRR 在库' },
       { id: 'better', label: '有更好版' },
+      { id: 'availability', label: '来源异常' },
       { id: 'blocked', label: '已抛弃' },
     ];
     const chipHost = document.getElementById('exc-work-chips');
@@ -14537,12 +14851,80 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       renderWorksPage();
     };
     await paintWorksList(tab);
+    const checkAllButton = document.getElementById('exc-check-all-sources');
+    if (checkAllButton) {
+      checkAllButton.onclick = async () => {
+        const snapshot = await loadLibraryStorageSnapshot();
+        await runWorkbenchAvailabilityCheck(snapshot.editions || [], checkAllButton);
+      };
+    }
+  }
+
+  async function runWorkbenchAvailabilityCheck(editions, button) {
+    const candidates = Array.from(editions || []).filter(
+      (edition) => edition && compactText(edition.gid || '') && compactText(edition.token || '')
+    );
+    if (!candidates.length) {
+      showToast('没有可检查的来源');
+      return null;
+    }
+    const originalText = button ? button.textContent : '';
+    if (button) {
+      button.disabled = true;
+      button.textContent = '检查中 0/' + candidates.length;
+    }
+    try {
+      const result = await checkEditionAvailabilityBatch(candidates, {
+        onProgress(progress) {
+          if (!button || !button.isConnected) return;
+          const completedBatches =
+            Number(progress.successfulBatches || 0) + Number(progress.failedBatches || 0);
+          button.textContent =
+            '检查中 ' + Math.min(candidates.length, completedBatches * 25) + '/' + candidates.length;
+        },
+      });
+      const failed = Number(result.failedBatches) || 0;
+      showToast(
+        '已更新 ' +
+          result.updatedCount +
+          ' 个来源' +
+          (failed ? '，' + failed + ' 批检查失败' : '')
+      );
+      await renderWorksPage();
+      let currentGallery = null;
+      try {
+        currentGallery = parseGalleryUrl(location.href);
+      } catch (_) { /* ignore */ }
+      if (
+        currentGallery &&
+        candidates.some((edition) => String(edition.gid) === String(currentGallery.gid)) &&
+        typeof enhanceGalleryPage === 'function'
+      ) {
+        await enhanceGalleryPage({ skipRelatedImport: true });
+      }
+      return result;
+    } catch (error) {
+      showToast('来源检查失败：' + ((error && error.message) || error));
+      if (button && button.isConnected) {
+        button.disabled = false;
+        button.textContent = originalText || '重试来源';
+      }
+      return null;
+    }
   }
 
   async function paintWorksList(tab) {
     const host = document.getElementById('jlc-wb-works-scroll');
     if (!host) return;
     const storageSnapshot = await loadLibraryStorageSnapshot();
+    const checkAllButton = document.getElementById('exc-check-all-sources');
+    if (checkAllButton) {
+      const checkableCount = (storageSnapshot.editions || []).filter(
+        (edition) => edition && edition.gid && edition.token
+      ).length;
+      checkAllButton.textContent = '检查全部来源 (' + checkableCount + ')';
+      checkAllButton.disabled = checkableCount === 0;
+    }
     await renderCurrentGalleryWork(
       document.getElementById('exc-current-work'),
       storageSnapshot
@@ -14556,7 +14938,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     let works = [];
     if (tab === 'blocked') works = await listBlockedWorks(storageSnapshot);
-    else if (tab === 'better') {
+    else if (tab === 'availability') {
+      const all = await listAllWorks(storageSnapshot);
+      works = all.filter((work) => {
+        const editions = storageSnapshot.editionsByWork.get(work.work_id) || [];
+        return editions.some((edition) => isEditionAvailabilityIssue(edition));
+      });
+    } else if (tab === 'better') {
       const all = await listAllWorks(storageSnapshot);
       for (const w of all) {
         const eds = storageSnapshot.editionsByWork.get(w.work_id) || [];
@@ -14572,7 +14960,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     setFooterSummary((works.length ? works.length + ' 本' : '无') + ' · 作品');
     if (!works.length) {
       host.innerHTML =
-        '<div class="jlc-wb-empty">暂无条目。有更好版需先浏览过相关画廊；画廊页可「抛弃」屏蔽单本。</div>';
+        '<div class="jlc-wb-empty">' +
+        (tab === 'availability'
+          ? '暂无已知异常来源。可用上方按钮重新检查所有已浏览版本。'
+          : '暂无条目。有更好版需先浏览过相关画廊；画廊页可「抛弃」屏蔽单本。') +
+        '</div>';
       return;
     }
     const chunks = [];
@@ -14581,6 +14973,39 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const best = pickBestEdition(eds, config);
       const title = w.title_raw || (best && best.title_raw) || w.work_id;
       const url = best ? best.url || buildGalleryUrl(location.origin, best.gid, best.token) : '';
+      const sourceIssues = eds.filter((edition) => isEditionAvailabilityIssue(edition));
+      const sourceHtml =
+        tab === 'availability'
+          ? '<div class="exc-source-editions">' +
+            sourceIssues
+              .slice(0, 6)
+              .map((edition) => {
+                const editionUrl =
+                  edition.url || buildGalleryUrl(location.origin, edition.gid, edition.token);
+                const reason = [edition.availability_error, edition.availability_reason]
+                  .map((value) => compactText(value || ''))
+                  .filter(Boolean)
+                  .join(' · ');
+                return (
+                  '<div class="exc-source-edition">' +
+                  editionAvailabilityBadgeHtml(edition) +
+                  '<a href="' +
+                  escapeHtml(editionUrl) +
+                  '" target="_blank" rel="noopener">gid ' +
+                  escapeHtml(edition.gid) +
+                  '</a>' +
+                  (reason ? '<span>' + escapeHtml(reason) + '</span>' : '') +
+                  '</div>'
+                );
+              })
+              .join('') +
+            (sourceIssues.length > 6
+              ? '<div class="jlc-wb-toolbar-note">另有 ' +
+                (sourceIssues.length - 6) +
+                ' 个异常版本</div>'
+              : '') +
+            '</div>'
+          : '';
       chunks.push(
         '<div class="jlc-wb-item" data-work="' +
           escapeHtml(w.work_id) +
@@ -14588,8 +15013,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           '<div class="jlc-wb-item-title">' +
           (url ? '<a href="' + escapeHtml(url) + '" class="jlc-wb-title-link">' + escapeHtml(title) + '</a>' : escapeHtml(title)) +
           '</div>' +
+          sourceHtml +
           '<div class="jlc-wb-item-actions">' +
-          '<button type="button" class="jlc-wb-btn primary" data-wact="best">最佳版</button>' +
+          (tab === 'availability'
+            ? '<button type="button" class="jlc-wb-btn primary" data-wact="source">复查来源</button>'
+            : '') +
+          '<button type="button" class="jlc-wb-btn ' +
+          (tab === 'availability' ? 'ghost' : 'primary') +
+          '" data-wact="best">最佳版</button>' +
           '<button type="button" class="jlc-wb-btn ghost" data-wact="bind">LRR</button>' +
           '</div></div>'
       );
@@ -14603,6 +15034,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const eds = await listEditionsByWork(workId);
       const best = pickBestEdition(eds, config) || eds[0];
       if (btn.getAttribute('data-wact') === 'best') await openBestEdition(workId);
+      if (btn.getAttribute('data-wact') === 'source') {
+        await runWorkbenchAvailabilityCheck(eds, btn);
+        return;
+      }
       if (btn.getAttribute('data-wact') === 'bind' && best) {
         best.work_id = workId;
         await openBindModal(best);
@@ -14645,6 +15080,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     );
     const statusBits = [];
     if (work && work.blocked) statusBits.push('已抛弃');
+    if (isEditionAvailabilityIssue(edition)) {
+      statusBits.push(getEditionAvailabilityLabel(edition));
+    }
     if (lib) {
       if (lib.same_version_confirmed) statusBits.push('已确认同源');
       else if (lib.edition_in_library) statusBits.push('本版在库');
@@ -14683,6 +15121,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       '</div></div>' +
       '<div class="jlc-wb-item-actions">' +
       '<button type="button" class="jlc-wb-btn primary" data-current-wact="best">最佳版</button>' +
+      '<button type="button" class="jlc-wb-btn ghost" data-current-wact="source">检查来源</button>' +
       '<button type="button" class="jlc-wb-btn ghost" data-current-wact="bind">绑定 LRR</button>' +
       (lrrUrl
         ? '<a class="jlc-wb-btn ghost" href="' +
@@ -14696,6 +15135,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       if (!button) return;
       const action = button.getAttribute('data-current-wact');
       if (action === 'best' && edition.work_id) await openBestEdition(edition.work_id);
+      else if (action === 'source') {
+        await runWorkbenchAvailabilityCheck([edition], button);
+      }
       else if (action === 'bind') await openBindModal(edition);
     };
     return { edition, work, lib };

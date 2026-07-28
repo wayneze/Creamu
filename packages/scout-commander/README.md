@@ -4,7 +4,7 @@
 
 ## 功能
 
-1. **组合搜索**：多词槽位 + 词库点选，可选 `and` / 空格 / `or` 连接，一键跳转引擎。
+1. **组合搜索**：必须 / 偏好 / 排除条件；三站结果量、精确样本与逐词命中评估；可用当前 URL 临时只看同时命中的作品。
 2. **词库**：页面标签采集、分类 / 中文 / 心动、热度与废弃。
 3. **屏蔽**：整词（默认）或子串；范围标题 / 上传者 / 两者；弱淡化或强隐藏。
 4. **追更断点**：收藏搜索 query；列表点片记页码；同词多站在 UI 折叠，续看优先当前站。
@@ -21,9 +21,11 @@
 | `10-core.js` | 公共文本、匹配和基础工具 |
 | `12-library-state.js` | 词库、屏蔽词、熟人和作品状态 |
 | `14-tracking-state.js` | 追更、配置和已点片库 |
+| `15-search-recipes.js` | 搜索配方、查询计划、命中评估与临时过滤 URL |
 | `16-data-portability.js` | JSON 导入导出与合并 |
 | `18-webdav.js` | WebDAV 状态同步接线 |
 | `20-sites.js` | 三站适配与分页 |
+| `21-search-runtime.js` | 站点查询、结果量读取与详情样本核验 |
 | `25-theme.js` | 主题装配、配色 token 与工作台扩展样式 |
 | `26-site-theme.js` | 三站页面主题 |
 | `27-page-enhancement-theme.js` | 详情标签、收藏、预览和屏蔽状态样式 |
@@ -35,6 +37,7 @@
 | `34-library-pages.js` | 词库、发布者与作品页 |
 | `35-search-enhancements.js` | 搜索追更入口 |
 | `36-tracking-page.js` | 追更与屏蔽列表页 |
+| `37-exact-search-filter.js` | 当前搜索页的同时命中核验与临时过滤 |
 | `38-settings.js` | 设置页与导入导出入口 |
 | `40-workbench-shell.js` | 工作台壳层与共享样式接线 |
 | `42-tracking-runtime.js` | 搜索追更断点交互 |

@@ -38,6 +38,7 @@ function createHarness() {
     detailPublishers: 0,
     detailSignatures: 0,
     detailTags: 0,
+    exactFilters: 0,
     flows: 0,
     previews: 0,
     parses: 0,
@@ -123,6 +124,10 @@ function createHarness() {
       counts.blocks += 1;
       counts.flows += 1;
     },
+    applyScoutExactSearchFilter(entries) {
+      assert.equal(entries.length, state.kind === 'search' ? state.items.length : 0);
+      counts.exactFilters += 1;
+    },
     enhanceListLexiconHitFlows() {
       counts.flows += 1;
     },
@@ -168,6 +173,7 @@ test('search refresh owns one lexicon flow pass', () => {
   context.refreshPageEnhancements('boot');
   assert.equal(counts.blocks, 1);
   assert.equal(counts.flows, 1);
+  assert.equal(counts.exactFilters, 1);
   assert.equal(counts.snapshots, 1);
   assert.equal(counts.parses, 1);
 });
@@ -179,6 +185,11 @@ test('observer ignores UI children and coalesces site mutations', () => {
   const flow = createElement(['scout-lex-flow-card']);
   state.observerCallback([{ target: card, addedNodes: [flow], removedNodes: [] }]);
   assert.equal(counts.scheduled, 0);
+
+  const exactBar = createElement();
+  exactBar.id = 'scout-exact-filter-bar';
+  state.observerCallback([{ target: card, addedNodes: [exactBar], removedNodes: [] }]);
+  assert.equal(counts.scheduled, 0, 'exact-filter status changes should stay inside the UI boundary');
 
   const workbench = createElement();
   workbench.id = 'jlc-wb';

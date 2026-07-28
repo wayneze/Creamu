@@ -17,6 +17,8 @@ const SCOUT_STORAGE_PAGE_DEPENDENCIES = {
   creamu_scout_tracks: ['tracks', 'settings'],
   creamu_scout_config: ['combo', 'settings'],
   creamu_scout_clicks: ['settings'],
+  creamu_scout_search_draft: ['combo'],
+  creamu_scout_search_relations: ['combo'],
   scout_combo_tokens: ['combo'],
   scout_combo_auto_track: ['combo'],
 };
@@ -107,6 +109,7 @@ function addLexiconTerm(termData) {
       note: termData.note,
       status: termData.status,
       subtypes: termData.subtypes,
+      aliases: termData.aliases,
       sources: termData.sources,
       heat: termData.heat,
       use: termData.use,
@@ -127,6 +130,7 @@ function addLexiconTerm(termData) {
     zh: compactText(termData.zh),
     type: termData.type || '未分类',
     subtypes: termData.subtypes || [],
+    aliases: termData.aliases || [],
     loved: !!termData.loved,
     status: termData.status || 'unreviewed', // unreviewed | confirmed | retired
     heat: Number(termData.heat) > 0 ? Number(termData.heat) : 1,

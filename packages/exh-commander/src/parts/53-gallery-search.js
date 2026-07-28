@@ -303,6 +303,11 @@
           group: (gm && gm.group) || it.group || extractGroupFromTitle(title) || '',
           tags: (gm && gm.tags) || [],
           uploader: (gm && gm.uploader) || '',
+          availability_status: gm && gm.availability_status,
+          availability_checked_at: (gm && gm.availability_checked_at) || 0,
+          availability_reason: (gm && gm.availability_reason) || '',
+          availability_error: (gm && gm.availability_error) || '',
+          expunged: (gm && gm.expunged) || 0,
           url: it.url || '',
         };
         const id = makeEditionId(String(it.gid), String(partial.token || ''));
@@ -331,6 +336,7 @@
           ) {
             merged.censor_tier = prev.censor_tier;
           }
+          mergeEditionAvailabilityState(merged, rec, prev);
         }
         if (!merged.created_at) merged.created_at = nowMs();
         await idbPut(STORE_EDITIONS, merged);

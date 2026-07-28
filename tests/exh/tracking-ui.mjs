@@ -176,6 +176,11 @@ assert.doesNotMatch(
 
 const listUiSource = readPart('62-list-item-ui.js');
 assert.match(listUiSource, /exc-last-seen-mark/, 'the saved breakpoint should have a visible marker');
+assert.match(
+  listUiSource,
+  /getEditionAvailabilityLabel/,
+  'list cards should expose stored source availability'
+);
 
 const hoverSource = readPart('61-hover-preview.js');
 assert.match(
@@ -185,6 +190,11 @@ assert.match(
 );
 
 const detailUiSource = readPart('60-ui-page.js');
+assert.match(
+  detailUiSource,
+  /function editionAvailabilityBadgeHtml/,
+  'detail and workbench views should share one source-status badge renderer'
+);
 assert.doesNotMatch(
   detailUiSource.slice(
     detailUiSource.indexOf('function editionCompareCardHtml'),
@@ -193,6 +203,9 @@ assert.doesNotMatch(
   /class="exc-compare-pair"/,
   'edition rows should not repeat the same current/peer summary block'
 );
-assert.match(readPart('72-workbench-works.js'), /async function renderCurrentGalleryWork/);
+const worksUiSource = readPart('72-workbench-works.js');
+assert.match(worksUiSource, /async function renderCurrentGalleryWork/);
+assert.match(worksUiSource, /id: 'availability'/);
+assert.match(worksUiSource, /async function runWorkbenchAvailabilityCheck/);
 
 console.log('ExH tracking and UI behavior tests passed');

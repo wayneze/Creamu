@@ -11,6 +11,7 @@ import {
 
 let passed = 0;
 let failed = 0;
+const CASE_FILTER = String(process.env.CREAMU_E2E_FILTER || '').trim().toLowerCase();
 const MAX_JLC_STARTUP_TRANSACTIONS = 4;
 const MAX_STARTUP_TRACKING_TRANSACTIONS = 4;
 const MAX_INITIAL_META_REQUESTS = 24;
@@ -520,6 +521,7 @@ function installJlcStorageMetrics() {
 }
 
 async function runCase(name, options, flow) {
+  if (CASE_FILTER && !String(name).toLowerCase().includes(CASE_FILTER)) return;
   let session;
   try {
     session = await openScriptPage(browser, options);
@@ -531,7 +533,7 @@ async function runCase(name, options, flow) {
     failed += 1;
     process.exitCode = 1;
     console.error('  FAIL  ' + name);
-    console.error('       ', error?.message || error);
+    console.error('       ', error?.stack || error?.message || error);
   } finally {
     await session?.context.close();
   }
@@ -992,14 +994,14 @@ try {
     async (page) => {
       await waitFab(page);
       const startup = await page.evaluate(() => ({
-        autoTrackReads: window.__testWorkbenchGmReads.scout_combo_auto_track || 0,
         comboChildren: document.querySelector('[data-jlc-wb-page="combo"]')?.childElementCount || 0,
+        draftReads: window.__testWorkbenchGmReads.creamu_scout_search_draft || 0,
         comboTokenReads: window.__testWorkbenchGmReads.scout_combo_tokens || 0,
         lexiconTypeReads: window.__testWorkbenchGmReads.creamu_scout_lexicon_types || 0,
       }));
       assert.deepEqual(startup, {
-        autoTrackReads: 0,
         comboChildren: 0,
+        draftReads: 0,
         comboTokenReads: 0,
         lexiconTypeReads: 0,
       });
@@ -1020,6 +1022,9 @@ try {
         return { ...window.__testWorkbenchGmReads };
       });
       assert.equal(firstOpen.scout_combo_tokens, 1);
+      assert.equal(firstOpen.creamu_scout_search_draft, 1);
+      assert.equal(firstOpen.creamu_scout_lexicon_terms, 1);
+      assert.equal(firstOpen.creamu_scout_lexicon_types, 1);
 
       await page.locator('#scout-wb-close-btn').click();
       await waitWorkbenchClosed(page);
@@ -1031,7 +1036,8 @@ try {
           'creamu_scout_config',
           'creamu_scout_lexicon_terms',
           'creamu_scout_lexicon_types',
-          'scout_combo_auto_track',
+          'creamu_scout_search_draft',
+          'creamu_scout_search_relations',
           'scout_combo_tokens',
         ].reduce((total, key) => total + (window.__testWorkbenchGmReads[key] || 0), 0),
         preserved: document.querySelector('[data-jlc-wb-page="combo"]')?.firstElementChild
@@ -1083,12 +1089,19 @@ try {
       await page.evaluate(() => window.__testResetWorkbenchGmReads());
       await page.locator('#scout-combo-free-input').fill('night, portrait');
       await page.locator('#scout-combo-add-btn').click();
-      await page.locator('[data-combo-token="portrait"]').waitFor();
+      await page.locator('.scout-search-condition', { hasText: 'portrait' }).waitFor();
       const batchIo = await page.evaluate(() => ({
-        reads: window.__testWorkbenchGmReads.scout_combo_tokens || 0,
-        writes: window.__testWorkbenchGmWrites.scout_combo_tokens || 0,
+        legacyReads: window.__testWorkbenchGmReads.scout_combo_tokens || 0,
+        legacyWrites: window.__testWorkbenchGmWrites.scout_combo_tokens || 0,
+        draftReads: window.__testWorkbenchGmReads.creamu_scout_search_draft || 0,
+        draftWrites: window.__testWorkbenchGmWrites.creamu_scout_search_draft || 0,
       }));
-      assert.deepEqual(batchIo, { reads: 2, writes: 1 });
+      assert.deepEqual(batchIo, {
+        legacyReads: 0,
+        legacyWrites: 1,
+        draftReads: 1,
+        draftWrites: 1,
+      });
 
       await page.locator('#scout-wb-settings-btn').click();
       await page.locator('#jlc-wb-settings.is-open').waitFor();
@@ -1205,35 +1218,33 @@ try {
       await openScoutTab(page, 'combo');
       await assertScoutPageLayout(page, 'combo');
       assert.deepEqual(
-        await page.locator('[data-combo-token]').evaluateAll(
-          (elements) => elements.map((element) => element.getAttribute('data-combo-token'))
-        ),
+        await page.locator('.scout-search-condition-text').allTextContents(),
         ['documentary', 'city walk']
       );
-      assert.equal(
-        await page.locator('.scout-combo-preview-value').textContent(),
-        'documentary and city walk'
+      assert.deepEqual(
+        await page.locator('.scout-search-condition-role').evaluateAll(
+          (elements) => elements.map((element) => element.value)
+        ),
+        ['required', 'required']
       );
+      assert.equal(await page.locator('.scout-search-plan-site').count(), 3);
 
       await page.locator('#scout-combo-free-input').fill('night');
       await page.locator('#scout-combo-add-btn').click();
-      await page.locator('[data-combo-token="night"]').waitFor();
-      assert.equal(
-        await page.locator('.scout-combo-preview-value').textContent(),
-        'documentary and city walk and night'
-      );
-      await page.locator('[data-combo-token="city walk"]').click();
-      assert.equal(await page.locator('[data-combo-token="city walk"]').count(), 0);
-      assert.equal(
-        await page.locator('.scout-combo-preview-value').textContent(),
-        'documentary and night'
-      );
-      await page.locator('input[name="scout-combo-join"][value="or"]').check();
-      await page.locator('input[name="scout-combo-join"][value="or"]:checked').waitFor();
-      assert.equal(
-        await page.locator('.scout-combo-preview-value').textContent(),
-        'documentary or night'
-      );
+      await page.locator('.scout-search-condition', { hasText: 'night' }).waitFor();
+      const cityCondition = page.locator('.scout-search-condition', { hasText: 'city walk' });
+      await cityCondition.locator('.scout-search-condition-remove').click();
+      assert.equal(await page.locator('.scout-search-condition', { hasText: 'city walk' }).count(), 0);
+
+      await page.locator('[data-search-target="preference"]').click();
+      await page.locator('[data-search-priority="2"]').click();
+      await page.locator('#scout-combo-free-input').fill('portrait');
+      await page.locator('#scout-combo-add-btn').click();
+      const portraitCondition = page.locator('.scout-search-condition', { hasText: 'portrait' });
+      await portraitCondition.waitFor();
+      assert.equal(await portraitCondition.locator('.scout-search-condition-role').inputValue(), 'preference');
+      assert.equal(await portraitCondition.locator('.scout-search-condition-priority').inputValue(), '2');
+      assert.equal(await page.locator('.scout-search-site-row input:checked').count(), 3);
       await assertScoutPageLayout(page, 'combo');
 
       await openScoutSettingsTab(page, 'overview');
@@ -1287,6 +1298,251 @@ try {
       await page.waitForFunction(
         () => !document.getElementById('jlc-wb-settings')?.classList.contains('is-open')
       );
+    }
+  );
+
+  await runCase(
+    'Scout search: compares site totals and bounded exact-match samples',
+    {
+      host: 'www.xvideos.com',
+      fixtureFile: 'xvideos-list.html',
+      scriptPath: PATHS.scoutDist,
+      viewport: { width: 390, height: 844 },
+      gmValues: {
+        creamu_scout_config: SCOUT_WORKBENCH_FIXTURE_DATA.creamu_scout_config,
+        creamu_scout_lexicon_types: SCOUT_WORKBENCH_FIXTURE_DATA.creamu_scout_lexicon_types,
+        creamu_scout_lexicon_terms: SCOUT_WORKBENCH_FIXTURE_DATA.creamu_scout_lexicon_terms,
+        creamu_scout_tracks: [],
+        creamu_scout_search_draft: {
+          id: 'recipe-documentary-night',
+          label: 'Documentary night',
+          sites: ['xvideos', 'xnxx', 'eporner'],
+          conditions: [
+            { id: 'condition-documentary', term_id: 'term-documentary', text: 'documentary', role: 'required' },
+            { id: 'condition-night', term_id: 'term-night', text: 'night', role: 'preference', priority: 1 },
+            { id: 'condition-spoiler', text: 'spoiler', role: 'excluded' },
+          ],
+        },
+      },
+      beforeScript: (page) => page.evaluate(() => {
+        const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+        window.__scoutSearchStats = { search: 0, detail: 0, urls: [] };
+        const siteFromHost = (hostname) => {
+          if (hostname.includes('xnxx')) return 'xnxx';
+          if (hostname.includes('eporner')) return 'eporner';
+          return 'xvideos';
+        };
+        const videoPath = (site, index) => {
+          const id = (site === 'xvideos' ? 'xv' : site === 'xnxx' ? 'xn' : 'ep')
+            + String(index).padStart(3, '0');
+          return site === 'xvideos'
+            ? `/video.${id}/documentary-${index}`
+            : `/video-${id}/documentary-${index}`;
+        };
+        const listTitle = (index) => index === 4
+          ? `Documentary Mystery ${index}`
+          : `Documentary Night ${index}`;
+        const listHtml = (site, url) => {
+          const query = decodeURIComponent(url.href).replace(/[+-]/g, ' ').toLowerCase();
+          const hasDocumentary = query.includes('documentary');
+          const hasNight = query.includes('night');
+          const profile = hasDocumentary && hasNight
+            ? 'strict'
+            : hasDocumentary ? 'documentary' : 'night';
+          const totals = {
+            strict: { xvideos: 120, xnxxPages: 5, eporner: 80 },
+            documentary: { xvideos: 360, xnxxPages: 10, eporner: 240 },
+            night: { xvideos: 900, xnxxPages: 15, eporner: 640 },
+          }[profile];
+          const cards = Array.from({ length: 4 }, (_, offset) => {
+            const index = offset + 1;
+            const path = videoPath(site, index);
+            const title = listTitle(index);
+            if (site === 'eporner') {
+              return `<div class="mb" data-id="${index}">`
+                + `<a href="${path}"><img src="${pixel}" alt="${title}"></a>`
+                + `<p class="mbtit"><a href="${path}" title="${title}">${title}</a></p>`
+                + `<span class="mb-uploader"><a href="/profile/studio-${index}">Studio ${index}</a></span>`
+                + '</div>';
+            }
+            return `<div class="thumb-block" id="video_${site}_${index}">`
+              + `<a href="${path}"><img src="${pixel}" alt="${title}"></a>`
+              + `<div class="thumb-under"><p class="title"><a href="${path}" title="${title}">${title}</a></p>`
+              + `<div class="uploader"><a href="/profiles/studio-${index}"><span class="name">Studio ${index}</span></a></div></div>`
+              + '</div>';
+          }).join('');
+          if (site === 'eporner') {
+            return '<!doctype html><html><head>'
+              + `<meta name="description" content="We have ${totals.eporner} videos with this query.">`
+              + `</head><body><div id="vidresults">${cards}</div></body></html>`;
+          }
+          if (site === 'xnxx') {
+            return '<!doctype html><html><head>'
+              + '<meta name="description" content="XNXX.COM query videos">'
+              + '</head><body><div class="mozaique">' + cards + '</div>'
+              + `<div class="pagination"><a class="last-page" href="/search/query/${totals.xnxxPages}" title="Page ${totals.xnxxPages}">${totals.xnxxPages}</a></div>`
+              + '</body></html>';
+          }
+          return '<!doctype html><html><head>'
+            + `<meta name="description" content="${totals.xvideos} query FREE videos found for this search.">`
+            + `</head><body><div class="mozaique">${cards}</div></body></html>`;
+        };
+        const detailHtml = (site, url) => {
+          const index = Number(url.pathname.match(/(\d+)/)?.[1] || 1);
+          const title = listTitle(index);
+          const tags = index === 4
+            ? ['documentary', 'spoiler']
+            : ['documentary', 'night', 'city walk'];
+          if (site === 'eporner') {
+            return '<!doctype html><html><head>'
+              + `<meta property="og:image" content="${pixel}"></head><body>`
+              + `<h1>${title}</h1><div id="video-tags">`
+              + tags.map((tag) => `<a href="/tag/${tag}/">${tag}</a>`).join('')
+              + `</div><a href="/profile/studio-${index}">Studio ${index}</a></body></html>`;
+          }
+          return '<!doctype html><html><head>'
+            + `<meta property="og:image" content="${pixel}"></head><body>`
+            + `<h2 class="page-title">${title}</h2><div class="video-tags">`
+            + tags.map((tag) => `<a class="is-keyword" href="/tags/${tag}">${tag}</a>`).join('')
+            + `</div><a class="uploader-tag" href="/profiles/studio-${index}">Studio ${index}</a></body></html>`;
+        };
+        window.GM_xmlhttpRequest = (options) => {
+          const request = options || {};
+          const url = new URL(request.url);
+          const site = siteFromHost(url.hostname);
+          const detail = /^\/video[.-]/i.test(url.pathname);
+          window.__scoutSearchStats[detail ? 'detail' : 'search'] += 1;
+          window.__scoutSearchStats.urls.push(request.url);
+          const body = detail ? detailHtml(site, url) : listHtml(site, url);
+          const delay = detail ? 20 : ({ xvideos: 35, xnxx: 20, eporner: 10 }[site] || 10);
+          setTimeout(() => request.onload?.({
+            status: 200,
+            responseText: body,
+            finalUrl: request.url,
+            responseHeaders: 'content-type: text/html',
+          }), delay);
+        };
+      }),
+    },
+    async (page) => {
+      await openAndCheckTitle(page, /Scout/i);
+      await openScoutTab(page, 'combo');
+      await page.locator('#scout-combo-search-btn').click();
+      await page.waitForFunction(() => (
+        document.querySelectorAll('.scout-search-assessment-site').length === 3 &&
+        document.getElementById('scout-search-result-status')?.textContent.startsWith('完成')
+      ), null, { timeout: 10000 });
+
+      const requestStats = await page.evaluate(() => window.__scoutSearchStats);
+      assert.equal(requestStats.search, 9);
+      assert.equal(requestStats.detail, 12);
+      assert.equal(await page.locator('.scout-search-result').count(), 0);
+      assert.equal(await page.locator('.scout-search-assessment-variant').count(), 6);
+
+      const xvideosAssessment = page.locator('[data-assessment-site="xvideos"]');
+      const xnxxAssessment = page.locator('[data-assessment-site="xnxx"]');
+      const epornerAssessment = page.locator('[data-assessment-site="eporner"]');
+      assert.match(await xvideosAssessment.textContent() || '', /120/);
+      assert.match(await xvideosAssessment.textContent() || '', /3\/4/);
+      assert.match(await xvideosAssessment.textContent() || '', /75%/);
+      assert.match(await xnxxAssessment.textContent() || '', /约\s*20/);
+      assert.match(await epornerAssessment.textContent() || '', /80/);
+      const conditionStats = await xvideosAssessment.locator('.scout-search-condition-stat').allTextContents();
+      assert.ok(conditionStats.some((text) => /documentary\s*4\/4/i.test(text)));
+      assert.ok(conditionStats.some((text) => /night\s*3\/4/i.test(text)));
+      assert.ok(conditionStats.some((text) => /spoiler\s*1\/4/i.test(text)));
+      assert.equal(await page.locator('.scout-search-related-add').count() > 0, true);
+      assert.equal(await page.locator('.scout-search-exact-open').count(), 3);
+      const exactHref = await xvideosAssessment
+        .locator('.scout-search-exact-open')
+        .getAttribute('href');
+      assert.ok(exactHref && new URL(exactHref).hash.startsWith('#creamu-exact='));
+
+      await page.evaluate((href) => {
+        const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+        const cards = Array.from({ length: 4 }, (_, offset) => {
+          const index = offset + 1;
+          const id = 'xv' + String(index).padStart(3, '0');
+          const path = `/video.${id}/documentary-${index}`;
+          const title = index === 4
+            ? `Documentary Mystery ${index}`
+            : `Documentary Night ${index}`;
+          return `<div class="thumb-block" id="video_exact_${index}">`
+            + `<a href="${path}"><img src="${pixel}" alt="${title}"></a>`
+            + `<div class="thumb-under"><p class="title"><a href="${path}" title="${title}">${title}</a></p>`
+            + `<div class="uploader"><a href="/profiles/studio-${index}"><span class="name">Studio ${index}</span></a></div></div>`
+            + '</div>';
+        }).join('');
+        document.querySelector('.mozaique').innerHTML = cards;
+        document.querySelector('.mozaique').insertAdjacentHTML(
+          'afterend',
+          '<div class="pagination"><a href="/?k=documentary+and+night&p=1">2</a></div>'
+        );
+        history.replaceState(null, '', href);
+      }, exactHref);
+      await page.waitForFunction(() => {
+        const bar = document.getElementById('scout-exact-filter-bar');
+        return bar && !bar.textContent.includes('核验中');
+      }, null, { timeout: 10000 });
+      assert.equal(await page.locator('.thumb-block.scout-exact-filter-match').count(), 3);
+      assert.equal(await page.locator('.thumb-block.scout-exact-filter-hidden').count(), 1);
+      assert.match(await page.locator('#scout-exact-filter-bar').textContent() || '', /保留 3\/4/);
+      const exactFilterLayout = await page.evaluate(() => {
+        const bar = document.getElementById('scout-exact-filter-bar').getBoundingClientRect();
+        const first = Array.from(document.querySelectorAll('.thumb-block'))
+          .find((card) => getComputedStyle(card).display !== 'none')
+          .getBoundingClientRect();
+        return {
+          withinViewport: bar.left >= 0 && bar.right <= innerWidth,
+          overlapsFirstCard: bar.bottom > first.top,
+          hasHorizontalOverflow: document.documentElement.scrollWidth > innerWidth,
+        };
+      });
+      assert.deepEqual(exactFilterLayout, {
+        withinViewport: true,
+        overlapsFirstCard: false,
+        hasHorizontalOverflow: false,
+      });
+      assert.match(
+        await page.locator('.pagination a').getAttribute('href') || '',
+        /#creamu-exact=/
+      );
+      assert.equal((await page.evaluate(() => window.__scoutSearchStats)).detail, 12);
+
+      await page.locator('#scout-search-track-bar').evaluate((element) => element.click());
+      const temporaryModeTrack = await page.evaluate(() => (
+        GM_getValue('creamu_scout_tracks', [])[0]
+      ));
+      assert.ok(temporaryModeTrack);
+      assert.doesNotMatch(temporaryModeTrack.url, /#creamu-exact=/);
+      await page.evaluate(() => GM_setValue('creamu_scout_tracks', []));
+
+      await page.locator('[data-scout-exact-action="show-all"]').click();
+      await page.waitForFunction(() => !document.getElementById('scout-exact-filter-bar'));
+      assert.equal(await page.locator('.thumb-block.scout-exact-filter-hidden').count(), 0);
+      assert.equal(await page.locator('.thumb-block').count(), 4);
+      assert.doesNotMatch(
+        await page.locator('.pagination a').getAttribute('href') || '',
+        /#creamu-exact=/
+      );
+      await assertScoutPageLayout(page, 'combo');
+
+      await page.locator('#scout-save-current-search-btn').click();
+      await page.locator('#scout-search-label').fill('Documentary night sources');
+      await page.locator('#scout-search-save-confirm').click();
+      const savedTracks = await page.evaluate(() => GM_getValue('creamu_scout_tracks', []));
+      assert.equal(savedTracks.length, 3);
+      assert.ok(savedTracks.every((track) => track.recipe_id === 'recipe-documentary-night'));
+      assert.ok(savedTracks.every((track) => track.probe_queries.length === 1));
+
+      await xvideosAssessment
+        .locator('[data-search-remove-condition="condition-night"]')
+        .click();
+      assert.equal(
+        await page.locator('[data-condition-id="condition-night"]').count(),
+        0
+      );
+      await assertScoutPageLayout(page, 'combo');
     }
   );
 
@@ -1965,6 +2221,10 @@ try {
         censor_tier: 'uncensored',
         pages: 777,
         size_bytes: 987654321,
+        availability_status: 'expunged',
+        availability_checked_at: 1_790_000_000_000,
+        availability_reason: 'Seeded expunged state',
+        expunged: 1,
         updated_at: 1,
       };
       await page.evaluate(
@@ -1985,10 +2245,20 @@ try {
             row.language === 'zh' &&
             row.censor_tier === 'uncensored' &&
             row.pages === 777 &&
-            row.size_bytes === 987654321
+            row.size_bytes === 987654321 &&
+            row.availability_status === 'expunged' &&
+            row.availability_checked_at === 1_790_000_000_000 &&
+            row.expunged === 1
           );
         },
         firstEdition.id,
+        { timeout: 10000 }
+      );
+      await page.waitForFunction(
+        () => document.querySelector(
+          '[data-e2e-exh-card="710000"] .meta-tag.source-expunged'
+        )?.textContent?.includes('已清退'),
+        null,
         { timeout: 10000 }
       );
       await page.waitForFunction(
@@ -2422,6 +2692,109 @@ try {
         await currentWork.evaluate((element) => !!element.closest('#jlc-wb-works-scroll')),
         false,
         'the current detail work should remain pinned above the scrollable status list'
+      );
+    }
+  );
+
+  await runCase(
+    'ExH availability: expunged sources can be reviewed and recover',
+    {
+      host: 'e-hentai.org',
+      fixtureHtml: createExhDetailFixture(),
+      scriptPath: PATHS.exhDist,
+      viewport: { width: 390, height: 844 },
+      beforeInject: async (page) => {
+        await page.evaluate(installExhStorageMetrics);
+        await page.evaluate(() => {
+          history.replaceState(null, '', '/g/720000/abcdef1234/');
+        });
+      },
+      beforeScript: async (page) => {
+        await page.evaluate(() => {
+          window.__exhAvailabilityMode = 'expunged';
+          window.GM_xmlhttpRequest = function mockAvailabilityRequest(options) {
+            const request = options || {};
+            const isGdata =
+              String(request.method || 'GET').toUpperCase() === 'POST' &&
+              /\/api\.php(?:$|\?)/.test(String(request.url || ''));
+            if (!isGdata) {
+              setTimeout(() => request.onload?.({ status: 200, responseText: '' }), 0);
+              return;
+            }
+            let payload = {};
+            try {
+              payload = JSON.parse(request.data || '{}');
+            } catch (_) { /* ignore */ }
+            const mode = window.__exhAvailabilityMode;
+            const gmetadata = (payload.gidlist || []).map(([gid, token]) => {
+              if (mode === 'unavailable') {
+                return { gid, error: 'Fixture source is unavailable' };
+              }
+              return {
+                gid,
+                token,
+                title: '[Detail Group] Detail Gallery',
+                posted: '1784548800',
+                filecount: '100',
+                filesize: String(128 * 1024 * 1024),
+                tags: ['language:chinese', 'group:detail group'],
+                uploader: 'detail-uploader',
+                expunged: mode === 'expunged',
+              };
+            });
+            setTimeout(
+              () => request.onload?.({
+                status: 200,
+                responseText: JSON.stringify({ gmetadata }),
+              }),
+              0
+            );
+          };
+        });
+      },
+    },
+    async (page) => {
+      await page.locator('#exc-gallery-panel').waitFor({ timeout: 15000 });
+      await page.locator(
+        '#exc-gallery-panel [data-source-status="expunged"]'
+      ).waitFor({ timeout: 15000 });
+      assert.match(await page.locator('#exc-gallery-panel').textContent() || '', /已清退/);
+
+      await openAndCheckTitle(page, /ExH/i);
+      await openWorkbenchNav(page, 'works');
+      await page.locator('#exc-work-chips [data-wtab="availability"]').click();
+      const sourceItem = page.locator('#jlc-wb-works-scroll .jlc-wb-item').first();
+      await sourceItem.waitFor({ timeout: 10000 });
+      assert.match(await sourceItem.textContent() || '', /已清退/);
+      await assertWorkbenchRegionLayout(page, '#exc-wb-works-root', 'ExH availability mobile');
+
+      await page.evaluate(() => {
+        window.__exhAvailabilityMode = 'active';
+      });
+      await sourceItem.locator('[data-wact="source"]').click();
+      await page.waitForFunction(
+        async () => {
+          const data = await window.__readExhStores(['editions']);
+          const edition = data.editions.find((row) => String(row.gid) === '720000');
+          return edition?.availability_status === 'active' && edition?.expunged === 0;
+        },
+        null,
+        { timeout: 15000 }
+      );
+      await page.waitForFunction(
+        () =>
+          !!document.querySelector('#exc-work-chips [data-wtab="availability"].is-on') &&
+          document.querySelectorAll('#jlc-wb-works-scroll .jlc-wb-item').length === 0 &&
+          /暂无已知异常来源/.test(
+            document.querySelector('#jlc-wb-works-scroll')?.textContent || ''
+          ),
+        null,
+        { timeout: 15000 }
+      );
+      await page.waitForFunction(
+        () => !document.querySelector('#exc-gallery-panel [data-source-status]'),
+        null,
+        { timeout: 15000 }
       );
     }
   );

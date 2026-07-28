@@ -10,6 +10,7 @@ const corePartFiles = [
   '10-core.js',
   '12-library-state.js',
   '14-tracking-state.js',
+  '15-search-recipes.js',
   '16-data-portability.js',
   '18-webdav.js',
 ];
@@ -103,7 +104,7 @@ test('library revision tracks detail-facing stores', () => {
   assert.equal(ctx.getScoutLibraryRevision(), 0);
   ctx.setupScoutStorageChangeListeners();
   ctx.setupScoutStorageChangeListeners();
-  assert.equal(ctx.__testValueChangeListeners.size, 10);
+  assert.equal(ctx.__testValueChangeListeners.size, 12);
   const remoteListener = ctx.__testValueChangeListeners.get('creamu_scout_lexicon_terms');
   remoteListener('creamu_scout_lexicon_terms', [], [], false);
   assert.equal(ctx.getScoutLibraryRevision(), 0);
@@ -190,6 +191,218 @@ test('tracking deduplicates and groups normalized queries', () => {
   assert.equal(ctx.getTracks()[0].query, 'documentary');
 });
 
+test('structured recipes migrate legacy tokens and keep role semantics', () => {
+  const ctx = loadCore();
+  store.set('scout_combo_tokens', ['documentary', 'city walk']);
+  const migrated = ctx.getScoutSearchDraft();
+  assert.deepEqual(
+    Array.from(migrated.conditions, (condition) => [condition.text, condition.role]),
+    [['documentary', 'required'], ['city walk', 'required']]
+  );
+
+  let recipe = ctx.putScoutRecipeCondition(migrated, 'night', 'preference', 2);
+  recipe = ctx.putScoutRecipeCondition(recipe, 'spoiler', 'excluded');
+  const saved = ctx.saveScoutSearchDraft(recipe);
+  assert.equal(saved.conditions.find((condition) => condition.text === 'night').priority, 2);
+  assert.equal(saved.conditions.find((condition) => condition.text === 'spoiler').role, 'excluded');
+  assert.deepEqual(Array.from(store.get('scout_combo_tokens')), ['documentary', 'city walk']);
+});
+
+test('exact-filter URLs keep one validated recipe in the current search hash', () => {
+  const ctx = loadCore();
+  const recipe = ctx.normalizeScoutSearchRecipe({
+    sites: ['xvideos'],
+    conditions: [
+      { text: 'documentary', role: 'required' },
+      { text: 'city walk', role: 'preference', priority: 2 },
+      { text: 'spoiler', role: 'excluded' },
+    ],
+  });
+  const filteredUrl = ctx.buildScoutExactFilterUrl(
+    'https://www.xvideos.com/?k=documentary+and+city+walk',
+    recipe
+  );
+  const target = new URL(filteredUrl);
+  assert.ok(target.hash.startsWith('#creamu-exact='));
+  assert.equal(
+    ctx.stripScoutExactFilterHash(filteredUrl),
+    'https://www.xvideos.com/?k=documentary+and+city+walk'
+  );
+  assert.equal(
+    ctx.stripScoutExactFilterHash('https://www.xvideos.com/?k=documentary#section'),
+    'https://www.xvideos.com/?k=documentary#section'
+  );
+  const parsed = ctx.parseScoutExactFilterLocation(target);
+  assert.ok(parsed);
+  assert.equal(parsed.scope, 'xvideos:documentary city walk');
+  assert.deepEqual(
+    Array.from(parsed.recipe.conditions, (condition) => [
+      condition.text,
+      condition.role,
+      condition.priority,
+    ]),
+    [
+      ['documentary', 'required', 0],
+      ['city walk', 'preference', 2],
+      ['spoiler', 'excluded', 0],
+    ]
+  );
+  assert.equal(ctx.parseScoutExactFilterLocation({ hash: '' }), null);
+  assert.notEqual(
+    ctx.getScoutExactFilterSearchScope('https://www.xvideos.com/?k=another+query'),
+    parsed.scope
+  );
+});
+
+test('exact-filter hashes reject malformed and oversized recipes', () => {
+  const ctx = loadCore();
+  assert.equal(ctx.parseScoutExactFilterLocation({ hash: '#creamu-exact=not-json' }), null);
+  const conditions = Array.from({ length: 17 }, (_, index) => ({
+    text: 'term ' + index,
+    role: 'required',
+  }));
+  const payload = encodeURIComponent(JSON.stringify({
+    version: 1,
+    scope: 'xvideos:sample',
+    sites: ['xvideos'],
+    conditions,
+  }));
+  assert.equal(
+    ctx.parseScoutExactFilterLocation({ hash: '#creamu-exact=' + payload }),
+    null
+  );
+  assert.equal(
+    ctx.buildScoutExactFilterUrl('https://www.xvideos.com/?k=sample', {
+      sites: ['xvideos'],
+      conditions: [{ text: 'blocked', role: 'excluded' }],
+    }),
+    'https://www.xvideos.com/?k=sample'
+  );
+});
+
+test('exact-filter search scopes remain stable across three-site pagination', () => {
+  const ctx = loadCore();
+  runInContext(
+    fs.readFileSync(path.join(partsDir, '20-sites.js'), 'utf8'),
+    ctx,
+    { filename: '20-sites.js' }
+  );
+  const recipe = {
+    sites: ['xvideos', 'xnxx', 'eporner'],
+    conditions: [
+      { text: 'documentary', role: 'required' },
+      { text: 'night', role: 'preference', priority: 1 },
+    ],
+  };
+  const cases = [
+    {
+      url: 'https://www.xvideos.com/?k=documentary+and+night',
+      page: 'https://www.xvideos.com/?k=documentary+and+night&p=3',
+      scope: 'xvideos:documentary night',
+    },
+    {
+      url: 'https://www.xnxx.com/search/documentary+and+night',
+      page: 'https://www.xnxx.com/search/documentary+and+night/3',
+      scope: 'xnxx:documentary night',
+    },
+    {
+      url: 'https://www.eporner.com/tag/documentary-night/',
+      page: 'https://www.eporner.com/tag/documentary-night/3/',
+      scope: 'eporner:documentary night',
+    },
+  ];
+  cases.forEach((entry) => {
+    const filtered = new URL(ctx.buildScoutExactFilterUrl(entry.url, recipe));
+    const parsed = ctx.parseScoutExactFilterLocation(filtered);
+    assert.equal(parsed.scope, entry.scope);
+    assert.equal(ctx.getScoutExactFilterSearchScope(entry.page), entry.scope);
+  });
+});
+
+test('search plans prioritize full and single-term reduction probes', () => {
+  const ctx = loadCore();
+  ctx.buildSearchUrl = (site, query) => `https://${site}.example/search/${encodeURIComponent(query)}`;
+  const documentary = ctx.addLexiconTerm({
+    text: 'documentary',
+    status: 'confirmed',
+    aliases: [{ text: 'docu', sites: ['xnxx'], status: 'confirmed' }],
+  });
+  const recipe = ctx.normalizeScoutSearchRecipe({
+    sites: ['xvideos', 'xnxx'],
+    conditions: [
+      { text: 'documentary', term_id: documentary.id, role: 'required' },
+      { text: 'city walk', role: 'preference', priority: 1 },
+      { text: 'night', role: 'preference', priority: 3 },
+      { text: 'spoiler', role: 'excluded' },
+    ],
+  });
+  const plan = ctx.buildScoutSearchPlan(recipe, { maxProbesPerSite: 5 });
+  assert.equal(plan.probes.filter((probe) => probe.site === 'xvideos').length, 4);
+  assert.equal(plan.probes.filter((probe) => probe.site === 'xnxx').length, 5);
+  assert.equal(
+    plan.probes.filter((probe) => probe.site === 'xvideos' && probe.level === 'reduced').length,
+    3
+  );
+  assert.ok(plan.probes.some((probe) => probe.site === 'xnxx' && /docu/.test(probe.query)));
+  assert.ok(plan.probes.some((probe) => (
+    probe.level === 'reduced' && probe.removed_condition_ids.length === 1
+  )));
+  assert.ok(plan.probes.every((probe) => !/spoiler/i.test(probe.query)));
+  assert.ok(plan.probes.every((probe) => probe.url.startsWith('https://')));
+});
+
+test('detail verification enforces required and excluded conditions', () => {
+  const ctx = loadCore();
+  const recipe = ctx.normalizeScoutSearchRecipe({
+    sites: ['xvideos'],
+    conditions: [
+      { text: 'documentary', role: 'required' },
+      { text: 'night', role: 'preference', priority: 1 },
+      { text: 'spoiler', role: 'excluded' },
+    ],
+  });
+  const candidate = ctx.evaluateScoutSearchResult(recipe, {
+    site: 'xvideos',
+    title: 'Documentary preview',
+    tags: [],
+    verified: false,
+    remote_rank: 1,
+  });
+  assert.equal(candidate.evaluation.state, 'candidate');
+
+  const verified = ctx.evaluateScoutSearchResult(recipe, {
+    site: 'xvideos',
+    title: 'Documentary at night',
+    tags: ['city walk'],
+    verified: true,
+    remote_rank: 1,
+  });
+  assert.equal(verified.evaluation.state, 'verified');
+  assert.equal(verified.evaluation.exact_match, true);
+  assert.deepEqual(Array.from(verified.evaluation.preference_hit), ['night']);
+
+  const partial = ctx.evaluateScoutSearchResult(recipe, {
+    site: 'xvideos',
+    title: 'Documentary preview',
+    tags: [],
+    verified: true,
+    remote_rank: 2,
+  });
+  assert.equal(partial.evaluation.state, 'verified');
+  assert.equal(partial.evaluation.exact_match, false);
+
+  const rejected = ctx.evaluateScoutSearchResult(recipe, {
+    site: 'xvideos',
+    title: 'Documentary spoiler',
+    tags: [],
+    verified: true,
+    remote_rank: 2,
+  });
+  assert.equal(rejected.evaluation.state, 'rejected');
+  assert.equal(rejected.evaluation.exact_match, false);
+  assert.deepEqual(Array.from(rejected.evaluation.excluded_hit), ['spoiler']);
+});
+
 test('exports preserve tracking and click state', () => {
   const ctx = loadCore();
   ctx.addLexiconTerm({ text: 'portrait', zh: '肖像' });
@@ -206,12 +419,27 @@ test('exports preserve tracking and click state', () => {
     title: 'Sample title',
     url: 'https://www.xvideos.com/video.sample/title',
   });
+  const recipe = ctx.saveScoutSearchDraft({
+    label: 'Documentary night',
+    sites: ['xvideos', 'xnxx'],
+    conditions: [{ text: 'documentary', role: 'required' }],
+  });
+  ctx.saveScoutSearchRelations([{
+    seed_key: 'documentary',
+    seed_text: 'documentary',
+    candidate_key: 'night',
+    candidate: 'night',
+    count: 3,
+    sites: ['xvideos'],
+  }]);
 
   const payload = JSON.parse(ctx.exportLexiconPackage());
   assert.equal(payload.format, 'creamu-scout-lexicon');
   assert.equal(payload.tracks[0].last_seen_page, 4);
   assert.equal(payload.tracks[0].last_seen_item, 'video_1');
   assert.equal(payload.clicks[0].id, '/video.sample/title');
+  assert.equal(payload.search_draft.id, recipe.id);
+  assert.equal(payload.search_relations[0].candidate, 'night');
 });
 
 test('structured import normalizes block entries', () => {
@@ -362,6 +590,61 @@ test('prepared lexicon matching preserves hit sources and boundaries', () => {
 });
 
 console.log('\nScout site helpers');
+
+function makeSearchSummaryDocument({ description = '', rows = 4, pageCount = 1, eporner = false }) {
+  const cards = Array.from({ length: rows }, () => ({}));
+  const lastPage = {
+    className: 'last-page',
+    textContent: String(pageCount),
+    getAttribute(name) {
+      if (name === 'href') return '/search/sample/' + pageCount;
+      if (name === 'title') return 'Page ' + pageCount;
+      return '';
+    },
+  };
+  return {
+    title: '',
+    querySelector(selector) {
+      if (selector === 'meta[name="description"]' && description) {
+        return { getAttribute: () => description };
+      }
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector.includes('.pagination')) return pageCount > 1 ? [lastPage] : [];
+      if (eporner && selector.includes('#vidresults .mb')) return cards;
+      if (!eporner && selector.includes('.mozaique')) return cards;
+      return [];
+    },
+  };
+}
+
+test('search summaries distinguish reported totals from pagination estimates', () => {
+  const ctx = loadSites();
+  const xvideos = ctx.getScoutSearchSummaryForSite(
+    'xvideos',
+    makeSearchSummaryDocument({ description: '12,345 sample FREE videos found for this search.' }),
+    'https://www.xvideos.com/?k=sample'
+  );
+  assert.equal(xvideos.total, 12345);
+  assert.equal(xvideos.total_kind, 'exact');
+
+  const xnxx = ctx.getScoutSearchSummaryForSite(
+    'xnxx',
+    makeSearchSummaryDocument({ description: 'XNXX.COM sample videos', pageCount: 5 }),
+    'https://www.xnxx.com/search/sample'
+  );
+  assert.equal(xnxx.total, 20);
+  assert.equal(xnxx.total_kind, 'estimate');
+
+  const eporner = ctx.getScoutSearchSummaryForSite(
+    'eporner',
+    makeSearchSummaryDocument({ description: 'We have 8,765 videos with Sample.', eporner: true }),
+    'https://www.eporner.com/tag/sample/'
+  );
+  assert.equal(eporner.total, 8765);
+  assert.equal(eporner.total_kind, 'exact');
+});
 
 test('site pagination uses each provider contract', () => {
   const ctx = loadSites();

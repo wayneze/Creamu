@@ -325,6 +325,7 @@
       const url = ed.url || buildGalleryUrl(location.origin, ed.gid, ed.token);
       const isPeer = peer && String(ed.gid) === String(peer.gid);
       const isLrr = isLrrGid(ed.gid);
+      const sourceIssue = isEditionAvailabilityIssue(ed);
       const sc = scoreEdition(ed, cfg);
       const curSc = scoreEdition(current, cfg);
       const marks = [];
@@ -352,6 +353,7 @@
         'exc-ed' +
         (isPeer ? ' is-peer' : '') +
         (isLrr ? ' is-lrr-bound' : '') +
+        (sourceIssue ? ' is-source-issue' : '') +
         (flags.isCurrent ? ' is-current' : '');
       return (
         '<div class="' +
@@ -367,6 +369,7 @@
         (isLrr
           ? '<span class="exc-ed-lrr-tag" title="LRR 档案绑定的 EH 源画廊">库源</span> '
           : '') +
+        editionAvailabilityBadgeHtml(ed) +
         escapeHtml(bits.join(' · ')) +
         '</a></div>'
       );
@@ -403,6 +406,39 @@
       (listHtml ? '<div class="exc-edition-list">' + listHtml + '</div>' : '') +
       actions +
       '</div>'
+    );
+  }
+
+  function editionAvailabilityBadgeHtml(edition, options) {
+    if (!edition) return '';
+    const opts = options || {};
+    const status = normalizeEditionAvailabilityStatus(
+      edition.availability_status,
+      edition.expunged
+    );
+    if (status === 'active' && !opts.showActive) return '';
+    if (status === 'unknown' && !opts.showUnknown) return '';
+    const details = [];
+    if (edition.availability_reason) details.push(edition.availability_reason);
+    if (edition.availability_error) details.push(edition.availability_error);
+    const checkedAt = Number(edition.availability_checked_at) || 0;
+    if (checkedAt) {
+      try {
+        details.push('检查于 ' + new Date(checkedAt).toLocaleString('zh-CN', { hour12: false }));
+      } catch (_) { /* ignore */ }
+    }
+    const title = details.length ? ' title="' + escapeHtml(details.join(' · ')) + '"' : '';
+    return (
+      '<span class="jlc-status-pill exc-source-pill tone-' +
+      getEditionAvailabilityTone(edition) +
+      '" data-source-status="' +
+      status +
+      '"' +
+      title +
+      '>' +
+      escapeHtml(opts.label || getEditionAvailabilityLabel(edition)) +
+      '</span>' +
+      (opts.trailingSpace === false ? '' : ' ')
     );
   }
 
@@ -448,6 +484,8 @@
       }
     }
     if (edition) {
+      const availabilityBadge = editionAvailabilityBadgeHtml(edition, { trailingSpace: false });
+      if (availabilityBadge) bits.push(availabilityBadge);
       try {
         if (typeof matchFamiliarRadar === 'function') {
           const fam = matchFamiliarRadar(edition.title_raw || edition.title || '', edition.tags || []);

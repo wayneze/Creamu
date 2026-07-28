@@ -162,6 +162,28 @@ function mergeLexiconTermFields(keep, incoming, opts) {
   if (Array.isArray(incoming.subtypes)) {
     keep.subtypes = Array.from(new Set([...(keep.subtypes || []), ...incoming.subtypes]));
   }
+  if (Array.isArray(incoming.aliases)) {
+    const aliases = Array.isArray(keep.aliases) ? keep.aliases.slice() : [];
+    const aliasIndex = new Map();
+    aliases.forEach((alias, index) => {
+      const text = typeof alias === 'string' ? alias : alias && alias.text;
+      const key = lexiconIdentityKey(text);
+      if (key && !aliasIndex.has(key)) aliasIndex.set(key, index);
+    });
+    incoming.aliases.forEach((alias) => {
+      const text = typeof alias === 'string' ? alias : alias && alias.text;
+      const key = lexiconIdentityKey(text);
+      if (!key) return;
+      const index = aliasIndex.get(key);
+      if (index == null) {
+        aliasIndex.set(key, aliases.length);
+        aliases.push(alias);
+      } else if (typeof alias === 'object' && alias) {
+        aliases[index] = Object.assign({}, aliases[index], alias);
+      }
+    });
+    keep.aliases = aliases.slice(-40);
+  }
   const existingSrc = keep.sources || [];
   const newSrc = incoming.sources || [];
   for (const ns of newSrc) {

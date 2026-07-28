@@ -5,6 +5,7 @@ import path from 'node:path';
 const root = process.cwd();
 const partsDir = path.join(root, 'packages/scout-commander/src/parts');
 const comboSource = fs.readFileSync(path.join(partsDir, '32-combo-page.js'), 'utf8');
+const searchRuntimeSource = fs.readFileSync(path.join(partsDir, '21-search-runtime.js'), 'utf8');
 const librarySource = fs.readFileSync(path.join(partsDir, '34-library-pages.js'), 'utf8');
 const trackingSource = fs.readFileSync(path.join(partsDir, '36-tracking-page.js'), 'utf8');
 const settingsSource = fs.readFileSync(path.join(partsDir, '38-settings.js'), 'utf8');
@@ -41,8 +42,11 @@ assert.match(settingsSource, /refreshScoutWorkbenchPagesIfActive\(/);
 console.log('  OK  settings refresh only the active workbench page');
 
 [
-  '.scout-combo-token {',
-  '.scout-combo-pool {',
+  '.scout-search-builder-grid {',
+  '.scout-search-condition {',
+  '.scout-search-assessment-site {',
+  '.scout-search-assessment-metrics {',
+  '.scout-search-savebar,',
   '.scout-wb-add-form {',
   '.scout-lexicon-edit {',
   '.scout-publisher-name.is-loved {',
@@ -56,8 +60,10 @@ console.log('  OK  settings refresh only the active workbench page');
 });
 
 [
-  'class="jlc-wb-chip is-on scout-wb-chip scout-combo-token"',
-  'class="scout-combo-pool"',
+  'class="scout-search-condition is-',
+  'id="scout-combo-pool"',
+  'id="scout-search-assessments"',
+  'id="scout-search-savebar"',
   'class="scout-wb-add-form',
   'class="scout-lexicon-edit"',
   'class="person-item scout-publisher-item"',
@@ -78,9 +84,18 @@ assert.ok(!sharedSource.includes('.scout-block-options'));
 assert.ok(!sharedSource.includes('.scout-settings-actions'));
 console.log('  OK  page components stay in the Scout theme boundary');
 
+assert.match(comboSource, /runScoutSearchPlan\(/);
+assert.match(comboSource, /sampleSize:\s*8/);
+assert.match(searchRuntimeSource, /verifyScoutSearchResult\(/);
+assert.match(searchRuntimeSource, /sample_exact/);
+assert.doesNotMatch(comboSource, /IntersectionObserver/);
+assert.doesNotMatch(comboSource, /scout-search-result-score/);
+assert.doesNotMatch(comboSource, /\bprompt\s*\(/);
+console.log('  OK  search uses bounded assessment samples and an in-panel save flow');
+
 assert.ok(!themeSource.includes('[data-jlc-wb-page="settings"]'));
 assert.match(settingsSource, /id="scout-wd-form"[^>]*\? '' : 'hidden'/);
 assert.ok(settingsSource.includes('wdForm.hidden = !curCfg.webdav_enabled'));
 console.log('  OK  settings target the real drawer and use semantic visibility');
 
-console.log('Scout workbench page tests passed (5)');
+console.log('Scout workbench page tests passed (6)');

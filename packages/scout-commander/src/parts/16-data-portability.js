@@ -4,7 +4,7 @@
 function exportLexiconPackage() {
   const pkg = {
     format: "creamu-scout-lexicon",
-    version: 3,
+    version: 4,
     exported_at: new Date().toISOString(),
     site_hint: "xvideos|xnxx|eporner|mixed",
     types: getLexiconTypes(),
@@ -13,7 +13,11 @@ function exportLexiconPackage() {
     publishers: getPublishers(),
     tracks: getTracks(),
     clicks: getClickedList(),
-    works: getWorks()
+    works: getWorks(),
+    search_draft: typeof getScoutSearchDraft === 'function' ? getScoutSearchDraft() : null,
+    search_relations: typeof getScoutSearchRelations === 'function'
+      ? getScoutSearchRelations()
+      : []
   };
   return JSON.stringify(pkg, null, 2);
 }
@@ -323,6 +327,7 @@ function mergeTermsFromPackage(pkg) {
           zh: compactText(newT.zh),
           type: newT.type || '未分类',
           subtypes: newT.subtypes || [],
+          aliases: newT.aliases || [],
           loved: !!newT.loved,
           status: newT.status || 'unreviewed',
           heat: Number(newT.heat) || 1,
@@ -475,6 +480,7 @@ function replaceTermsFromPackage(pkg) {
         zh: compactText(newT.zh != null ? newT.zh : old.zh),
         type: (newT.type && newT.type !== '未分类') ? newT.type : (old.type || '未分类'),
         subtypes: Array.isArray(newT.subtypes) ? newT.subtypes : (old.subtypes || []),
+        aliases: Array.isArray(newT.aliases) ? newT.aliases : (old.aliases || []),
         loved: newT.loved !== undefined ? !!newT.loved : !!old.loved,
         status: newT.status || old.status || 'unreviewed',
         // 热度：本地与包取较大，避免导入 heat=0 冲掉使用记录
@@ -495,6 +501,7 @@ function replaceTermsFromPackage(pkg) {
         zh: compactText(newT.zh),
         type: newT.type || '未分类',
         subtypes: newT.subtypes || [],
+        aliases: newT.aliases || [],
         loved: !!newT.loved,
         status: newT.status || 'unreviewed',
         heat: pkgHeat > 0 ? pkgHeat : 1,
@@ -699,6 +706,7 @@ function importLexiconPackage(jsonStr) {
             zh: compactText(newT.zh),
             type: newT.type || '未分类',
             subtypes: newT.subtypes || [],
+            aliases: newT.aliases || [],
             loved: !!newT.loved,
             status: newT.status || 'unreviewed',
             heat: Number(newT.heat) || 1,
@@ -803,6 +811,10 @@ function importLexiconPackage(jsonStr) {
         if (existing) {
           if (newT.label) existing.label = String(newT.label);
           if (newT.url) existing.url = String(newT.url);
+          if (newT.recipe) existing.recipe = newT.recipe;
+          if (newT.recipe_id) existing.recipe_id = String(newT.recipe_id);
+          if (newT.recipe_fingerprint) existing.recipe_fingerprint = String(newT.recipe_fingerprint);
+          if (Array.isArray(newT.probe_queries)) existing.probe_queries = newT.probe_queries.slice();
           // 取更新的断点：页码更大或 updated_at 更新
           const remotePage = Number(newT.last_seen_page) || 1;
           const localPage = Number(existing.last_seen_page) || 1;
@@ -820,6 +832,10 @@ function importLexiconPackage(jsonStr) {
             query: queryNorm,
             label: String(newT.label || queryNorm),
             url: String(newT.url || ''),
+            recipe: newT.recipe || null,
+            recipe_id: String(newT.recipe_id || ''),
+            recipe_fingerprint: String(newT.recipe_fingerprint || ''),
+            probe_queries: Array.isArray(newT.probe_queries) ? newT.probe_queries.slice() : [],
             last_seen_item: String(newT.last_seen_item || ''),
             last_seen_page: Number(newT.last_seen_page) || 1,
             updated_at: newT.updated_at || new Date().toISOString()
@@ -855,6 +871,16 @@ function importLexiconPackage(jsonStr) {
         }
       });
       saveWorks(Object.values(map));
+    }
+
+    if (pkg.search_draft && typeof saveScoutSearchDraft === 'function') {
+      saveScoutSearchDraft(pkg.search_draft);
+    }
+    if (
+      Array.isArray(pkg.search_relations) &&
+      typeof mergeScoutSearchRelations === 'function'
+    ) {
+      mergeScoutSearchRelations(pkg.search_relations);
     }
 
     triggerWebDavDirty();

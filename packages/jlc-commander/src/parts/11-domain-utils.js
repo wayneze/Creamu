@@ -19,6 +19,33 @@
         return normalizeText(v).replace(/[^a-z0-9]+/g, '');
     }
 
+    function openUrlInNewTab(url) {
+        const href = String(url || '').trim();
+        if (!href) return false;
+        try {
+            if (typeof GM_openInTab === 'function') {
+                GM_openInTab(href, { active: true, insert: true, setParent: true });
+                return true;
+            }
+        } catch (_) { /* fall through */ }
+        try {
+            const anchor = document.createElement('a');
+            anchor.href = href;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.style.display = 'none';
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            return true;
+        } catch (_) { /* fall through */ }
+        try {
+            return !!window.open(href, '_blank', 'noopener,noreferrer');
+        } catch (_) {
+            return false;
+        }
+    }
+
     function uniqueTextList(list) {
         const seen = new Set();
         return (Array.isArray(list) ? list : [])

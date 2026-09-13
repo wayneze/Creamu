@@ -275,4 +275,87 @@ assert.deepEqual(
   ['current', 'older', 'updated']
 );
 
+const coreSource = fs.readFileSync('packages/jlc-commander/src/parts/10-core.js', 'utf8');
+const sessionSource = extract(
+  coreSource,
+  /function getDefaultWorkbenchSession[\s\S]*?(?=\n\s*function loadConfig)/,
+  'workbench session helpers'
+);
+assert.match(sessionSource, /WORKBENCH_PAGE_UI_KEY/);
+assert.match(sessionSource, /writeWorkbenchPageUi/);
+assert.match(
+  sessionSource,
+  /GM_setValue\(WORKBENCH_SESSION_KEY, Object\.assign\(\{\}, workbenchSessionCache, \{\s*panelOpen: false,\s*settingsOpen: false\s*\}\)\)/
+);
+
+function createSessionContext(gmStore, pageStore, windowName = '') {
+  const context = {
+    config: { open_mode: 'tab' },
+    workbenchSessionCache: null,
+    WORKBENCH_SESSION_KEY: 'jlc_workbench_session_v1',
+    WORKBENCH_PAGE_UI_KEY: 'jlc_workbench_page_ui_v1',
+    Date,
+    Math,
+    window: { name: windowName },
+    GM_getValue(key) {
+      return gmStore[key];
+    },
+    GM_setValue(key, value) {
+      gmStore[key] = value;
+    },
+    sessionStorage: {
+      getItem(key) {
+        return Object.prototype.hasOwnProperty.call(pageStore, key) ? pageStore[key] : null;
+      },
+      setItem(key, value) {
+        pageStore[key] = String(value);
+      }
+    }
+  };
+  vm.createContext(context);
+  vm.runInContext(sessionSource, context);
+  return context;
+}
+
+const gmStore = {};
+const currentPageStore = {};
+const currentTab = createSessionContext(gmStore, currentPageStore);
+currentTab.persistWorkbenchSession({
+  panelOpen: true,
+  settingsOpen: true,
+  nav: 'tracking',
+  tracking: { lastOpenedId: 'rec-1' }
+});
+currentTab.persistWorkbenchSession({
+  tracking: { lastOpenedId: 'rec-2' }
+});
+assert.equal(currentTab.getWorkbenchSession().panelOpen, true, 'current tab keeps the workbench open');
+assert.equal(currentTab.getWorkbenchSession().settingsOpen, true);
+assert.equal(gmStore['jlc_workbench_session_v1'].panelOpen, false, 'shared storage must not carry an open panel');
+assert.equal(gmStore['jlc_workbench_session_v1'].settingsOpen, false);
+assert.equal(gmStore['jlc_workbench_session_v1'].tracking.lastOpenedId, 'rec-2');
+assert.equal(JSON.parse(currentPageStore.jlc_workbench_page_ui_v1).panelOpen, true);
+assert.match(currentTab.window.name, /^jlc-wb:/);
+
+const newTab = createSessionContext(gmStore, {});
+assert.equal(newTab.getWorkbenchSession().panelOpen, false, 'a tracking-opened tab must start with the workbench closed');
+assert.equal(newTab.getWorkbenchSession().settingsOpen, false);
+assert.equal(newTab.getWorkbenchSession().tracking.lastOpenedId, 'rec-2', 'list focus still follows the shared session');
+
+const clonedTab = createSessionContext(gmStore, { ...currentPageStore });
+assert.equal(clonedTab.getWorkbenchSession().panelOpen, false, 'copied sessionStorage without this tab identity must stay closed');
+
+const refreshedTab = createSessionContext(gmStore, currentPageStore, currentTab.window.name);
+assert.equal(refreshedTab.getWorkbenchSession().panelOpen, true, 'refreshing the current tab still restores the open panel');
+assert.equal(refreshedTab.getWorkbenchSession().settingsOpen, true);
+
+const occupiedNameStore = {};
+const occupiedTab = createSessionContext(gmStore, occupiedNameStore, 'javlibrary');
+occupiedTab.persistWorkbenchSession({ panelOpen: true, settingsOpen: false });
+assert.equal(occupiedTab.window.name, 'javlibrary', 'existing window.name must stay untouched');
+const occupiedRefresh = createSessionContext(gmStore, occupiedNameStore, 'javlibrary');
+assert.equal(occupiedRefresh.getWorkbenchSession().panelOpen, true, 'refresh still restores when the page already owns window.name');
+const occupiedClone = createSessionContext(gmStore, { ...occupiedNameStore });
+assert.equal(occupiedClone.getWorkbenchSession().panelOpen, false, 'a cloned tab with empty window.name stays closed');
+
 console.log('JLC workbench navigation tests OK');

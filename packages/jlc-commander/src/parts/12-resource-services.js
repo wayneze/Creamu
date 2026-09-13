@@ -297,6 +297,7 @@
     const resourceScreenshotCache = new Map();
     const resourceScreenshotInfoCache = new Map();
     const resourceMagnetCache = new Map();
+    const resourceSubtitleCache = new Map();
     const resourceMissAVCache = new Map();
     const resourceFalenoCache = new Map();
     const resourceMgsCache = new Map();
@@ -318,6 +319,7 @@
         resourceScreenshotCache.delete(key);
         resourceScreenshotInfoCache.delete(key);
         resourceMagnetCache.delete(key);
+        resourceSubtitleCache.delete(key);
     }
 
     function getResourceToggleStates(currentConfig = config) {
@@ -327,6 +329,8 @@
             resource_screenshot: currentConfig.resource_screenshot !== false,
             resource_screenshot_auto: !!currentConfig.resource_screenshot_auto,
             resource_magnet: currentConfig.resource_magnet !== false,
+            resource_subtitle: currentConfig.resource_subtitle !== false,
+            resource_links: currentConfig.resource_links !== false
         };
     }
 

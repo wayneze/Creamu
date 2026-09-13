@@ -137,7 +137,7 @@
             const sync = ensureCreamuSync();
             wdStatus.textContent = sync ? sync.statusText() : '同步模块未加载';
         }
-        const resourceKeys = ['resource_center', 'resource_trailer', 'resource_screenshot', 'resource_screenshot_auto', 'resource_magnet', 'resource_links'];
+        const resourceKeys = ['resource_center', 'resource_trailer', 'resource_screenshot', 'resource_screenshot_auto', 'resource_magnet', 'resource_subtitle', 'resource_links'];
         resourceKeys.forEach(k => {
             const input = shell.querySelector('[data-jlc-wb-resource="' + k + '"]');
             if (input) input.checked = config[k] !== false;
@@ -214,7 +214,7 @@
                 ? (openModeEl.value === 'same' ? 'same' : 'tab')
                 : ((getWorkbenchSession().openMode || config.open_mode || previous.open_mode || 'tab') === 'same' ? 'same' : 'tab');
             config.open_mode = openMode;
-            ['resource_center', 'resource_trailer', 'resource_screenshot', 'resource_screenshot_auto', 'resource_magnet', 'resource_links'].forEach(k => {
+            ['resource_center', 'resource_trailer', 'resource_screenshot', 'resource_screenshot_auto', 'resource_magnet', 'resource_subtitle', 'resource_links'].forEach(k => {
                 const input = shell.querySelector('[data-jlc-wb-resource="' + k + '"]');
                 if (input) config[k] = !!input.checked;
             });

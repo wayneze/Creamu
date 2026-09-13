@@ -22,15 +22,35 @@
         return { collapsed: {}, refresh_resume: null };
     }
 
+    function normalizeTrackingRefreshResumeState(resumeState) {
+        if (!resumeState || typeof resumeState !== 'object') return null;
+        const pendingIds = Array.isArray(resumeState.pending_ids)
+            ? resumeState.pending_ids.map(id => compactText(id || '')).filter(Boolean)
+            : [];
+        if (!pendingIds.length) return null;
+        const reason = resumeState.reason === 'cf_required'
+            || resumeState.reason === 'running'
+            || resumeState.reason === 'interrupted'
+            ? resumeState.reason
+            : (compactText(resumeState.verify_url || '') ? 'cf_required' : 'interrupted');
+        return Object.assign({}, resumeState, {
+            pending_ids: pendingIds,
+            reason,
+            total: Number(resumeState.total || 0) || pendingIds.length,
+            completed: Number(resumeState.completed || 0) || 0
+        });
+    }
+
     function getTrackingRefreshResumeState() {
         const state = getTrackingUiState();
-        return state.refresh_resume && typeof state.refresh_resume === 'object' ? state.refresh_resume : null;
+        return normalizeTrackingRefreshResumeState(state.refresh_resume);
     }
 
     function setTrackingRefreshResumeState(resumeState) {
         const state = getTrackingUiState();
-        state.refresh_resume = resumeState && typeof resumeState === 'object' ? resumeState : null;
+        state.refresh_resume = normalizeTrackingRefreshResumeState(resumeState);
         GM_setValue(TRACKING_UI_STATE_KEY, state);
+        return state.refresh_resume;
     }
 
     function clearTrackingRefreshResumeState() {

@@ -232,6 +232,7 @@
             config.resource_screenshot !== false,
             !!config.resource_screenshot_auto,
             config.resource_magnet !== false,
+            config.resource_subtitle !== false,
             config.resource_links !== false
         ]);
     }

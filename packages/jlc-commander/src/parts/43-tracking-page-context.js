@@ -55,6 +55,15 @@
         return isTrackingUiChromeLabel(cleaned) ? '' : cleaned;
     }
 
+    function buildTrackingPagedUrl(seedUrl, page) {
+        const parsed = parseTrackingUrl(seedUrl || '');
+        if (!parsed) return seedUrl || '';
+        const pageNumber = Number(page || 0) || 1;
+        if (pageNumber > 1) parsed.searchParams.set('page', String(pageNumber));
+        else parsed.searchParams.delete('page');
+        return parsed.toString();
+    }
+
     function getCurrentListPageHint(url = location.href, doc = document) {
         const parsed = parseTrackingUrl(url);
         if (!parsed) return 1;

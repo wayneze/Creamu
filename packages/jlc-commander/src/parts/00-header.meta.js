@@ -2,7 +2,7 @@
 // @name         Creamu · JavLibrary
 // @name:zh-CN   Creamu · JavLibrary
 // @namespace    https://github.com/wayneze/Creamu
-// @version      3.8.1
+// @version      3.8.4
 // @description  Creamu：JavLibrary 奶油工作台；WebDAV 同步；追更 / Emby / 备份
 // @author       wayneze
 // @include      *javbus.com/*
@@ -18,6 +18,7 @@
 // @grant        GM_setValue
 // @grant        GM_download
 // @grant        GM_setClipboard
+// @grant        GM_openInTab
 // @connect      *
 // @run-at       document-end
 // ==/UserScript==

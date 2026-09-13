@@ -99,6 +99,7 @@
     const TRACKING_STORE = 'tracking_searches';
     const TRACKING_UI_STATE_KEY = 'jlc_tracking_ui_state_v1';
     const WORKBENCH_SESSION_KEY = 'jlc_workbench_session_v1';
+    const WORKBENCH_PAGE_UI_KEY = 'jlc_workbench_page_ui_v1';
     let db = null;
     let knownPersons = new Set();
     let embyDataSnapshot = null;
@@ -145,6 +146,7 @@
         resource_screenshot: true,
         resource_screenshot_auto: false,
         resource_magnet: true,
+        resource_subtitle: true,
         resource_links: true,
         open_mode: 'tab',
         webdav_enabled: false,
@@ -224,9 +226,66 @@
         return next;
     }
 
+    function getWorkbenchPageInstanceId() {
+        try {
+            const name = String(window.name || '');
+            if (name.startsWith('jlc-wb:')) return name.slice(7);
+        } catch (_) { /* ignore */ }
+        return '';
+    }
+
+    function ensureWorkbenchPageInstanceId() {
+        let id = getWorkbenchPageInstanceId();
+        if (id) return id;
+        id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+        try {
+            const current = String(window.name || '');
+            if (!current || current.startsWith('jlc-wb:')) window.name = 'jlc-wb:' + id;
+        } catch (_) { /* ignore */ }
+        return getWorkbenchPageInstanceId() || id;
+    }
+
+    function readWorkbenchPageUi() {
+        try {
+            const raw = sessionStorage.getItem(WORKBENCH_PAGE_UI_KEY);
+            if (!raw) return { panelOpen: false, settingsOpen: false };
+            const parsed = JSON.parse(raw);
+            const pageId = getWorkbenchPageInstanceId();
+            const windowName = String(window.name || '');
+            if (pageId) {
+                if (parsed?.pageId !== pageId) return { panelOpen: false, settingsOpen: false };
+            } else if (!windowName) {
+                return { panelOpen: false, settingsOpen: false };
+            }
+            return {
+                panelOpen: parsed?.panelOpen === true,
+                settingsOpen: parsed?.settingsOpen === true
+            };
+        } catch (_) {
+            return { panelOpen: false, settingsOpen: false };
+        }
+    }
+
+    function writeWorkbenchPageUi(panelOpen, settingsOpen) {
+        try {
+            sessionStorage.setItem(WORKBENCH_PAGE_UI_KEY, JSON.stringify({
+                pageId: ensureWorkbenchPageInstanceId(),
+                panelOpen: !!panelOpen,
+                settingsOpen: !!settingsOpen
+            }));
+        } catch (_) { /* private mode / blocked storage */ }
+    }
+
+    function applyWorkbenchPageUi(session) {
+        const pageUi = readWorkbenchPageUi();
+        session.panelOpen = pageUi.panelOpen;
+        session.settingsOpen = pageUi.settingsOpen;
+        return session;
+    }
+
     function getWorkbenchSession() {
         if (workbenchSessionCache) return workbenchSessionCache;
-        workbenchSessionCache = normalizeWorkbenchSession(GM_getValue(WORKBENCH_SESSION_KEY));
+        workbenchSessionCache = applyWorkbenchPageUi(normalizeWorkbenchSession(GM_getValue(WORKBENCH_SESSION_KEY)));
         if (config?.open_mode === 'same' || config?.open_mode === 'tab') {
             workbenchSessionCache.openMode = config.open_mode;
         }
@@ -246,7 +305,12 @@
         current.updatedAt = new Date().toISOString();
         current.skin = 'v3';
         workbenchSessionCache = normalizeWorkbenchSession(current);
-        GM_setValue(WORKBENCH_SESSION_KEY, workbenchSessionCache);
+        writeWorkbenchPageUi(workbenchSessionCache.panelOpen, workbenchSessionCache.settingsOpen);
+        // 开合只属于当前标签：共享存储始终写成收起，避免追更开出的新页把控制台带过去
+        GM_setValue(WORKBENCH_SESSION_KEY, Object.assign({}, workbenchSessionCache, {
+            panelOpen: false,
+            settingsOpen: false
+        }));
         return workbenchSessionCache;
     }
 

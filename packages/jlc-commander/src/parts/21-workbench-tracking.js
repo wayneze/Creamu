@@ -210,8 +210,9 @@
         }
     }
 
-    function bindWorkbenchTrackingActions(root, list, context, resumePendingIds, refreshResume) {
-        const findRecord = (id) => list.find(item => item.id === id);
+    function bindWorkbenchTrackingActions(root, list, context, resumePendingIds, refreshResume, allRecords = list) {
+        const findRecord = (id) => list.find(item => item.id === id)
+            || allRecords.find(item => item.id === id);
         const stopBubble = (event) => {
             event.stopPropagation();
         };
@@ -396,8 +397,8 @@
             });
         });
         root.querySelector('[data-jlc-wb-open-verify]')?.addEventListener('click', () => {
-            const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                || list.find(record => resumePendingIds.includes(record.id));
+            const verifyRecord = allRecords.find(record => record.id === refreshResume?.record_id)
+                || allRecords.find(record => resumePendingIds.includes(record.id));
             const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
             if (!verifyUrl) {
                 showAlert('当前没有可打开的验证页面。');
@@ -406,31 +407,8 @@
             openTrackingVerificationUrl(verifyUrl, { fallbackToNavigate: true });
         });
         root.querySelector('[data-jlc-wb-resume]')?.addEventListener('click', async (event) => {
-            if (!resumePendingIds.length) {
-                clearTrackingRefreshResumeState();
-                await renderWorkbenchTrackingList();
-                return;
-            }
-            const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                || list.find(record => resumePendingIds.includes(record.id));
-            const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
-            const probe = await probeTrackingVerificationReady(verifyRecord, verifyUrl);
-            if (!probe.ok) {
-                if (verifyUrl) openTrackingVerificationUrl(verifyUrl);
-                showAlert((probe.note || '验证尚未生效') + '，请在打开的 JavLibrary 页面完成验证后再点继续。');
-                return;
-            }
-            clearTrackingRefreshResumeState();
-            if (verifyRecord) {
-                clearTrackingVerificationRequired(verifyRecord, { restoreStatus: true });
-                await saveTrackingRecord(verifyRecord);
-            }
-            void refreshAllTrackingSearches(event.currentTarget, {
-                recordIds: resumePendingIds,
-                total: Number(refreshResume?.total || 0) || resumePendingIds.length,
-                completedBase: Number(refreshResume?.completed || 0) || 0,
-                resumeVerified: true
-            });
+            const resumed = await resumeSavedTrackingRefresh(event.currentTarget, allRecords);
+            if (!resumed) await renderWorkbenchTrackingList();
         });
     }
 
@@ -552,30 +530,41 @@
         }
 
         const openedAt = new Date().toISOString();
+        const openInNewTab = openMode === 'tab';
         // 本机 UI 高亮（不同步）+ 可同步浏览时间（进 tracking 记录 / WebDAV）
-        persistWorkbenchSession({
-            panelOpen: false,
-            settingsOpen: false,
-            nav: 'tracking',
-            tracking: {
-                focusRecordId: record.id,
-                lastOpenedId: record.id,
-                lastOpenedAt: openedAt
+        persistWorkbenchSession(openInNewTab
+            ? {
+                nav: 'tracking',
+                tracking: {
+                    focusRecordId: record.id,
+                    lastOpenedId: record.id,
+                    lastOpenedAt: openedAt
+                }
             }
-        });
+            : {
+                panelOpen: false,
+                settingsOpen: false,
+                nav: 'tracking',
+                tracking: {
+                    focusRecordId: record.id,
+                    lastOpenedId: record.id,
+                    lastOpenedAt: openedAt
+                }
+            });
         // 先落盘 last_browsed_at，避免只改了 session 导致其它设备永远看不到「上次」
         try {
             record.last_browsed_at = openedAt;
             await saveTrackingRecord(record);
         } catch (_) { /* prepare 里还会再写一次 */ }
-        try { closeWorkbenchV3(); } catch (_) {}
+        if (!openInNewTab) {
+            try { closeWorkbenchV3(); } catch (_) {}
+        }
 
         const prepared = await prepareTrackingRecordNavigation(record, targetUrl);
         if (!prepared.ok) return;
         const url = prepared.url;
-        if (openMode === 'tab') {
-            const opened = window.open(url, '_blank', 'noopener');
-            if (!opened) {
+        if (openInNewTab) {
+            if (!openUrlInNewTab(url)) {
                 showAlert('浏览器拦截了新标签，已改为本页打开。');
                 location.href = url;
                 return;
@@ -656,8 +645,11 @@
         const runtimeButtonText = buildTrackingRefreshRuntimeButtonText(refreshRuntime);
         const refreshResume = getTrackingRefreshResumeState();
         const resumePendingIds = Array.isArray(refreshResume?.pending_ids)
-            ? refreshResume.pending_ids.filter(id => list.some(record => record.id === id))
+            ? refreshResume.pending_ids.filter(id => allRecords.some(record => record.id === id))
             : [];
+        const resumeReason = resumePendingIds.length
+            ? (refreshResume?.reason === 'cf_required' ? 'cf_required' : 'interrupted')
+            : '';
         const collapsedState = getTrackingUiState().collapsed || {};
         const focusId = session.tracking.focusRecordId || session.tracking.lastOpenedId || '';
 
@@ -717,12 +709,17 @@
             + '      <option value="last_browsed"' + (session.tracking.sort === 'last_browsed' ? ' selected' : '') + '>最近浏览</option>'
             + '      <option value="name"' + (session.tracking.sort === 'name' ? ' selected' : '') + '>名称</option>'
             + '    </select>'
-            + '    <button type="button" class="jlc-wb-chip" data-jlc-wb-continue>继续上次</button>'
+            + '    <button type="button" class="jlc-wb-chip' + (resumePendingIds.length ? ' is-on' : '') + '" data-jlc-wb-continue>'
+            + (resumePendingIds.length ? '继续上次刷新' : '继续上次')
+            + '</button>'
             + '  </div>'
             + (resumePendingIds.length
-                ? '  <div class="jlc-wb-toolbar-row jlc-wb-tracking-alert">刷新已暂停 · 待验证后继续 ' + resumePendingIds.length + ' 项'
-                + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-open-verify>去验证</button>'
-                + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-resume>验证后继续</button></div>'
+                ? (resumeReason === 'cf_required'
+                    ? '  <div class="jlc-wb-toolbar-row jlc-wb-tracking-alert">刷新已暂停 · 待验证后继续 ' + resumePendingIds.length + ' 项'
+                    + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-open-verify>去验证</button>'
+                    + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-resume>验证后继续</button></div>'
+                    : '  <div class="jlc-wb-toolbar-row jlc-wb-tracking-alert">刷新被中断 · 还剩 ' + resumePendingIds.length + ' 项'
+                    + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-resume>继续上次</button></div>')
                 : '')
             + (useVirtual ? '  <div class="jlc-wb-toolbar-row jlc-wb-virtual-note">虚拟列表已启用（' + list.length + ' 项）</div>' : '')
             + '</div>';
@@ -783,7 +780,7 @@
                     return '<div class="jlc-wb-virt-row" style="min-height:' + row.height + 'px">' + buildWorkbenchTrackingItemHtml(row.record, session, context, currentSignature, focusId) + '</div>';
                 }).join('');
                 // 只绑可视窗口内节点，避免滚动重绘时在 toolbar 上叠监听
-                bindWorkbenchTrackingActions(windowEl, list, context, resumePendingIds, refreshResume);
+                bindWorkbenchTrackingActions(windowEl, list, context, resumePendingIds, refreshResume, allRecords);
                 const sampleItem = windowEl.querySelector('.jlc-wb-item');
                 const sampleGroup = windowEl.querySelector('.jlc-wb-group-toggle');
                 let changed = false;
@@ -843,7 +840,11 @@
             persistWorkbenchSession({ tracking: { sort: e.target.value || 'updates_first' } });
             void renderWorkbenchTrackingList();
         });
-        root.querySelector('[data-jlc-wb-continue]')?.addEventListener('click', () => {
+        root.querySelector('[data-jlc-wb-continue]')?.addEventListener('click', async (event) => {
+            if (resumePendingIds.length) {
+                const resumed = await resumeSavedTrackingRefresh(event.currentTarget, allRecords);
+                if (resumed) return;
+            }
             const id = session.tracking.focusRecordId || session.tracking.lastOpenedId || '';
             if (!id) {
                 showAlert('还没有上次打开记录。');
@@ -860,12 +861,12 @@
         });
 
         if (!useVirtual) {
-            bindWorkbenchTrackingActions(root, list, context, resumePendingIds, refreshResume);
+            bindWorkbenchTrackingActions(root, list, context, resumePendingIds, refreshResume, allRecords);
         } else {
             // 虚拟模式下条目动作在 paint 内绑定；工具条验证/续刷绑在 root
             root.querySelector('[data-jlc-wb-open-verify]')?.addEventListener('click', () => {
-                const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                    || list.find(record => resumePendingIds.includes(record.id));
+                const verifyRecord = allRecords.find(record => record.id === refreshResume?.record_id)
+                    || allRecords.find(record => resumePendingIds.includes(record.id));
                 const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
                 if (!verifyUrl) {
                     showAlert('当前没有可打开的验证页面。');
@@ -874,31 +875,8 @@
                 openTrackingVerificationUrl(verifyUrl, { fallbackToNavigate: true });
             });
             root.querySelector('[data-jlc-wb-resume]')?.addEventListener('click', async (event) => {
-                if (!resumePendingIds.length) {
-                    clearTrackingRefreshResumeState();
-                    await renderWorkbenchTrackingList();
-                    return;
-                }
-                const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                    || list.find(record => resumePendingIds.includes(record.id));
-                const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
-                const probe = await probeTrackingVerificationReady(verifyRecord, verifyUrl);
-                if (!probe.ok) {
-                    if (verifyUrl) openTrackingVerificationUrl(verifyUrl);
-                    showAlert((probe.note || '验证尚未生效') + '，请在打开的 JavLibrary 页面完成验证后再点继续。');
-                    return;
-                }
-                clearTrackingRefreshResumeState();
-                if (verifyRecord) {
-                    clearTrackingVerificationRequired(verifyRecord, { restoreStatus: true });
-                    await saveTrackingRecord(verifyRecord);
-                }
-                void refreshAllTrackingSearches(event.currentTarget, {
-                    recordIds: resumePendingIds,
-                    total: Number(refreshResume?.total || 0) || resumePendingIds.length,
-                    completedBase: Number(refreshResume?.completed || 0) || 0,
-                    resumeVerified: true
-                });
+                const resumed = await resumeSavedTrackingRefresh(event.currentTarget, allRecords);
+                if (!resumed) await renderWorkbenchTrackingList();
             });
         }
         const listScroll = root.querySelector('#jlc-wb-list-scroll');

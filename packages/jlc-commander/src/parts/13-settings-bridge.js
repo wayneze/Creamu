@@ -16,6 +16,7 @@
             'jlc-c-resource-screenshot': config.resource_screenshot !== false,
             'jlc-c-resource-screenshot-auto': !!config.resource_screenshot_auto,
             'jlc-c-resource-magnet': config.resource_magnet !== false,
+            'jlc-c-resource-subtitle': config.resource_subtitle !== false,
         };
         Object.entries(toggles).forEach(([id, value]) => {
             const el = document.getElementById(id);

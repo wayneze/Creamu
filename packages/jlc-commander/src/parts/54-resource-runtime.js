@@ -36,6 +36,9 @@
         if (config.resource_magnet !== false) {
             cards.push('<section class="jlc-resource-card" data-jlc-resource="magnet"><h3>磁力</h3><div class="jlc-resource-body"></div></section>');
         }
+        if (config.resource_subtitle !== false) {
+            cards.push('<section class="jlc-resource-card" data-jlc-resource="subtitle"><h3>字幕</h3><div class="jlc-resource-body"></div></section>');
+        }
         const linksStrip = config.resource_links !== false
             ? '<div class="jlc-resource-links" data-jlc-resource="links"><span class="jlc-resource-links-label">站外</span><div class="jlc-resource-body"></div></div>'
             : '';
@@ -61,6 +64,8 @@
         if (screenshotCard) renderScreenshotSection(screenshotCard, context, token);
         const magnetCard = container.querySelector('[data-jlc-resource="magnet"]');
         if (magnetCard) renderMagnetSection(magnetCard, context, token);
+        const subtitleCard = container.querySelector('[data-jlc-resource="subtitle"]');
+        if (subtitleCard) renderSubtitleSection(subtitleCard, context, token);
         const linksSection = container.querySelector('[data-jlc-resource="links"]');
         if (linksSection) renderResourceLinksSection(linksSection, context);
     }

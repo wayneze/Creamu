@@ -37,7 +37,8 @@
             background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06);
             border-radius: 12px; padding: 14px; min-width: 0; min-height: 120px;
         }
-        .jlc-resource-card[data-jlc-resource="magnet"] { grid-column: 1 / -1; }
+        .jlc-resource-card[data-jlc-resource="magnet"],
+        .jlc-resource-card[data-jlc-resource="subtitle"] { grid-column: 1 / -1; }
         .jlc-resource-links {
             display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start;
             margin: -2px 0 12px; padding: 8px 10px; border-radius: 8px;
@@ -54,7 +55,8 @@
         .jlc-resource-links .jlc-resource-chip small { display: none; }
         @media (max-width: 760px) {
             .jlc-resource-grid { grid-template-columns: minmax(0, 1fr); }
-            .jlc-resource-card[data-jlc-resource="magnet"] { grid-column: auto; }
+            .jlc-resource-card[data-jlc-resource="magnet"],
+            .jlc-resource-card[data-jlc-resource="subtitle"] { grid-column: auto; }
             .jlc-resource-links { grid-template-columns: minmax(0, 1fr); gap: 6px; }
             .jlc-resource-links-label { padding-top: 0; }
         }
@@ -218,12 +220,16 @@
         .jlc-magnet-actions a {
             padding: 4px 7px; border-radius: 6px; font-size: 11px; line-height: 1.2; white-space: nowrap;
         }
-        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status {
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status,
+        .jlc-resource-card[data-jlc-resource="subtitle"] .jlc-resource-status {
             gap: 4px; padding: 4px 7px; font-size: 11px;
         }
-        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status strong { font-size: 11px; }
-        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status small { font-size: 10px; }
-        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-title-inline-button {
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status strong,
+        .jlc-resource-card[data-jlc-resource="subtitle"] .jlc-resource-status strong { font-size: 11px; }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status small,
+        .jlc-resource-card[data-jlc-resource="subtitle"] .jlc-resource-status small { font-size: 10px; }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-title-inline-button,
+        .jlc-resource-card[data-jlc-resource="subtitle"] .jlc-title-inline-button {
             padding: 4px 8px; border-radius: 6px; font-size: 11px;
         }
         @media (max-width: 720px) {

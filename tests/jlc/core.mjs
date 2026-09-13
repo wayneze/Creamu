@@ -13,6 +13,7 @@ assert.strictEqual(config.metatube_url, '');
 assert.deepStrictEqual(Array.from(config.fav_tags), []);
 assert.deepStrictEqual(Array.from(config.hate_tags), []);
 assert.deepStrictEqual(Array.from(config.custom_persons), []);
+assert.strictEqual(config.resource_subtitle, true);
 
 assert.ok(queueHelperMatch, 'enqueueStablePriority not found');
 const enqueueStablePriority = vm.runInNewContext(`(${queueHelperMatch[0]})`);

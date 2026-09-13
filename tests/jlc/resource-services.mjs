@@ -7,6 +7,7 @@ const transportSource = fs.readFileSync('packages/jlc-commander/src/parts/12-res
 const trailerSource = fs.readFileSync('packages/jlc-commander/src/parts/12-resource-trailer-providers.js', 'utf8');
 const linkSource = fs.readFileSync('packages/jlc-commander/src/parts/12-resource-link-providers.js', 'utf8');
 const magnetProviderSource = fs.readFileSync('packages/jlc-commander/src/parts/12-resource-magnet-providers.js', 'utf8');
+const subtitleProviderSource = fs.readFileSync('packages/jlc-commander/src/parts/12-resource-subtitle-providers.js', 'utf8');
 const manifest = JSON.parse(fs.readFileSync('packages/jlc-commander/src/parts.manifest.json', 'utf8'));
 const coreSource = fs.readFileSync('packages/jlc-commander/src/parts/10-core.js', 'utf8');
 
@@ -25,14 +26,17 @@ assert.deepEqual(
     '12-resource-trailer-providers.js',
     '12-resource-link-providers.js',
     '12-resource-magnet-providers.js',
+    '12-resource-subtitle-providers.js',
   ],
   'resource service modules should stay in dependency order'
 );
-assert.doesNotMatch(source, /async function requestPage|function extractDmmSearchPreviewInfo|function extractSukebeiMagnetEntries/);
+assert.doesNotMatch(source, /async function requestPage|function extractDmmSearchPreviewInfo|function extractSukebeiMagnetEntries|function extractSubtitlecatSearchEntries/);
 assert.match(transportSource, /async function requestPage/);
 assert.match(trailerSource, /function extractDmmSearchPreviewInfo/);
 assert.match(linkSource, /function extractBlogJavScreenshotCandidates/);
 assert.match(magnetProviderSource, /function extractSukebeiMagnetEntries/);
+assert.match(subtitleProviderSource, /function extractSubtitlecatSearchEntries/);
+assert.match(subtitleProviderSource, /function extractSubtitlecatLanguageEntries/);
 
 const identitySource = extract(
   /function uniqueLinkObjects[\s\S]*?(?=\n\s*function normalizeResourceStatusState)/,
@@ -87,6 +91,85 @@ assert.equal(magnets.length, 1, 'magnets should deduplicate by info hash');
 assert.equal(resourceContext.extractMagnetHash(magnets[0].href), hash.toUpperCase());
 assert.equal(magnets[0].title, 'First title');
 
+const subtitleMatchSource = extract(
+  /function buildAvidLoosePattern[\s\S]*?(?=\n\s*function uniqueResourceEntries)/,
+  'subtitle avid match helpers'
+);
+vm.runInContext(subtitleMatchSource + '\n' + subtitleProviderSource, resourceContext);
+assert.equal(
+  resourceContext.buildSubtitlecatSearchUrl('ssis001'),
+  'https://www.subtitlecat.com/index.php?search=SSIS-001'
+);
+assert.equal(resourceContext.normalizeSubtitleLang('zh_hans'), 'zh-CN');
+assert.equal(resourceContext.normalizeSubtitleLang('cht'), 'zh-TW');
+assert.equal(resourceContext.getSubtitleLangLabel('zh-CN'), '简中');
+
+const searchHtml = `
+<table class="table sub-table">
+  <tr><th>header</th></tr>
+  <tr>
+    <td><a href="subs/256/SSIS-001%20T.html">SSIS-001 T</a> (translated from English)</td>
+    <td class="sub-table__metric"><span class="sub-table__metric-value">135 KB</span></td>
+    <td class="sub-table__metric"><span class="sub-table__metric-value">28<span class="sub-table__metric-unit"> downloads</span></span></td>
+    <td class="sub-table__metric"><span class="sub-table__metric-value">28<span class="sub-table__metric-unit"> languages</span></span></td>
+  </tr>
+  <tr>
+    <td><a href="subs/252/OTHER-002.html">OTHER-002</a> (translated from Korean)</td>
+    <td class="sub-table__metric"><span class="sub-table__metric-value">87 KB</span></td>
+  </tr>
+  <tr>
+    <td><a href="/subs/266/SSIS-001 T-zh-CN.srt">SSIS-001 T-zh-CN.srt</a></td>
+  </tr>
+</table>`;
+const packs = resourceContext.extractSubtitlecatSearchEntries(searchHtml, 'SSIS-001');
+assert.equal(packs.length, 1, 'search results should keep matching packs and skip srt / other avid');
+assert.equal(packs[0].href, 'https://www.subtitlecat.com/subs/256/SSIS-001%20T.html');
+assert.match(packs[0].note, /机翻自 English/);
+assert.match(packs[0].note, /135 KB/);
+assert.match(packs[0].note, /28 次下载/);
+
+const detailHtml = `
+<div class="sub-single">
+  <span><img src="/assets/flags/za.png" alt="af" class="flag"></span>
+  <span>Afrikaans</span>
+  <span><button id="af" onclick="translate_from_server_folder('af', 'SSIS-001 T-orig.srt', '/subs/256/')" class="yellow-link">Translate</button></span>
+</div>
+<div class="sub-single">
+  <span><img src="/assets/flags/us.png" alt="en" class="flag"></span>
+  <span>English</span>
+  <span><a id="download_en"  onclick="log_download(1); show_voting('en');" href="/subs/256/SSIS-001 T-en.srt" class="green-link">Download</a></span>
+</div>
+<div class="sub-single">
+  <span><img src="/assets/flags/cn.png" alt="zh-CN" class="flag"></span>
+  <span>Chinese (Simplified)</span>
+  <span><a id="download_zh-CN"  onclick="log_download(2669993); show_voting('zh-CN');" href="/subs/266/SSIS-001 T-zh-CN.srt" class="green-link">Download</a></span>
+</div>
+<div class="sub-single">
+  <span><img src="/assets/flags/tw.png" alt="zh-TW" class="flag"></span>
+  <span>Chinese (Traditional)</span>
+  <span><a id="download_zh-TW"  onclick="log_download(2599218); show_voting('zh-TW');" href="/subs/259/SSIS-001 T-zh-TW.srt" class="green-link">Download</a></span>
+</div>`;
+const languages = Array.from(resourceContext.extractSubtitlecatLanguageEntries(detailHtml, packs[0]));
+assert.equal(
+  languages.map(item => item.lang).join(','),
+  'zh-CN,zh-TW,en',
+  'ready Download links should keep 简中/繁中/英语 and skip Translate buttons'
+);
+assert.equal(languages[0].href, 'https://www.subtitlecat.com/subs/266/SSIS-001%20T-zh-CN.srt');
+assert.equal(
+  Array.from(resourceContext.filterSubtitlesByScope(languages, 'zh'), item => item.lang).join(','),
+  'zh-CN,zh-TW'
+);
+assert.equal(Array.from(resourceContext.filterSubtitlesByScope(languages, 'all')).length, 3);
+assert.equal(
+  resourceContext.buildSubtitleDownloadName('SSIS-001', languages[0]),
+  'SSIS-001 T-zh-CN.srt'
+);
+assert.equal(
+  resourceContext.buildSubtitleDownloadName('SSIS-001', { lang: 'zh-CN', href: 'https://www.subtitlecat.com/subs/1/bad:name.srt' }),
+  'SSIS-001.zh-CN.srt'
+);
+
 const cacheSource = extract(
   /const resourceTrailerCache[\s\S]*?(?=\n\s*function getResourceToggleStates)/,
   'resource caches'
@@ -97,6 +180,7 @@ vm.runInContext(cacheSource + `
     resourceScreenshotCache,
     resourceScreenshotInfoCache,
     resourceMagnetCache,
+    resourceSubtitleCache,
     resourceMissAVCache,
     resourceFalenoCache,
     resourceMgsCache
@@ -108,10 +192,12 @@ caches.resourceTrailerCache.set(`${cacheKey}::dmm-only`, true);
 caches.resourceScreenshotCache.set(cacheKey, true);
 caches.resourceScreenshotInfoCache.set(cacheKey, true);
 caches.resourceMagnetCache.set(cacheKey, true);
+caches.resourceSubtitleCache.set(cacheKey, true);
 caches.resourceMissAVCache.set(cacheKey, true);
 caches.resourceFalenoCache.set(cacheKey, true);
 caches.resourceMgsCache.set(cacheKey, true);
 caches.resourceMagnetCache.set('KEEP-001', true);
+caches.resourceSubtitleCache.set('KEEP-001', true);
 resourceContext.clearDetailResourceCaches('abp001');
 assert.equal([
   caches.resourceTrailerCache,
@@ -122,7 +208,9 @@ assert.equal([
   caches.resourceMgsCache,
 ].some(cache => Array.from(cache.keys()).some(key => key.includes(cacheKey))), false);
 assert.equal(caches.resourceMagnetCache.has(cacheKey), false);
+assert.equal(caches.resourceSubtitleCache.has(cacheKey), false);
 assert.equal(caches.resourceMagnetCache.has('KEEP-001'), true, 'unrelated cache entries must remain');
+assert.equal(caches.resourceSubtitleCache.has('KEEP-001'), true, 'unrelated subtitle cache entries must remain');
 
 const headerSource = extract(
   /function sanitizeBrowserFetchHeaders[\s\S]*?(?=\n\s*function isLikelyBotGuardResponse)/,
@@ -222,5 +310,7 @@ assert.equal(toggles.resource_trailer, true);
 assert.equal(toggles.resource_screenshot, true);
 assert.equal(toggles.resource_screenshot_auto, true);
 assert.equal(toggles.resource_magnet, true);
+assert.equal(toggles.resource_subtitle, true);
+assert.equal(toggles.resource_links, true);
 
 console.log('JLC resource service tests OK');

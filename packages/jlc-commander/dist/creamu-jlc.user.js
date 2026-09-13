@@ -2,7 +2,7 @@
 // @name         Creamu · JavLibrary
 // @name:zh-CN   Creamu · JavLibrary
 // @namespace    https://github.com/wayneze/Creamu
-// @version      3.8.1
+// @version      3.8.4
 // @description  Creamu：JavLibrary 奶油工作台；WebDAV 同步；追更 / Emby / 备份
 // @author       wayneze
 // @include      *javbus.com/*
@@ -18,6 +18,7 @@
 // @grant        GM_setValue
 // @grant        GM_download
 // @grant        GM_setClipboard
+// @grant        GM_openInTab
 // @connect      *
 // @run-at       document-end
 // ==/UserScript==
@@ -122,6 +123,7 @@
     const TRACKING_STORE = 'tracking_searches';
     const TRACKING_UI_STATE_KEY = 'jlc_tracking_ui_state_v1';
     const WORKBENCH_SESSION_KEY = 'jlc_workbench_session_v1';
+    const WORKBENCH_PAGE_UI_KEY = 'jlc_workbench_page_ui_v1';
     let db = null;
     let knownPersons = new Set();
     let embyDataSnapshot = null;
@@ -168,6 +170,7 @@
         resource_screenshot: true,
         resource_screenshot_auto: false,
         resource_magnet: true,
+        resource_subtitle: true,
         resource_links: true,
         open_mode: 'tab',
         webdav_enabled: false,
@@ -247,9 +250,66 @@
         return next;
     }
 
+    function getWorkbenchPageInstanceId() {
+        try {
+            const name = String(window.name || '');
+            if (name.startsWith('jlc-wb:')) return name.slice(7);
+        } catch (_) { /* ignore */ }
+        return '';
+    }
+
+    function ensureWorkbenchPageInstanceId() {
+        let id = getWorkbenchPageInstanceId();
+        if (id) return id;
+        id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+        try {
+            const current = String(window.name || '');
+            if (!current || current.startsWith('jlc-wb:')) window.name = 'jlc-wb:' + id;
+        } catch (_) { /* ignore */ }
+        return getWorkbenchPageInstanceId() || id;
+    }
+
+    function readWorkbenchPageUi() {
+        try {
+            const raw = sessionStorage.getItem(WORKBENCH_PAGE_UI_KEY);
+            if (!raw) return { panelOpen: false, settingsOpen: false };
+            const parsed = JSON.parse(raw);
+            const pageId = getWorkbenchPageInstanceId();
+            const windowName = String(window.name || '');
+            if (pageId) {
+                if (parsed?.pageId !== pageId) return { panelOpen: false, settingsOpen: false };
+            } else if (!windowName) {
+                return { panelOpen: false, settingsOpen: false };
+            }
+            return {
+                panelOpen: parsed?.panelOpen === true,
+                settingsOpen: parsed?.settingsOpen === true
+            };
+        } catch (_) {
+            return { panelOpen: false, settingsOpen: false };
+        }
+    }
+
+    function writeWorkbenchPageUi(panelOpen, settingsOpen) {
+        try {
+            sessionStorage.setItem(WORKBENCH_PAGE_UI_KEY, JSON.stringify({
+                pageId: ensureWorkbenchPageInstanceId(),
+                panelOpen: !!panelOpen,
+                settingsOpen: !!settingsOpen
+            }));
+        } catch (_) { /* private mode / blocked storage */ }
+    }
+
+    function applyWorkbenchPageUi(session) {
+        const pageUi = readWorkbenchPageUi();
+        session.panelOpen = pageUi.panelOpen;
+        session.settingsOpen = pageUi.settingsOpen;
+        return session;
+    }
+
     function getWorkbenchSession() {
         if (workbenchSessionCache) return workbenchSessionCache;
-        workbenchSessionCache = normalizeWorkbenchSession(GM_getValue(WORKBENCH_SESSION_KEY));
+        workbenchSessionCache = applyWorkbenchPageUi(normalizeWorkbenchSession(GM_getValue(WORKBENCH_SESSION_KEY)));
         if (config?.open_mode === 'same' || config?.open_mode === 'tab') {
             workbenchSessionCache.openMode = config.open_mode;
         }
@@ -269,7 +329,12 @@
         current.updatedAt = new Date().toISOString();
         current.skin = 'v3';
         workbenchSessionCache = normalizeWorkbenchSession(current);
-        GM_setValue(WORKBENCH_SESSION_KEY, workbenchSessionCache);
+        writeWorkbenchPageUi(workbenchSessionCache.panelOpen, workbenchSessionCache.settingsOpen);
+        // 开合只属于当前标签：共享存储始终写成收起，避免追更开出的新页把控制台带过去
+        GM_setValue(WORKBENCH_SESSION_KEY, Object.assign({}, workbenchSessionCache, {
+            panelOpen: false,
+            settingsOpen: false
+        }));
         return workbenchSessionCache;
     }
 
@@ -315,6 +380,33 @@
 
     function normalizeCode(v) {
         return normalizeText(v).replace(/[^a-z0-9]+/g, '');
+    }
+
+    function openUrlInNewTab(url) {
+        const href = String(url || '').trim();
+        if (!href) return false;
+        try {
+            if (typeof GM_openInTab === 'function') {
+                GM_openInTab(href, { active: true, insert: true, setParent: true });
+                return true;
+            }
+        } catch (_) { /* fall through */ }
+        try {
+            const anchor = document.createElement('a');
+            anchor.href = href;
+            anchor.target = '_blank';
+            anchor.rel = 'noopener noreferrer';
+            anchor.style.display = 'none';
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            return true;
+        } catch (_) { /* fall through */ }
+        try {
+            return !!window.open(href, '_blank', 'noopener,noreferrer');
+        } catch (_) {
+            return false;
+        }
     }
 
     function uniqueTextList(list) {
@@ -500,7 +592,8 @@
             background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06);
             border-radius: 12px; padding: 14px; min-width: 0; min-height: 120px;
         }
-        .jlc-resource-card[data-jlc-resource="magnet"] { grid-column: 1 / -1; }
+        .jlc-resource-card[data-jlc-resource="magnet"],
+        .jlc-resource-card[data-jlc-resource="subtitle"] { grid-column: 1 / -1; }
         .jlc-resource-links {
             display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start;
             margin: -2px 0 12px; padding: 8px 10px; border-radius: 8px;
@@ -517,7 +610,8 @@
         .jlc-resource-links .jlc-resource-chip small { display: none; }
         @media (max-width: 760px) {
             .jlc-resource-grid { grid-template-columns: minmax(0, 1fr); }
-            .jlc-resource-card[data-jlc-resource="magnet"] { grid-column: auto; }
+            .jlc-resource-card[data-jlc-resource="magnet"],
+            .jlc-resource-card[data-jlc-resource="subtitle"] { grid-column: auto; }
             .jlc-resource-links { grid-template-columns: minmax(0, 1fr); gap: 6px; }
             .jlc-resource-links-label { padding-top: 0; }
         }
@@ -681,12 +775,16 @@
         .jlc-magnet-actions a {
             padding: 4px 7px; border-radius: 6px; font-size: 11px; line-height: 1.2; white-space: nowrap;
         }
-        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status {
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status,
+        .jlc-resource-card[data-jlc-resource="subtitle"] .jlc-resource-status {
             gap: 4px; padding: 4px 7px; font-size: 11px;
         }
-        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status strong { font-size: 11px; }
-        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status small { font-size: 10px; }
-        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-title-inline-button {
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status strong,
+        .jlc-resource-card[data-jlc-resource="subtitle"] .jlc-resource-status strong { font-size: 11px; }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-resource-status small,
+        .jlc-resource-card[data-jlc-resource="subtitle"] .jlc-resource-status small { font-size: 10px; }
+        .jlc-resource-card[data-jlc-resource="magnet"] .jlc-title-inline-button,
+        .jlc-resource-card[data-jlc-resource="subtitle"] .jlc-title-inline-button {
             padding: 4px 8px; border-radius: 6px; font-size: 11px;
         }
         @media (max-width: 720px) {
@@ -1158,6 +1256,7 @@
     const resourceScreenshotCache = new Map();
     const resourceScreenshotInfoCache = new Map();
     const resourceMagnetCache = new Map();
+    const resourceSubtitleCache = new Map();
     const resourceMissAVCache = new Map();
     const resourceFalenoCache = new Map();
     const resourceMgsCache = new Map();
@@ -1179,6 +1278,7 @@
         resourceScreenshotCache.delete(key);
         resourceScreenshotInfoCache.delete(key);
         resourceMagnetCache.delete(key);
+        resourceSubtitleCache.delete(key);
     }
 
     function getResourceToggleStates(currentConfig = config) {
@@ -1188,6 +1288,8 @@
             resource_screenshot: currentConfig.resource_screenshot !== false,
             resource_screenshot_auto: !!currentConfig.resource_screenshot_auto,
             resource_magnet: currentConfig.resource_magnet !== false,
+            resource_subtitle: currentConfig.resource_subtitle !== false,
+            resource_links: currentConfig.resource_links !== false
         };
     }
 
@@ -2356,6 +2458,207 @@
             return scoreB - scoreA;
         });
     }
+// @@creamu-part:12-resource-subtitle-providers
+    const SUBTITLECAT_ORIGIN = 'https://www.subtitlecat.com';
+    const SUBTITLE_CHINESE_LANGS = Object.freeze(['zh-CN', 'zh-TW']);
+    const SUBTITLE_LANG_LABELS = Object.freeze({
+        'zh-CN': '简中',
+        'zh-TW': '繁中',
+        en: '英语',
+        ja: '日语',
+        ko: '韩语'
+    });
+
+    function buildSubtitlecatSearchUrl(avid) {
+        const code = normalizeResourceAvid(avid);
+        if (!code) return '';
+        return SUBTITLECAT_ORIGIN + '/index.php?search=' + encodeURIComponent(code);
+    }
+
+    function normalizeSubtitleLang(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const compact = raw.replace(/_/g, '-');
+        const lower = compact.toLowerCase();
+        if (lower === 'zh-cn' || lower === 'zh-hans' || lower === 'chs' || lower === 'cn') return 'zh-CN';
+        if (lower === 'zh-tw' || lower === 'zh-hant' || lower === 'cht' || lower === 'tw') return 'zh-TW';
+        if (lower === 'zh' || lower === 'chinese') return 'zh-CN';
+        return compact;
+    }
+
+    function getSubtitleLangLabel(lang) {
+        const key = normalizeSubtitleLang(lang);
+        return SUBTITLE_LANG_LABELS[key] || key || '字幕';
+    }
+
+    function isChineseSubtitleLang(lang) {
+        return SUBTITLE_CHINESE_LANGS.includes(normalizeSubtitleLang(lang));
+    }
+
+    function scoreSubtitleLang(lang) {
+        const key = normalizeSubtitleLang(lang);
+        if (key === 'zh-CN') return 80;
+        if (key === 'zh-TW') return 70;
+        if (key === 'en') return 20;
+        if (key === 'ja' || key === 'ko') return 10;
+        return 0;
+    }
+
+    function uniqueSubtitleEntries(list) {
+        const seen = new Set();
+        const baseHref = SUBTITLECAT_ORIGIN + '/';
+        return (Array.isArray(list) ? list : [])
+            .map(item => {
+                if (!item) return null;
+                const hrefRaw = String(item.href || item.url || '').trim();
+                if (!hrefRaw) return null;
+                let href = hrefRaw;
+                try {
+                    href = new URL(hrefRaw, item.base || baseHref).href;
+                } catch (error) {
+                    href = hrefRaw;
+                }
+                const lang = normalizeSubtitleLang(item.lang || item.language || '');
+                const title = stripHtmlTags(item.title || item.label || item.text || '').trim();
+                const src = String(item.src || item.source || '').trim();
+                let srcHref = src;
+                if (srcHref) {
+                    try { srcHref = new URL(srcHref, item.base || baseHref).href; } catch (error) { /* keep */ }
+                }
+                return {
+                    title: title || (lang ? (getSubtitleLangLabel(lang) + '字幕') : href),
+                    href,
+                    lang,
+                    label: getSubtitleLangLabel(lang),
+                    note: stripHtmlTags(item.note || '').trim(),
+                    provider: String(item.provider || 'subtitlecat').trim() || 'subtitlecat',
+                    src: srcHref,
+                    size: stripHtmlTags(item.size || '').trim(),
+                    downloads: Number(item.downloads || 0) || 0
+                };
+            })
+            .filter(item => item && item.href)
+            .filter(item => {
+                const key = normalizeSubtitleLang(item.lang) + '|' + item.href;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+    }
+
+    function extractSubtitlecatSearchEntries(responseText, avid) {
+        const text = String(responseText || '');
+        if (!text) return [];
+        const table = (text.match(/<table\b[^>]*class=["'][^"']*\bsub-table\b[^"']*["'][^>]*>[\s\S]*?<\/table>/i) || [])[0] || text;
+        const rows = table.match(/<tr\b[\s\S]*?<\/tr>/ig) || [];
+        const entries = [];
+        for (const row of rows) {
+            if (/<th\b/i.test(row)) continue;
+            const link = row.match(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+            if (!link) continue;
+            const href = link[1];
+            if (!/(?:^|\/)subs\/\d+\//i.test(href) || /\.srt(?:$|[?#])/i.test(href)) continue;
+            const title = stripHtmlTags(link[2]);
+            if (!title || (avid && !isLikelyAvidMatch(title, avid) && !isLikelyAvidMatch(decodeURIComponent(href.replace(/\+/g, ' ')), avid))) continue;
+            const extra = stripHtmlTags(row.replace(link[0], ' '));
+            const translated = (extra.match(/translated from\s+([a-z]+)/i) || [])[1] || '';
+            const sizeText = (row.match(/sub-table__metric-value">\s*([^<]*?(?:KB|MB|GB))\s*</i) || [])[1] || '';
+            const downloadText = (row.match(/sub-table__metric-value">\s*(\d+)\s*<span class=["']sub-table__metric-unit["']>\s*downloads/i) || [])[1] || '';
+            const langCount = (row.match(/sub-table__metric-value">\s*(\d+)\s*<span class=["']sub-table__metric-unit["']>\s*languages/i) || [])[1] || '';
+            const noteParts = ['Subtitlecat'];
+            if (translated) noteParts.push('机翻自 ' + translated);
+            if (sizeText) noteParts.push(sizeText.trim());
+            if (downloadText) noteParts.push(downloadText + ' 次下载');
+            if (langCount) noteParts.push(langCount + ' 种语言');
+            entries.push({
+                title,
+                href,
+                provider: 'subtitlecat',
+                note: noteParts.join(' · '),
+                src: href,
+                base: SUBTITLECAT_ORIGIN + '/',
+                size: sizeText.trim(),
+                downloads: Number(downloadText || 0) || 0,
+                langCount: Number(langCount || 0) || 0
+            });
+        }
+        const seen = new Set();
+        return entries.filter(item => {
+            let abs = item.href;
+            try { abs = new URL(item.href, SUBTITLECAT_ORIGIN + '/').href; } catch (error) { /* keep */ }
+            if (seen.has(abs)) return false;
+            seen.add(abs);
+            item.href = abs;
+            item.src = abs;
+            return true;
+        });
+    }
+
+    function extractSubtitlecatLanguageEntries(responseText, pack = {}) {
+        const text = String(responseText || '');
+        if (!text) return [];
+        const blocks = text.match(/<div\b[^>]*class=["'][^"']*\bsub-single\b[^"']*["'][^>]*>[\s\S]*?<\/div>/ig) || [];
+        const rawEntries = [];
+        for (const block of blocks) {
+            const download = block.match(/<a\b[^>]*id=["']download_([^"']+)["'][^>]*href=["']([^"']+)["'][^>]*>/i)
+                || block.match(/<a\b[^>]*href=["']([^"']+\.srt[^"']*)["'][^>]*id=["']download_([^"']+)["']/i);
+            if (!download) continue;
+            const lang = normalizeSubtitleLang(download[1].includes('/') ? download[2] : download[1]);
+            const href = download[1].includes('/') ? download[1] : download[2];
+            if (!lang || !href || !/\.srt(?:$|[?#])/i.test(href)) continue;
+            const langLabel = stripHtmlTags((block.match(/<span>([^<]+)<\/span>\s*<span>\s*<a\b[^>]*id=["']download_/i) || [])[1] || '')
+                || getSubtitleLangLabel(lang);
+            const noteParts = [getSubtitleLangLabel(lang) || langLabel];
+            if (pack.title) noteParts.push(pack.title);
+            if (pack.size) noteParts.push(pack.size);
+            if (pack.note && /机翻自/.test(pack.note)) {
+                const origin = (pack.note.match(/机翻自\s+([^\s·]+)/) || [])[1];
+                if (origin) noteParts.push('机翻自 ' + origin);
+            }
+            rawEntries.push({
+                title: pack.title ? (pack.title + ' · ' + (getSubtitleLangLabel(lang) || langLabel)) : (getSubtitleLangLabel(lang) || langLabel),
+                href,
+                lang,
+                provider: 'subtitlecat',
+                note: noteParts.join(' · '),
+                src: pack.src || pack.href || '',
+                base: SUBTITLECAT_ORIGIN + '/',
+                size: pack.size || '',
+                downloads: Number(pack.downloads || 0) || 0
+            });
+        }
+        return sortSubtitleEntries(rawEntries);
+    }
+
+    function sortSubtitleEntries(list) {
+        return uniqueSubtitleEntries(list).sort((a, b) => {
+            const langDelta = scoreSubtitleLang(b.lang) - scoreSubtitleLang(a.lang);
+            if (langDelta) return langDelta;
+            return (Number(b.downloads || 0) || 0) - (Number(a.downloads || 0) || 0);
+        });
+    }
+
+    function filterSubtitlesByScope(list, scope = 'zh') {
+        const entries = uniqueSubtitleEntries(list);
+        return sortSubtitleEntries(scope === 'all' ? entries : entries.filter(item => isChineseSubtitleLang(item.lang)));
+    }
+
+    function buildSubtitleDownloadName(avid, item) {
+        const code = normalizeResourceAvid(avid) || 'subtitle';
+        const lang = normalizeSubtitleLang(item?.lang || '');
+        let hrefName = '';
+        try {
+            hrefName = decodeURIComponent(new URL(item?.href || '', SUBTITLECAT_ORIGIN + '/').pathname.split('/').pop() || '');
+        } catch (error) {
+            hrefName = String(item?.href || '').split(/[?#]/)[0].split('/').pop() || '';
+        }
+        hrefName = hrefName.split(/[?#]/)[0].trim();
+        const extMatch = hrefName.match(/\.(srt|ass|ssa|vtt)$/i);
+        const ext = extMatch ? extMatch[1].toLowerCase() : 'srt';
+        if (hrefName && extMatch && !/[\\/:*?"<>|]/.test(hrefName)) return hrefName;
+        const safeLang = lang.replace(/[^A-Za-z0-9-]+/g, '') || 'und';
+        return code + '.' + safeLang + '.' + ext;
+    }
 // @@creamu-part:13-settings-bridge
     function syncCommanderConfigInputs() {
         const map = {
@@ -2374,6 +2677,7 @@
             'jlc-c-resource-screenshot': config.resource_screenshot !== false,
             'jlc-c-resource-screenshot-auto': !!config.resource_screenshot_auto,
             'jlc-c-resource-magnet': config.resource_magnet !== false,
+            'jlc-c-resource-subtitle': config.resource_subtitle !== false,
         };
         Object.entries(toggles).forEach(([id, value]) => {
             const el = document.getElementById(id);
@@ -7151,8 +7455,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
     }
 
-    function bindWorkbenchTrackingActions(root, list, context, resumePendingIds, refreshResume) {
-        const findRecord = (id) => list.find(item => item.id === id);
+    function bindWorkbenchTrackingActions(root, list, context, resumePendingIds, refreshResume, allRecords = list) {
+        const findRecord = (id) => list.find(item => item.id === id)
+            || allRecords.find(item => item.id === id);
         const stopBubble = (event) => {
             event.stopPropagation();
         };
@@ -7337,8 +7642,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             });
         });
         root.querySelector('[data-jlc-wb-open-verify]')?.addEventListener('click', () => {
-            const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                || list.find(record => resumePendingIds.includes(record.id));
+            const verifyRecord = allRecords.find(record => record.id === refreshResume?.record_id)
+                || allRecords.find(record => resumePendingIds.includes(record.id));
             const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
             if (!verifyUrl) {
                 showAlert('当前没有可打开的验证页面。');
@@ -7347,31 +7652,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             openTrackingVerificationUrl(verifyUrl, { fallbackToNavigate: true });
         });
         root.querySelector('[data-jlc-wb-resume]')?.addEventListener('click', async (event) => {
-            if (!resumePendingIds.length) {
-                clearTrackingRefreshResumeState();
-                await renderWorkbenchTrackingList();
-                return;
-            }
-            const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                || list.find(record => resumePendingIds.includes(record.id));
-            const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
-            const probe = await probeTrackingVerificationReady(verifyRecord, verifyUrl);
-            if (!probe.ok) {
-                if (verifyUrl) openTrackingVerificationUrl(verifyUrl);
-                showAlert((probe.note || '验证尚未生效') + '，请在打开的 JavLibrary 页面完成验证后再点继续。');
-                return;
-            }
-            clearTrackingRefreshResumeState();
-            if (verifyRecord) {
-                clearTrackingVerificationRequired(verifyRecord, { restoreStatus: true });
-                await saveTrackingRecord(verifyRecord);
-            }
-            void refreshAllTrackingSearches(event.currentTarget, {
-                recordIds: resumePendingIds,
-                total: Number(refreshResume?.total || 0) || resumePendingIds.length,
-                completedBase: Number(refreshResume?.completed || 0) || 0,
-                resumeVerified: true
-            });
+            const resumed = await resumeSavedTrackingRefresh(event.currentTarget, allRecords);
+            if (!resumed) await renderWorkbenchTrackingList();
         });
     }
 
@@ -7493,30 +7775,41 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
 
         const openedAt = new Date().toISOString();
+        const openInNewTab = openMode === 'tab';
         // 本机 UI 高亮（不同步）+ 可同步浏览时间（进 tracking 记录 / WebDAV）
-        persistWorkbenchSession({
-            panelOpen: false,
-            settingsOpen: false,
-            nav: 'tracking',
-            tracking: {
-                focusRecordId: record.id,
-                lastOpenedId: record.id,
-                lastOpenedAt: openedAt
+        persistWorkbenchSession(openInNewTab
+            ? {
+                nav: 'tracking',
+                tracking: {
+                    focusRecordId: record.id,
+                    lastOpenedId: record.id,
+                    lastOpenedAt: openedAt
+                }
             }
-        });
+            : {
+                panelOpen: false,
+                settingsOpen: false,
+                nav: 'tracking',
+                tracking: {
+                    focusRecordId: record.id,
+                    lastOpenedId: record.id,
+                    lastOpenedAt: openedAt
+                }
+            });
         // 先落盘 last_browsed_at，避免只改了 session 导致其它设备永远看不到「上次」
         try {
             record.last_browsed_at = openedAt;
             await saveTrackingRecord(record);
         } catch (_) { /* prepare 里还会再写一次 */ }
-        try { closeWorkbenchV3(); } catch (_) {}
+        if (!openInNewTab) {
+            try { closeWorkbenchV3(); } catch (_) {}
+        }
 
         const prepared = await prepareTrackingRecordNavigation(record, targetUrl);
         if (!prepared.ok) return;
         const url = prepared.url;
-        if (openMode === 'tab') {
-            const opened = window.open(url, '_blank', 'noopener');
-            if (!opened) {
+        if (openInNewTab) {
+            if (!openUrlInNewTab(url)) {
                 showAlert('浏览器拦截了新标签，已改为本页打开。');
                 location.href = url;
                 return;
@@ -7597,8 +7890,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const runtimeButtonText = buildTrackingRefreshRuntimeButtonText(refreshRuntime);
         const refreshResume = getTrackingRefreshResumeState();
         const resumePendingIds = Array.isArray(refreshResume?.pending_ids)
-            ? refreshResume.pending_ids.filter(id => list.some(record => record.id === id))
+            ? refreshResume.pending_ids.filter(id => allRecords.some(record => record.id === id))
             : [];
+        const resumeReason = resumePendingIds.length
+            ? (refreshResume?.reason === 'cf_required' ? 'cf_required' : 'interrupted')
+            : '';
         const collapsedState = getTrackingUiState().collapsed || {};
         const focusId = session.tracking.focusRecordId || session.tracking.lastOpenedId || '';
 
@@ -7658,12 +7954,17 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '      <option value="last_browsed"' + (session.tracking.sort === 'last_browsed' ? ' selected' : '') + '>最近浏览</option>'
             + '      <option value="name"' + (session.tracking.sort === 'name' ? ' selected' : '') + '>名称</option>'
             + '    </select>'
-            + '    <button type="button" class="jlc-wb-chip" data-jlc-wb-continue>继续上次</button>'
+            + '    <button type="button" class="jlc-wb-chip' + (resumePendingIds.length ? ' is-on' : '') + '" data-jlc-wb-continue>'
+            + (resumePendingIds.length ? '继续上次刷新' : '继续上次')
+            + '</button>'
             + '  </div>'
             + (resumePendingIds.length
-                ? '  <div class="jlc-wb-toolbar-row jlc-wb-tracking-alert">刷新已暂停 · 待验证后继续 ' + resumePendingIds.length + ' 项'
-                + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-open-verify>去验证</button>'
-                + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-resume>验证后继续</button></div>'
+                ? (resumeReason === 'cf_required'
+                    ? '  <div class="jlc-wb-toolbar-row jlc-wb-tracking-alert">刷新已暂停 · 待验证后继续 ' + resumePendingIds.length + ' 项'
+                    + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-open-verify>去验证</button>'
+                    + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-resume>验证后继续</button></div>'
+                    : '  <div class="jlc-wb-toolbar-row jlc-wb-tracking-alert">刷新被中断 · 还剩 ' + resumePendingIds.length + ' 项'
+                    + '    <button type="button" class="jlc-wb-btn ghost" data-jlc-wb-resume>继续上次</button></div>')
                 : '')
             + (useVirtual ? '  <div class="jlc-wb-toolbar-row jlc-wb-virtual-note">虚拟列表已启用（' + list.length + ' 项）</div>' : '')
             + '</div>';
@@ -7724,7 +8025,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                     return '<div class="jlc-wb-virt-row" style="min-height:' + row.height + 'px">' + buildWorkbenchTrackingItemHtml(row.record, session, context, currentSignature, focusId) + '</div>';
                 }).join('');
                 // 只绑可视窗口内节点，避免滚动重绘时在 toolbar 上叠监听
-                bindWorkbenchTrackingActions(windowEl, list, context, resumePendingIds, refreshResume);
+                bindWorkbenchTrackingActions(windowEl, list, context, resumePendingIds, refreshResume, allRecords);
                 const sampleItem = windowEl.querySelector('.jlc-wb-item');
                 const sampleGroup = windowEl.querySelector('.jlc-wb-group-toggle');
                 let changed = false;
@@ -7784,7 +8085,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             persistWorkbenchSession({ tracking: { sort: e.target.value || 'updates_first' } });
             void renderWorkbenchTrackingList();
         });
-        root.querySelector('[data-jlc-wb-continue]')?.addEventListener('click', () => {
+        root.querySelector('[data-jlc-wb-continue]')?.addEventListener('click', async (event) => {
+            if (resumePendingIds.length) {
+                const resumed = await resumeSavedTrackingRefresh(event.currentTarget, allRecords);
+                if (resumed) return;
+            }
             const id = session.tracking.focusRecordId || session.tracking.lastOpenedId || '';
             if (!id) {
                 showAlert('还没有上次打开记录。');
@@ -7801,12 +8106,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         });
 
         if (!useVirtual) {
-            bindWorkbenchTrackingActions(root, list, context, resumePendingIds, refreshResume);
+            bindWorkbenchTrackingActions(root, list, context, resumePendingIds, refreshResume, allRecords);
         } else {
             // 虚拟模式下条目动作在 paint 内绑定；工具条验证/续刷绑在 root
             root.querySelector('[data-jlc-wb-open-verify]')?.addEventListener('click', () => {
-                const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                    || list.find(record => resumePendingIds.includes(record.id));
+                const verifyRecord = allRecords.find(record => record.id === refreshResume?.record_id)
+                    || allRecords.find(record => resumePendingIds.includes(record.id));
                 const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
                 if (!verifyUrl) {
                     showAlert('当前没有可打开的验证页面。');
@@ -7815,31 +8120,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 openTrackingVerificationUrl(verifyUrl, { fallbackToNavigate: true });
             });
             root.querySelector('[data-jlc-wb-resume]')?.addEventListener('click', async (event) => {
-                if (!resumePendingIds.length) {
-                    clearTrackingRefreshResumeState();
-                    await renderWorkbenchTrackingList();
-                    return;
-                }
-                const verifyRecord = list.find(record => record.id === refreshResume?.record_id)
-                    || list.find(record => resumePendingIds.includes(record.id));
-                const verifyUrl = compactText(refreshResume?.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
-                const probe = await probeTrackingVerificationReady(verifyRecord, verifyUrl);
-                if (!probe.ok) {
-                    if (verifyUrl) openTrackingVerificationUrl(verifyUrl);
-                    showAlert((probe.note || '验证尚未生效') + '，请在打开的 JavLibrary 页面完成验证后再点继续。');
-                    return;
-                }
-                clearTrackingRefreshResumeState();
-                if (verifyRecord) {
-                    clearTrackingVerificationRequired(verifyRecord, { restoreStatus: true });
-                    await saveTrackingRecord(verifyRecord);
-                }
-                void refreshAllTrackingSearches(event.currentTarget, {
-                    recordIds: resumePendingIds,
-                    total: Number(refreshResume?.total || 0) || resumePendingIds.length,
-                    completedBase: Number(refreshResume?.completed || 0) || 0,
-                    resumeVerified: true
-                });
+                const resumed = await resumeSavedTrackingRefresh(event.currentTarget, allRecords);
+                if (!resumed) await renderWorkbenchTrackingList();
             });
         }
         const listScroll = root.querySelector('#jlc-wb-list-scroll');
@@ -8007,7 +8289,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             const sync = ensureCreamuSync();
             wdStatus.textContent = sync ? sync.statusText() : '同步模块未加载';
         }
-        const resourceKeys = ['resource_center', 'resource_trailer', 'resource_screenshot', 'resource_screenshot_auto', 'resource_magnet', 'resource_links'];
+        const resourceKeys = ['resource_center', 'resource_trailer', 'resource_screenshot', 'resource_screenshot_auto', 'resource_magnet', 'resource_subtitle', 'resource_links'];
         resourceKeys.forEach(k => {
             const input = shell.querySelector('[data-jlc-wb-resource="' + k + '"]');
             if (input) input.checked = config[k] !== false;
@@ -8084,7 +8366,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 ? (openModeEl.value === 'same' ? 'same' : 'tab')
                 : ((getWorkbenchSession().openMode || config.open_mode || previous.open_mode || 'tab') === 'same' ? 'same' : 'tab');
             config.open_mode = openMode;
-            ['resource_center', 'resource_trailer', 'resource_screenshot', 'resource_screenshot_auto', 'resource_magnet', 'resource_links'].forEach(k => {
+            ['resource_center', 'resource_trailer', 'resource_screenshot', 'resource_screenshot_auto', 'resource_magnet', 'resource_subtitle', 'resource_links'].forEach(k => {
                 const input = shell.querySelector('[data-jlc-wb-resource="' + k + '"]');
                 if (input) config[k] = !!input.checked;
             });
@@ -8295,6 +8577,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '        <div class="legacy-row legacy-toggle"><span>截图模块</span><input type="checkbox" data-jlc-wb-resource="resource_screenshot"></div>'
             + '        <div class="legacy-row legacy-toggle"><span>截图自动展开</span><input type="checkbox" data-jlc-wb-resource="resource_screenshot_auto"></div>'
             + '        <div class="legacy-row legacy-toggle"><span>磁力模块</span><input type="checkbox" data-jlc-wb-resource="resource_magnet"></div>'
+            + '        <div class="legacy-row legacy-toggle"><span>字幕模块</span><input type="checkbox" data-jlc-wb-resource="resource_subtitle"></div>'
             + '        <div class="legacy-row legacy-toggle"><span>站外链接</span><input type="checkbox" data-jlc-wb-resource="resource_links"></div>'
             + '      </section>'
             // —— 服务：Emby / MetaTube / WebDAV ——
@@ -8419,6 +8702,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         });
         shell.querySelector('#jlc-wb-refresh-all')?.addEventListener('click', (event) => {
             if (getTrackingRefreshRuntimeState()) return;
+            const resume = typeof getTrackingRefreshResumeState === 'function'
+                ? getTrackingRefreshResumeState()
+                : null;
+            if (resume?.pending_ids?.length) {
+                void resumeSavedTrackingRefresh(event.currentTarget);
+                return;
+            }
             void refreshAllTrackingSearches(event.currentTarget);
         });
         shell.querySelector('#jlc-wb-sync-now')?.addEventListener('click', (event) => {
@@ -8438,6 +8728,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             workbenchUiBound = true;
             window.addEventListener('pagehide', () => {
                 captureWorkbenchScroll();
+                if (typeof markTrackingRefreshInterrupted === 'function') {
+                    markTrackingRefreshInterrupted();
+                }
             });
         }
     }
@@ -9393,15 +9686,35 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         return { collapsed: {}, refresh_resume: null };
     }
 
+    function normalizeTrackingRefreshResumeState(resumeState) {
+        if (!resumeState || typeof resumeState !== 'object') return null;
+        const pendingIds = Array.isArray(resumeState.pending_ids)
+            ? resumeState.pending_ids.map(id => compactText(id || '')).filter(Boolean)
+            : [];
+        if (!pendingIds.length) return null;
+        const reason = resumeState.reason === 'cf_required'
+            || resumeState.reason === 'running'
+            || resumeState.reason === 'interrupted'
+            ? resumeState.reason
+            : (compactText(resumeState.verify_url || '') ? 'cf_required' : 'interrupted');
+        return Object.assign({}, resumeState, {
+            pending_ids: pendingIds,
+            reason,
+            total: Number(resumeState.total || 0) || pendingIds.length,
+            completed: Number(resumeState.completed || 0) || 0
+        });
+    }
+
     function getTrackingRefreshResumeState() {
         const state = getTrackingUiState();
-        return state.refresh_resume && typeof state.refresh_resume === 'object' ? state.refresh_resume : null;
+        return normalizeTrackingRefreshResumeState(state.refresh_resume);
     }
 
     function setTrackingRefreshResumeState(resumeState) {
         const state = getTrackingUiState();
-        state.refresh_resume = resumeState && typeof resumeState === 'object' ? resumeState : null;
+        state.refresh_resume = normalizeTrackingRefreshResumeState(resumeState);
         GM_setValue(TRACKING_UI_STATE_KEY, state);
+        return state.refresh_resume;
     }
 
     function clearTrackingRefreshResumeState() {
@@ -11018,6 +11331,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         return isTrackingUiChromeLabel(cleaned) ? '' : cleaned;
     }
 
+    function buildTrackingPagedUrl(seedUrl, page) {
+        const parsed = parseTrackingUrl(seedUrl || '');
+        if (!parsed) return seedUrl || '';
+        const pageNumber = Number(page || 0) || 1;
+        if (pageNumber > 1) parsed.searchParams.set('page', String(pageNumber));
+        else parsed.searchParams.delete('page');
+        return parsed.toString();
+    }
+
     function getCurrentListPageHint(url = location.href, doc = document) {
         const parsed = parseTrackingUrl(url);
         if (!parsed) return 1;
@@ -11620,6 +11942,66 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         return value;
     }
 
+    function estimateTrackingUnreadTotal(record, options = {}) {
+        const pageSize = Math.max(0, Math.floor(Number(options.pageSize || record?.page_size_hint || 0) || 0));
+        const topPage = Math.max(0, Math.floor(Number(options.topPage || record?.top_page_hint || 0) || 0));
+        const localPage = Math.max(0, Math.floor(Number(options.localPage || 0) || 0));
+        const seenPage = Math.max(0, Math.floor(Number(options.seenPage || record?.last_seen_page_hint || localPage || 0) || 0));
+        const localUnreadRaw = Number(options.localUnread);
+        const localFound = options.localFound === true && Number.isFinite(localUnreadRaw) && localUnreadRaw >= 0;
+        const localUnread = localFound ? Math.max(0, Math.floor(localUnreadRaw)) : 0;
+
+        if (localFound && options.spanCovered === true) return localUnread;
+        if (localFound && (!topPage || !localPage || topPage === localPage)) return localUnread;
+        if (localFound && pageSize > 0 && topPage > 0 && localPage > 0) {
+            return Math.abs(topPage - localPage) * pageSize + localUnread;
+        }
+        if (topPage > 0 && seenPage > 0 && pageSize > 0 && topPage !== seenPage) {
+            return Math.abs(topPage - seenPage) * pageSize + (localFound ? localUnread : 0);
+        }
+        if (localFound) return localUnread;
+        return -1;
+    }
+
+    function planTrackingUnreadPageWalk(options = {}) {
+        const mode = options.mode === 'backfill' ? 'backfill' : 'forward';
+        const startPage = Math.max(1, Math.floor(Number(options.startPage || 0) || 1));
+        const seenPage = Math.max(0, Math.floor(Number(options.seenPage || 0) || 0));
+        const lastPage = Math.max(0, Math.floor(Number(options.lastPage || 0) || 0));
+        const maxExtraPages = Math.min(20, Math.max(0, Math.floor(Number(options.maxExtraPages || 8) || 8)));
+        const step = mode === 'backfill' ? -1 : 1;
+        const extraPages = [];
+        let page = startPage + step;
+        while (extraPages.length < maxExtraPages) {
+            if (page < 1) break;
+            if (lastPage > 0 && page > lastPage) break;
+            if (seenPage > 0) {
+                if (step > 0 && page > seenPage) break;
+                if (step < 0 && page < seenPage) break;
+            } else if (!(lastPage > 0)) {
+                break;
+            }
+            extraPages.push(page);
+            if (seenPage > 0 && page === seenPage) break;
+            page += step;
+        }
+        let remainingPages = 0;
+        if (seenPage > 0) {
+            const cursor = extraPages.length ? extraPages[extraPages.length - 1] + step : startPage + step;
+            if (step > 0) remainingPages = cursor <= seenPage ? (seenPage - cursor + 1) : 0;
+            else remainingPages = cursor >= seenPage && cursor >= 1 ? (cursor - seenPage + 1) : 0;
+        }
+        return { mode, startPage, seenPage, lastPage, step, extraPages, remainingPages };
+    }
+
+    function applyTrackingUnreadEstimate(record, unread, options = {}) {
+        if (!record || typeof record !== 'object') return record;
+        const value = Math.max(0, Math.floor(Number(unread) || 0));
+        record.unread_estimate = value;
+        record.unread_span = options.span !== false;
+        return record;
+    }
+
     function getTrackingUnreadMetrics(record) {
         const topCode = normalizeCode(record?.top_avid || '');
         const seenCode = normalizeCode(record?.last_seen_avid || '');
@@ -11629,11 +12011,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const unreadEstimate = Number(record?.unread_estimate || 0) || 0;
         const pageSizeHint = Number(record?.page_size_hint || 0) || 0;
         const pageDelta = topPage > 0 && seenPage > 0 ? Math.abs(topPage - seenPage) : 0;
-        const estimatedCount = hasUpdate
-            ? ((pageDelta > 0 && pageSizeHint > 0)
-                ? (pageDelta * pageSizeHint + unreadEstimate)
-                : unreadEstimate)
-            : 0;
+        const spanComplete = record?.unread_span === true || record?.unread_span === 1;
+        let estimatedCount = 0;
+        if (hasUpdate) {
+            if (spanComplete && unreadEstimate > 0) estimatedCount = unreadEstimate;
+            else if (pageDelta > 0 && pageSizeHint > 0) {
+                estimatedCount = pageDelta * pageSizeHint + (spanComplete ? 0 : unreadEstimate);
+            } else {
+                estimatedCount = unreadEstimate;
+            }
+        }
         return {
             hasUpdate,
             topPage,
@@ -11898,7 +12285,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             record.last_seen_at = now;
             record.last_seen_page_hint = pageHint;
             record.last_found_at = now;
-            record.unread_estimate = 0;
+            applyTrackingUnreadEstimate(record, 0);
             record.check_status = 'latest';
             record.check_note = '初始断点已设为当前首项';
         }
@@ -11911,7 +12298,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             record.last_found_at = now;
             const explicitUnreadEstimate = Number(options.explicitLastSeen.unread_estimate);
             if (Number.isFinite(explicitUnreadEstimate) && explicitUnreadEstimate >= 0) {
-                record.unread_estimate = Math.max(0, Math.floor(explicitUnreadEstimate));
+                const totalUnread = estimateTrackingUnreadTotal(record, {
+                    localUnread: explicitUnreadEstimate,
+                    localFound: true,
+                    localPage: record.last_seen_page_hint,
+                    topPage: record.top_page_hint,
+                    pageSize: record.page_size_hint
+                });
+                applyTrackingUnreadEstimate(record, totalUnread >= 0 ? totalUnread : explicitUnreadEstimate);
             }
             record.check_status = record.top_avid && normalizeCode(record.top_avid) === normalizeCode(record.last_seen_avid) ? 'latest' : 'checked';
             record.check_note = '断点已更新';
@@ -11941,7 +12335,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         record.last_seen_at = now;
         record.last_seen_page_hint = pageHint;
         record.last_found_at = now;
-        record.unread_estimate = 0;
+        applyTrackingUnreadEstimate(record, 0);
         record.check_status = 'latest';
         record.check_note = '已设为已读';
         await saveTrackingRecord(record);
@@ -12032,12 +12426,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     function openTrackingVerificationUrl(verifyUrl, options = {}) {
         const normalizedUrl = compactText(verifyUrl || '');
         if (!normalizedUrl) return false;
-        const opened = window.open(normalizedUrl, '_blank', 'noopener');
-        if (!opened && options.fallbackToNavigate) {
+        if (openUrlInNewTab(normalizedUrl)) return true;
+        if (options.fallbackToNavigate) {
             location.href = normalizedUrl;
             return true;
         }
-        return !!opened;
+        return false;
     }
 
     function markTrackingVerificationRequired(record, verifyUrl, note = '') {
@@ -12046,6 +12440,138 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         record.pending_verify_url = compactText(verifyUrl || buildTrackingVerifyUrl(record) || '');
         record.verify_required_at = new Date().toISOString();
         return record;
+    }
+
+    async function scanTrackingUnreadAcrossPages(record, options = {}) {
+        const mode = options.mode === 'backfill' ? 'backfill' : 'forward';
+        const seedUrl = options.seedUrl || record?.open_url || '';
+        const startUrl = options.startUrl || seedUrl;
+        const startDoc = options.startDoc;
+        const startInfos = Array.isArray(options.startInfos)
+            ? options.startInfos
+            : getTrackingItemInfosFromDocument(startDoc, record.site, startUrl);
+        const startPage = Number(getCurrentListPageHint(startUrl, startDoc) || 0) || 1;
+        const seenPage = Number(record?.last_seen_page_hint || 0) || 0;
+        const lastPage = Number(options.lastPage || 0) || 0;
+        const pageSize = Math.max(Number(record?.page_size_hint || 0) || 0, startInfos.length);
+        const localUnread = estimateTrackingUnreadFromInfos(record, startInfos, mode);
+        if (localUnread >= 0) {
+            const total = estimateTrackingUnreadTotal(record, {
+                localUnread,
+                localFound: true,
+                localPage: startPage,
+                topPage: record.top_page_hint || startPage,
+                pageSize
+            });
+            return { unread: total >= 0 ? total : localUnread };
+        }
+
+        const plan = planTrackingUnreadPageWalk({
+            mode,
+            startPage,
+            seenPage,
+            lastPage,
+            maxExtraPages: 8
+        });
+        let unread = startInfos.length;
+        let found = false;
+        for (const page of plan.extraPages) {
+            const pageUrl = buildTrackingPagedUrl(seedUrl, page);
+            const pageResponse = await requestPageWithBrowserFetch(pageUrl, { timeout: 18000 });
+            if (isTrackingVerificationRequired(record, pageResponse)) {
+                record.last_check_at = new Date().toISOString();
+                markTrackingVerificationRequired(record, pageUrl, '跨页检查遇到 Cloudflare 验证');
+                await saveTrackingRecord(record);
+                return { blocked: true, record };
+            }
+            if (!pageResponse.ok || !pageResponse.responseText) break;
+            const pageDoc = new DOMParser().parseFromString(pageResponse.responseText, 'text/html');
+            const pageInfos = getTrackingItemInfosFromDocument(pageDoc, record.site, pageUrl);
+            if (pageInfos.length) {
+                record.page_size_hint = Math.max(Number(record.page_size_hint || 0) || 0, pageInfos.length);
+            }
+            const pageUnread = estimateTrackingUnreadFromInfos(record, pageInfos, mode);
+            if (pageUnread >= 0) {
+                unread += pageUnread;
+                found = true;
+                break;
+            }
+            unread += pageInfos.length;
+        }
+        if (!found && plan.remainingPages > 0) {
+            unread += plan.remainingPages * Math.max(Number(record.page_size_hint || 0) || 0, pageSize);
+        }
+        if (!(unread > 0) && record.last_seen_avid) return { unread: -1 };
+        return { unread };
+    }
+
+    function persistTrackingRefreshQueue(pending, total, completed, extra = {}) {
+        const pendingIds = (Array.isArray(pending) ? pending : [])
+            .map(item => compactText(item?.id || item || ''))
+            .filter(Boolean);
+        if (!pendingIds.length) {
+            clearTrackingRefreshResumeState();
+            return null;
+        }
+        return setTrackingRefreshResumeState(Object.assign({
+            pending_ids: pendingIds,
+            total: Number(total || 0) || pendingIds.length,
+            completed: Number(completed || 0) || 0,
+            reason: extra.reason || 'running',
+            paused_at: extra.paused_at || new Date().toISOString()
+        }, extra));
+    }
+
+    function markTrackingRefreshInterrupted() {
+        const resume = getTrackingRefreshResumeState();
+        if (!resume?.pending_ids?.length) return resume;
+        if (resume.reason === 'cf_required') return resume;
+        return persistTrackingRefreshQueue(resume.pending_ids, resume.total, resume.completed, {
+            reason: 'interrupted',
+            record_id: resume.record_id,
+            verify_url: resume.verify_url,
+            note: resume.note || '刷新被中断'
+        });
+    }
+
+    async function resumeSavedTrackingRefresh(trigger, records = null) {
+        if (getTrackingRefreshRuntimeState()) {
+            showAlert('刷新还在进行中。');
+            return true;
+        }
+        const refreshResume = getTrackingRefreshResumeState();
+        const pendingIds = Array.isArray(refreshResume?.pending_ids)
+            ? refreshResume.pending_ids.filter(Boolean)
+            : [];
+        if (!pendingIds.length) {
+            clearTrackingRefreshResumeState();
+            return false;
+        }
+        const list = Array.isArray(records)
+            ? records
+            : (await getTrackingSearches()).filter(record => !record.archived);
+        const verifyRecord = list.find(record => record.id === refreshResume.record_id)
+            || list.find(record => pendingIds.includes(record.id));
+        if (refreshResume.reason === 'cf_required') {
+            const verifyUrl = compactText(refreshResume.verify_url || '') || buildTrackingVerifyUrl(verifyRecord);
+            const probe = await probeTrackingVerificationReady(verifyRecord, verifyUrl);
+            if (!probe.ok) {
+                if (verifyUrl) openTrackingVerificationUrl(verifyUrl);
+                showAlert((probe.note || '验证尚未生效') + '，请在打开的 JavLibrary 页面完成验证后再点继续。');
+                return true;
+            }
+            if (verifyRecord) {
+                clearTrackingVerificationRequired(verifyRecord, { restoreStatus: true });
+                await saveTrackingRecord(verifyRecord);
+            }
+        }
+        void refreshAllTrackingSearches(trigger, {
+            recordIds: pendingIds,
+            total: Number(refreshResume.total || 0) || pendingIds.length,
+            completedBase: Number(refreshResume.completed || 0) || 0,
+            resumeVerified: true
+        });
+        return true;
     }
 
     async function refreshSingleTrackingRecord(recordOrId, options = {}) {
@@ -12120,24 +12646,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
         const baseDoc = new DOMParser().parseFromString(response.responseText, 'text/html');
         const baseItemCount = getTrackingDocumentItemCount(baseDoc, record.site);
-        const buildPagedUrl = (seedUrl, page) => {
-            const parsed = parseTrackingUrl(seedUrl || record.open_url || '');
-            if (!parsed) return seedUrl || record.open_url || '';
-            if (page > 1) parsed.searchParams.set('page', String(page));
-            else parsed.searchParams.delete('page');
-            return parsed.toString();
-        };
+        const seedUrl = requestSeedUrl || record.open_url;
 
         let targetDoc = baseDoc;
-        let targetUrl = requestSeedUrl || record.open_url;
-        let topPageHint = Number(getCurrentListPageHint(requestSeedUrl || record.open_url, baseDoc) || 0) || 1;
+        let targetUrl = seedUrl;
+        let topPageHint = Number(getCurrentListPageHint(seedUrl, baseDoc) || 0) || 1;
+        const lastPageInfo = getTrackingLastPageInfo(baseDoc, seedUrl);
+        const lastPage = Number(lastPageInfo.page || 0) || topPageHint || 1;
 
         if (String(record.site || '').toLowerCase() === 'javlibrary' && searchMode === 'backfill') {
-            const lastPageInfo = getTrackingLastPageInfo(baseDoc, requestSeedUrl || record.open_url);
-            const lastPage = Number(lastPageInfo.page || 0) || topPageHint || 1;
             if (lastPage > 0) topPageHint = lastPage;
-            const basePageHint = Number(getCurrentListPageHint(requestSeedUrl || record.open_url, baseDoc) || 0) || 1;
-            targetUrl = lastPageInfo.url || buildPagedUrl(requestSeedUrl || record.open_url, topPageHint);
+            const basePageHint = Number(getCurrentListPageHint(seedUrl, baseDoc) || 0) || 1;
+            targetUrl = lastPageInfo.url || buildTrackingPagedUrl(seedUrl, topPageHint);
             if (topPageHint > 1 && topPageHint != basePageHint) {
                 const tailResponse = await requestPageWithBrowserFetch(targetUrl, { timeout: 18000 });
                 if (isTrackingVerificationRequired(record, tailResponse)) {
@@ -12158,8 +12678,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
 
         const targetItemCount = getTrackingDocumentItemCount(targetDoc, record.site);
-        const targetInfos = getTrackingItemInfosFromDocument(targetDoc, record.site, targetUrl || requestSeedUrl || record.open_url || '');
-        const pageUnreadEstimate = estimateTrackingUnreadFromInfos(record, targetInfos, searchMode);
+        const targetInfos = getTrackingItemInfosFromDocument(targetDoc, record.site, targetUrl || seedUrl || '');
         const firstItem = (searchMode === 'backfill' ? targetInfos[targetInfos.length - 1] : targetInfos[0])
             || getTrackingAnchorItemFromDocument(targetDoc, record.site, searchMode)
             || getTrackingFirstItemFromDocument(targetDoc, record.site);
@@ -12185,22 +12704,42 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         record.top_avid = firstItem.avid;
         record.top_title = firstItem.title || '';
         applyTrackingCoverFields(record, firstItem, {
-            baseUrl: targetUrl || requestSeedUrl || record.open_url || location.href,
-            avatar: extractTrackingAvatarFromDocument(targetDoc, record.group_type, targetUrl || requestSeedUrl || record.open_url || location.href)
-                || extractTrackingAvatarFromDocument(baseDoc, record.group_type, requestSeedUrl || record.open_url || location.href)
+            baseUrl: targetUrl || seedUrl || location.href,
+            avatar: extractTrackingAvatarFromDocument(targetDoc, record.group_type, targetUrl || seedUrl || location.href)
+                || extractTrackingAvatarFromDocument(baseDoc, record.group_type, seedUrl || location.href)
         });
         if (record.last_seen_avid && normalizeCode(record.last_seen_avid) === normalizeCode(record.top_avid)) {
             record.check_status = 'latest';
             record.check_note = '已追到最新';
-            record.unread_estimate = 0;
+            applyTrackingUnreadEstimate(record, 0);
         } else {
-            if (pageUnreadEstimate >= 0) {
-                record.unread_estimate = pageUnreadEstimate;
+            const unreadScan = await scanTrackingUnreadAcrossPages(record, {
+                seedUrl,
+                startUrl: targetUrl || seedUrl,
+                startDoc: targetDoc,
+                startInfos: targetInfos,
+                mode: searchMode,
+                lastPage,
+                preserveStatusOnFailure
+            });
+            if (unreadScan?.blocked) return record;
+            const scannedUnread = Number(unreadScan?.unread);
+            if (Number.isFinite(scannedUnread) && scannedUnread >= 0) {
+                applyTrackingUnreadEstimate(record, scannedUnread);
             } else if (record.last_seen_avid) {
-                const fallbackUnreadEstimate = (!previousTop || normalizeCode(previousTop) !== normalizeCode(record.top_avid))
-                    ? Math.max(1, previousUnreadEstimate)
-                    : Math.max(1, previousUnreadEstimate || 0);
-                record.unread_estimate = fallbackUnreadEstimate;
+                const fallbackUnread = estimateTrackingUnreadTotal(record, {
+                    localUnread: previousUnreadEstimate,
+                    localFound: previousUnreadEstimate > 0,
+                    localPage: record.last_seen_page_hint,
+                    topPage: record.top_page_hint,
+                    pageSize: record.page_size_hint
+                });
+                applyTrackingUnreadEstimate(
+                    record,
+                    fallbackUnread >= 0
+                        ? Math.max(1, fallbackUnread)
+                        : Math.max(1, previousUnreadEstimate || 0)
+                );
             }
             if (!previousTop || normalizeCode(previousTop) !== normalizeCode(record.top_avid)) {
                 record.check_status = 'updated';
@@ -12276,6 +12815,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         let completed = Number(options.completedBase || 0) || 0;
         const total = Number(options.total || 0) || (requestedIds?.length ? (completed + list.length) : list.length);
         let pausedForVerification = false;
+        persistTrackingRefreshQueue(pending, total, completed, { reason: 'running' });
         setTrackingRefreshRuntimeState({
             phase: 'refreshing',
             completed,
@@ -12287,6 +12827,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             while (pending.length) {
                 const nextTask = pickNextTrackingRefreshRecord(pending, bucketLastRunAt, Date.now());
                 if (!nextTask.record) {
+                    persistTrackingRefreshQueue(pending, total, completed, { reason: 'running' });
                     const waitMs = Math.min(Math.max(1500, nextTask.waitMs || 1500), 5 * 60 * 1000);
                     await waitTrackingRefreshCountdown(waitMs, remainingMs => {
                         setTrackingRefreshRuntimeState({
@@ -12301,6 +12842,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                     continue;
                 }
                 const [record] = pending.splice(nextTask.index, 1);
+                persistTrackingRefreshQueue([record, ...pending], total, completed, { reason: 'running' });
                 const cooldownNote = getTrackingRefreshCooldownMs(record) > 0 ? 'JavLibrary 冷却桶' : '请求中';
                 setTrackingRefreshRuntimeState({
                     phase: 'refreshing',
@@ -12313,26 +12855,23 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 const refreshed = await refreshSingleTrackingRecord(record, { silent: true });
                 if (refreshed?.check_status === 'cf_required') {
                     pausedForVerification = true;
-                    const pendingIds = [refreshed.id, ...pending.map(item => item.id)];
                     const verifyUrl = buildTrackingVerifyUrl(refreshed);
-                    setTrackingRefreshResumeState({
-                        pending_ids: pendingIds,
-                        total,
-                        completed,
+                    persistTrackingRefreshQueue([refreshed, ...pending], total, completed, {
+                        reason: 'cf_required',
                         record_id: refreshed.id,
                         verify_url: verifyUrl,
-                        note: refreshed.check_note || '',
-                        paused_at: new Date().toISOString()
+                        note: refreshed.check_note || ''
                     });
                     setTrackingRefreshRuntimeState(null);
                     await renderTrackingUI();
                     const opened = openTrackingVerificationUrl(verifyUrl);
                     showAlert(opened
-                        ? '刷新遇到 Cloudflare 验证，已尝试打开验证页；验证完回到这里点“验证后继续刷新”。'
-                        : '刷新遇到 Cloudflare 验证，先点“去验证”，验证完再点“验证后继续刷新”。');
+                        ? '刷新遇到 Cloudflare 验证，已尝试打开验证页；验证完回到这里点“继续上次”。'
+                        : '刷新遇到 Cloudflare 验证，先点“去验证”，验证完再点“继续上次”。');
                     return;
                 }
                 completed += 1;
+                persistTrackingRefreshQueue(pending, total, completed, { reason: 'running' });
                 setTrackingRefreshRuntimeState({
                     phase: 'refreshing',
                     completed,
@@ -12367,6 +12906,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             showAlert(requestedIds?.length ? '剩余追更项已继续刷新完成！' : '追更列表刷新完成！');
         } finally {
             if (!pausedForVerification) setTrackingRefreshRuntimeState(null);
+            const leftover = getTrackingRefreshResumeState();
+            if (!pausedForVerification && leftover?.pending_ids?.length) {
+                persistTrackingRefreshQueue(leftover.pending_ids, leftover.total || total, leftover.completed || completed, {
+                    reason: leftover.reason === 'cf_required' ? 'cf_required' : 'interrupted',
+                    record_id: leftover.record_id,
+                    verify_url: leftover.verify_url,
+                    note: leftover.note
+                });
+            }
             renderTrackingUI();
         }
     }
@@ -12519,13 +13067,25 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             const divider = document.createElement('div');
             divider.className = 'jlc-tracking-divider';
             divider.textContent = isBackfill ? '上次看到这里（下面是更新）' : '上次看到这里';
-            if (isBackfill) {
-                items[foundIndex].after(divider);
-                record.unread_estimate = Math.max(0, items.length - foundIndex - 1);
+            const localUnread = isBackfill
+                ? Math.max(0, items.length - foundIndex - 1)
+                : Math.max(0, foundIndex);
+            const topCode = normalizeCode(record.top_avid || '');
+            const hasTop = !!topCode && items.some(item => normalizeCode(getTrackingItemInfoFromNode(item)?.avid || '') === topCode);
+            if (hasTop) {
+                applyTrackingUnreadEstimate(record, localUnread);
             } else {
-                items[foundIndex].before(divider);
-                record.unread_estimate = foundIndex;
+                const totalUnread = estimateTrackingUnreadTotal(record, {
+                    localUnread,
+                    localFound: true,
+                    localPage: currentPageHint,
+                    topPage: record.top_page_hint,
+                    pageSize: record.page_size_hint
+                });
+                applyTrackingUnreadEstimate(record, totalUnread >= 0 ? totalUnread : localUnread);
             }
+            if (isBackfill) items[foundIndex].after(divider);
+            else items[foundIndex].before(divider);
             void saveTrackingRecord(record);
             refreshTrackingToolbarButtons();
             return;
@@ -13139,6 +13699,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             config.resource_screenshot !== false,
             !!config.resource_screenshot_auto,
             config.resource_magnet !== false,
+            config.resource_subtitle !== false,
             config.resource_links !== false
         ]);
     }
@@ -14125,6 +14686,281 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         render();
         startDeferredLoad = scheduleResourceSectionLoad(card, token, loadMagnets);
     }
+// @@creamu-part:52-resource-subtitles
+    async function fetchSupplementalSubtitleInfo(avid) {
+        const key = normalizeResourceAvid(avid);
+        const emptyMessage = '未搜索到字幕';
+        const searchUrl = buildSubtitlecatSearchUrl(key);
+        if (!key || !searchUrl) return { subtitles: [], statuses: [], packs: [], message: emptyMessage };
+        if (resourceSubtitleCache.has(key)) return resourceSubtitleCache.get(key);
+        const promise = (async () => {
+            const searchResponse = await requestPage(searchUrl, { timeout: 12000 });
+            if (!searchResponse.ok || searchResponse.blockedByChallenge) {
+                const state = searchResponse.blockedByChallenge
+                    ? 'blocked'
+                    : ([403, 429, 503].includes(searchResponse.status) ? 'blocked' : (searchResponse.status === 404 ? 'empty' : 'error'));
+                return {
+                    subtitles: [],
+                    packs: [],
+                    statuses: [{
+                        key: 'subtitlecat',
+                        label: 'Subtitlecat',
+                        state,
+                        note: searchResponse.blockedByChallenge ? 'JS challenge' : describeRequestStatus(searchResponse, '检索失败'),
+                        href: searchUrl
+                    }],
+                    message: emptyMessage
+                };
+            }
+            const packs = extractSubtitlecatSearchEntries(searchResponse.responseText, key).slice(0, 8);
+            if (!packs.length) {
+                return {
+                    subtitles: [],
+                    packs: [],
+                    statuses: [{ key: 'subtitlecat', label: 'Subtitlecat', state: 'empty', note: '未命中', href: searchUrl }],
+                    message: emptyMessage
+                };
+            }
+            const packResults = await Promise.all(packs.map(async pack => {
+                try {
+                    const detail = await requestPage(pack.href, { timeout: 12000 });
+                    if (!detail.ok || detail.blockedByChallenge) {
+                        return { pack, entries: [], state: detail.blockedByChallenge ? 'blocked' : 'error' };
+                    }
+                    return {
+                        pack,
+                        entries: extractSubtitlecatLanguageEntries(detail.responseText, pack),
+                        state: 'ok'
+                    };
+                } catch (error) {
+                    console.warn('[JLC] Subtitlecat 详情解析失败', pack.href, error);
+                    return { pack, entries: [], state: 'error' };
+                }
+            }));
+            const subtitles = sortSubtitleEntries(packResults.flatMap(item => item.entries));
+            const chineseCount = filterSubtitlesByScope(subtitles, 'zh').length;
+            return {
+                subtitles,
+                packs,
+                statuses: [{
+                    key: 'subtitlecat',
+                    label: 'Subtitlecat',
+                    state: subtitles.length ? 'ok' : 'empty',
+                    note: subtitles.length
+                        ? (subtitles.length + ' 条 · 中文 ' + chineseCount)
+                        : '有字幕包但没有已生成文件',
+                    href: searchUrl
+                }],
+                message: subtitles.length ? '' : emptyMessage
+            };
+        })().catch(error => {
+            console.warn('[JLC] 字幕搜索失败', error);
+            resourceSubtitleCache.delete(key);
+            return {
+                subtitles: [],
+                packs: [],
+                statuses: [{ key: 'subtitlecat', label: 'Subtitlecat', state: 'error', note: '解析异常', href: searchUrl }],
+                message: emptyMessage
+            };
+        });
+        resourceSubtitleCache.set(key, promise);
+        return promise;
+    }
+
+    function makeSubtitleListMarkup(subtitles) {
+        if (!subtitles.length) return '';
+        return `<div class="jlc-magnet-list jlc-subtitle-list">${subtitles.map((item, index) => {
+            const title = item.title || ((item.label || '字幕') + ' ' + (index + 1));
+            const note = item.note || item.label || '字幕';
+            return `
+            <div class="jlc-magnet-row" data-jlc-subtitle-index="${index}">
+                <div class="jlc-magnet-meta">
+                    <div class="jlc-magnet-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                </div>
+                <div class="jlc-magnet-side">
+                    <div class="jlc-magnet-sub" title="${escapeHtml(note)}">${escapeHtml(note)}</div>
+                    <div class="jlc-magnet-actions">
+                        <button type="button" data-jlc-download-subtitle="${index}" title="下载字幕">下载</button>
+                        <a href="${escapeHtml(item.href)}" target="_blank" rel="noopener noreferrer nofollow">打开</a>
+                        ${item.src ? `<a href="${escapeHtml(item.src)}" target="_blank" rel="noopener noreferrer nofollow">来源</a>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        }).join('')}</div>`;
+    }
+
+    function downloadSubtitleFile(avid, item, button) {
+        if (!item?.href) return;
+        if (button?.dataset.jlcBusy === '1') return;
+        if (button) {
+            button.dataset.jlcBusy = '1';
+            button.disabled = true;
+        }
+        const name = buildSubtitleDownloadName(avid, item);
+        const finish = (ok, note) => {
+            if (button) {
+                button.dataset.jlcBusy = '0';
+                button.disabled = false;
+            }
+            showAlert(ok ? ('已开始下载 ' + name) : (note || '字幕下载失败'));
+        };
+        try {
+            GM_download({
+                url: item.href,
+                name,
+                headers: { Referer: item.src || buildSubtitlecatSearchUrl(avid) || item.href },
+                onload: () => finish(true),
+                onerror: () => finish(false, '字幕下载失败'),
+                ontimeout: () => finish(false, '字幕下载超时')
+            });
+        } catch (error) {
+            finish(false, '当前环境不支持直接下载');
+        }
+    }
+
+    function bindSubtitleActionButtons(body, avid, subtitles) {
+        body.querySelectorAll('[data-jlc-download-subtitle]').forEach(button => {
+            button.addEventListener('click', () => {
+                const item = subtitles[Number(button.dataset.jlcDownloadSubtitle)];
+                if (!item) return;
+                downloadSubtitleFile(avid, item, button);
+            });
+        });
+    }
+
+    function renderSubtitleSection(card, context, token) {
+        const body = card.querySelector('.jlc-resource-body');
+        const titleNode = card.querySelector('h3');
+        let titleBar = card.querySelector('.jlc-resource-card-titlebar');
+        if (titleNode && !titleBar) {
+            titleBar = document.createElement('div');
+            titleBar.className = 'jlc-resource-card-titlebar';
+            titleNode.parentNode.insertBefore(titleBar, titleNode);
+            titleBar.appendChild(titleNode);
+        }
+        let titleTools = card.querySelector('.jlc-resource-card-tools');
+        if (titleBar && !titleTools) {
+            titleTools = document.createElement('div');
+            titleTools.className = 'jlc-resource-card-tools';
+            titleBar.appendChild(titleTools);
+        }
+
+        const searchUrl = buildSubtitlecatSearchUrl(context.avid);
+        let info = { subtitles: [], statuses: [], packs: [], message: '' };
+        let loading = false;
+        let searched = false;
+        let activeScope = 'zh';
+        let lastMessage = '准备搜索 Subtitlecat。';
+        let startDeferredLoad = () => false;
+
+        const getVisibleSubtitles = () => filterSubtitlesByScope(info.subtitles, activeScope);
+
+        const buildStatuses = () => {
+            const allCount = uniqueSubtitleEntries(info.subtitles).length;
+            const zhCount = filterSubtitlesByScope(info.subtitles, 'zh').length;
+            const source = (info.statuses || [])[0] || {};
+            const sourceState = loading
+                ? (allCount ? 'ok' : 'pending')
+                : (source.state || (searched ? (allCount ? 'ok' : 'empty') : 'pending'));
+            return [
+                {
+                    key: 'zh',
+                    label: '中文',
+                    state: loading ? (zhCount ? 'ok' : 'pending') : (zhCount ? 'ok' : (searched ? 'empty' : 'pending')),
+                    note: loading ? (zhCount ? (zhCount + ' 条 · 搜索中') : '搜索中') : (zhCount ? (zhCount + ' 条') : (searched ? '无中文' : '默认')),
+                    count: zhCount,
+                    active: activeScope === 'zh'
+                },
+                {
+                    key: 'all',
+                    label: '全部',
+                    state: loading ? (allCount ? 'ok' : 'pending') : (allCount ? 'ok' : (searched ? 'empty' : 'pending')),
+                    note: loading ? (allCount ? (allCount + ' 条 · 搜索中') : '搜索中') : (allCount ? (allCount + ' 条') : (searched ? '未命中' : '含英日韩')),
+                    count: allCount,
+                    active: activeScope === 'all'
+                },
+                {
+                    key: 'subtitlecat',
+                    label: source.label || 'Subtitlecat',
+                    state: sourceState,
+                    note: source.note || (loading ? '自动检测中' : (searched ? (allCount + ' 条') : '来源')),
+                    href: source.href || searchUrl,
+                    count: allCount,
+                    active: false
+                }
+            ];
+        };
+
+        const makeStatusMarkup = (statuses) => {
+            return '<div class="jlc-resource-status-list">' + statuses.map(item => {
+                const state = normalizeResourceStatusState(item.state);
+                const inner = '<strong>' + escapeHtml(item.label) + '</strong>' + (item.note ? '<small>' + escapeHtml(item.note) + '</small>' : '');
+                const activeClass = item.active ? ' is-active-filter' : '';
+                if (item.key === 'subtitlecat' && item.href) {
+                    return '<a class="jlc-resource-status is-' + escapeHtml(state) + activeClass + '" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer nofollow" title="打开 Subtitlecat 搜索页">' + inner + '</a>';
+                }
+                return '<button type="button" class="jlc-resource-status is-' + escapeHtml(state) + activeClass + '" data-jlc-subtitle-scope="' + escapeHtml(item.key) + '">' + inner + '</button>';
+            }).join('') + '</div>';
+        };
+
+        const renderTitleTools = () => {
+            if (!titleTools) return;
+            titleTools.innerHTML = '<button type="button" class="jlc-title-inline-button" data-jlc-load-subtitle' + (loading ? ' disabled' : '') + '>' + (loading ? '刷新中...' : '刷新字幕') + '</button>';
+            titleTools.querySelector('[data-jlc-load-subtitle]')?.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+                if (startDeferredLoad()) return;
+                resourceSubtitleCache.delete(normalizeResourceAvid(context.avid));
+                void loadSubtitles();
+            }, { capture: true });
+        };
+
+        const render = () => {
+            const subtitles = getVisibleSubtitles();
+            const statuses = buildStatuses();
+            const zhCount = statuses.find(item => item.key === 'zh')?.count || 0;
+            const allCount = statuses.find(item => item.key === 'all')?.count || 0;
+            const summaryParts = ['中文 ' + zhCount + ' 条', '全部 ' + allCount + ' 条'];
+            if (activeScope === 'all') summaryParts.push('筛选 全部');
+            let emptyText = lastMessage || '当前还没有可用字幕。';
+            if (searched && activeScope === 'zh' && !subtitles.length && allCount) {
+                emptyText = '没有中文字幕，可切到「全部」。';
+            } else if (searched && !subtitles.length) {
+                emptyText = activeScope === 'zh' ? '未找到已生成的中文字幕。' : (lastMessage || '未搜索到字幕');
+            }
+            const contentMarkup = subtitles.length ? makeSubtitleListMarkup(subtitles) : `<div class="jlc-resource-empty">${escapeHtml(emptyText)}</div>`;
+            renderTitleTools();
+            body.innerHTML = makeStatusMarkup(statuses)
+                + `<div class="jlc-resource-note">${escapeHtml(summaryParts.join(' · '))}</div>`
+                + (loading ? '<div class="jlc-resource-loading">正在搜索 Subtitlecat...</div>' : '')
+                + contentMarkup;
+            body.querySelectorAll('[data-jlc-subtitle-scope]').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    activeScope = button.dataset.jlcSubtitleScope === 'all' ? 'all' : 'zh';
+                    render();
+                });
+            });
+            bindSubtitleActionButtons(body, context.avid, subtitles);
+        };
+
+        const loadSubtitles = async () => {
+            if (loading) return;
+            loading = true;
+            render();
+            const next = await fetchSupplementalSubtitleInfo(context.avid);
+            if (!isResourceCenterTokenAlive(token)) return;
+            info = next || { subtitles: [], statuses: [], packs: [], message: '' };
+            lastMessage = info.message || (info.subtitles?.length ? '' : '未搜索到字幕');
+            searched = true;
+            loading = false;
+            render();
+        };
+
+        render();
+        startDeferredLoad = scheduleResourceSectionLoad(card, token, loadSubtitles);
+    }
 // @@creamu-part:53-resource-sections
     async function buildInlineScreenshotPanel(context) {
         const key = context?.avid;
@@ -14362,6 +15198,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (config.resource_magnet !== false) {
             cards.push('<section class="jlc-resource-card" data-jlc-resource="magnet"><h3>磁力</h3><div class="jlc-resource-body"></div></section>');
         }
+        if (config.resource_subtitle !== false) {
+            cards.push('<section class="jlc-resource-card" data-jlc-resource="subtitle"><h3>字幕</h3><div class="jlc-resource-body"></div></section>');
+        }
         const linksStrip = config.resource_links !== false
             ? '<div class="jlc-resource-links" data-jlc-resource="links"><span class="jlc-resource-links-label">站外</span><div class="jlc-resource-body"></div></div>'
             : '';
@@ -14387,6 +15226,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (screenshotCard) renderScreenshotSection(screenshotCard, context, token);
         const magnetCard = container.querySelector('[data-jlc-resource="magnet"]');
         if (magnetCard) renderMagnetSection(magnetCard, context, token);
+        const subtitleCard = container.querySelector('[data-jlc-resource="subtitle"]');
+        if (subtitleCard) renderSubtitleSection(subtitleCard, context, token);
         const linksSection = container.querySelector('[data-jlc-resource="links"]');
         if (linksSection) renderResourceLinksSection(linksSection, context);
     }

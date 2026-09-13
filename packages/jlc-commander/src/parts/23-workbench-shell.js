@@ -92,6 +92,7 @@
             + '        <div class="legacy-row legacy-toggle"><span>截图模块</span><input type="checkbox" data-jlc-wb-resource="resource_screenshot"></div>'
             + '        <div class="legacy-row legacy-toggle"><span>截图自动展开</span><input type="checkbox" data-jlc-wb-resource="resource_screenshot_auto"></div>'
             + '        <div class="legacy-row legacy-toggle"><span>磁力模块</span><input type="checkbox" data-jlc-wb-resource="resource_magnet"></div>'
+            + '        <div class="legacy-row legacy-toggle"><span>字幕模块</span><input type="checkbox" data-jlc-wb-resource="resource_subtitle"></div>'
             + '        <div class="legacy-row legacy-toggle"><span>站外链接</span><input type="checkbox" data-jlc-wb-resource="resource_links"></div>'
             + '      </section>'
             // —— 服务：Emby / MetaTube / WebDAV ——
@@ -216,6 +217,13 @@
         });
         shell.querySelector('#jlc-wb-refresh-all')?.addEventListener('click', (event) => {
             if (getTrackingRefreshRuntimeState()) return;
+            const resume = typeof getTrackingRefreshResumeState === 'function'
+                ? getTrackingRefreshResumeState()
+                : null;
+            if (resume?.pending_ids?.length) {
+                void resumeSavedTrackingRefresh(event.currentTarget);
+                return;
+            }
             void refreshAllTrackingSearches(event.currentTarget);
         });
         shell.querySelector('#jlc-wb-sync-now')?.addEventListener('click', (event) => {
@@ -235,6 +243,9 @@
             workbenchUiBound = true;
             window.addEventListener('pagehide', () => {
                 captureWorkbenchScroll();
+                if (typeof markTrackingRefreshInterrupted === 'function') {
+                    markTrackingRefreshInterrupted();
+                }
             });
         }
     }

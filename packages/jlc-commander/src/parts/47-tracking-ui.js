@@ -147,13 +147,25 @@
             const divider = document.createElement('div');
             divider.className = 'jlc-tracking-divider';
             divider.textContent = isBackfill ? '上次看到这里（下面是更新）' : '上次看到这里';
-            if (isBackfill) {
-                items[foundIndex].after(divider);
-                record.unread_estimate = Math.max(0, items.length - foundIndex - 1);
+            const localUnread = isBackfill
+                ? Math.max(0, items.length - foundIndex - 1)
+                : Math.max(0, foundIndex);
+            const topCode = normalizeCode(record.top_avid || '');
+            const hasTop = !!topCode && items.some(item => normalizeCode(getTrackingItemInfoFromNode(item)?.avid || '') === topCode);
+            if (hasTop) {
+                applyTrackingUnreadEstimate(record, localUnread);
             } else {
-                items[foundIndex].before(divider);
-                record.unread_estimate = foundIndex;
+                const totalUnread = estimateTrackingUnreadTotal(record, {
+                    localUnread,
+                    localFound: true,
+                    localPage: currentPageHint,
+                    topPage: record.top_page_hint,
+                    pageSize: record.page_size_hint
+                });
+                applyTrackingUnreadEstimate(record, totalUnread >= 0 ? totalUnread : localUnread);
             }
+            if (isBackfill) items[foundIndex].after(divider);
+            else items[foundIndex].before(divider);
             void saveTrackingRecord(record);
             refreshTrackingToolbarButtons();
             return;

@@ -13,6 +13,7 @@ const expectedParts = [
   '50-resource-center.js',
   '51-resource-trailer.js',
   '52-resource-magnets.js',
+  '52-resource-subtitles.js',
   '53-resource-sections.js',
   '54-resource-runtime.js',
   '55-site-registry.js',
@@ -38,12 +39,14 @@ assert.doesNotMatch(sources[expectedParts[0]], /async function resolveTrailerSou
 assert.match(sources[expectedParts[1]], /async function resolveTrailerSources/);
 assert.match(sources[expectedParts[2]], /async function fetchSupplementalMagnetInfo/);
 assert.match(sources[expectedParts[2]], /function renderMagnetSection/);
-assert.match(sources[expectedParts[3]], /function renderTrailerSection/);
-assert.match(sources[expectedParts[3]], /function renderScreenshotSection/);
-assert.match(sources[expectedParts[4]], /function renderDetailResourceCenter/);
-assert.match(sources[expectedParts[5]], /let ConstCode =/);
+assert.match(sources[expectedParts[3]], /async function fetchSupplementalSubtitleInfo/);
+assert.match(sources[expectedParts[3]], /function renderSubtitleSection/);
+assert.match(sources[expectedParts[4]], /function renderTrailerSection/);
+assert.match(sources[expectedParts[4]], /function renderScreenshotSection/);
+assert.match(sources[expectedParts[5]], /function renderDetailResourceCenter/);
+assert.match(sources[expectedParts[6]], /let ConstCode =/);
 assert.doesNotMatch(sources[expectedParts[0]], /\.style\.marginLeft/);
-assert.doesNotMatch(sources[expectedParts[3]], /\.style\.display/);
+assert.doesNotMatch(sources[expectedParts[4]], /\.style\.display/);
 
 function extract(source, pattern, label) {
   const match = source.match(pattern);
@@ -123,6 +126,7 @@ const signatureContext = {
     resource_screenshot: true,
     resource_screenshot_auto: false,
     resource_magnet: true,
+    resource_subtitle: true,
     resource_links: true,
   },
   compactText(value) {
@@ -150,19 +154,34 @@ assert.notEqual(
   firstSignature,
   'resource settings must invalidate the render signature'
 );
+signatureContext.config.resource_links = true;
+signatureContext.config.resource_subtitle = false;
+assert.notEqual(
+  signatureContext.buildDetailResourceRenderSignature(detailContext, '2026-07-28'),
+  firstSignature,
+  'subtitle toggle must invalidate the render signature'
+);
 
 assert.match(
-  sources[expectedParts[4]],
+  sources[expectedParts[5]],
   /container\.dataset\.renderSignature === renderSignature\) return;/,
   'stable resource renders should return before replacing section DOM'
 );
-assert.match(sources[expectedParts[4]], /class="jlc-resource-links" data-jlc-resource="links"/);
+assert.match(sources[expectedParts[5]], /class="jlc-resource-links" data-jlc-resource="links"/);
 assert.doesNotMatch(
-  sources[expectedParts[4]],
+  sources[expectedParts[5]],
   /class="jlc-resource-card" data-jlc-resource="links"/,
   'external links should not consume a resource grid card'
 );
+assert.match(sources[expectedParts[5]], /data-jlc-resource="subtitle"/);
+assert.match(sources[expectedParts[5]], /renderSubtitleSection\(subtitleCard/);
 assert.match(sources[expectedParts[2]], /scheduleResourceSectionLoad\(card, token, loadMagnets\)/);
-assert.match(sources[expectedParts[3]], /scheduleResourceSectionLoad\(card, token, loadTrailer\)/);
+assert.match(sources[expectedParts[3]], /scheduleResourceSectionLoad\(card, token, loadSubtitles\)/);
+assert.match(sources[expectedParts[4]], /scheduleResourceSectionLoad\(card, token, loadTrailer\)/);
+assert.doesNotMatch(
+  sources[expectedParts[2]],
+  /Subtitlecat|renderSubtitleSection|loadSubtitles/,
+  'subtitle search must stay on its own card'
+);
 
 console.log('JLC resource center module tests passed');

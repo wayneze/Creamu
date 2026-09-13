@@ -73,6 +73,66 @@
         return value;
     }
 
+    function estimateTrackingUnreadTotal(record, options = {}) {
+        const pageSize = Math.max(0, Math.floor(Number(options.pageSize || record?.page_size_hint || 0) || 0));
+        const topPage = Math.max(0, Math.floor(Number(options.topPage || record?.top_page_hint || 0) || 0));
+        const localPage = Math.max(0, Math.floor(Number(options.localPage || 0) || 0));
+        const seenPage = Math.max(0, Math.floor(Number(options.seenPage || record?.last_seen_page_hint || localPage || 0) || 0));
+        const localUnreadRaw = Number(options.localUnread);
+        const localFound = options.localFound === true && Number.isFinite(localUnreadRaw) && localUnreadRaw >= 0;
+        const localUnread = localFound ? Math.max(0, Math.floor(localUnreadRaw)) : 0;
+
+        if (localFound && options.spanCovered === true) return localUnread;
+        if (localFound && (!topPage || !localPage || topPage === localPage)) return localUnread;
+        if (localFound && pageSize > 0 && topPage > 0 && localPage > 0) {
+            return Math.abs(topPage - localPage) * pageSize + localUnread;
+        }
+        if (topPage > 0 && seenPage > 0 && pageSize > 0 && topPage !== seenPage) {
+            return Math.abs(topPage - seenPage) * pageSize + (localFound ? localUnread : 0);
+        }
+        if (localFound) return localUnread;
+        return -1;
+    }
+
+    function planTrackingUnreadPageWalk(options = {}) {
+        const mode = options.mode === 'backfill' ? 'backfill' : 'forward';
+        const startPage = Math.max(1, Math.floor(Number(options.startPage || 0) || 1));
+        const seenPage = Math.max(0, Math.floor(Number(options.seenPage || 0) || 0));
+        const lastPage = Math.max(0, Math.floor(Number(options.lastPage || 0) || 0));
+        const maxExtraPages = Math.min(20, Math.max(0, Math.floor(Number(options.maxExtraPages || 8) || 8)));
+        const step = mode === 'backfill' ? -1 : 1;
+        const extraPages = [];
+        let page = startPage + step;
+        while (extraPages.length < maxExtraPages) {
+            if (page < 1) break;
+            if (lastPage > 0 && page > lastPage) break;
+            if (seenPage > 0) {
+                if (step > 0 && page > seenPage) break;
+                if (step < 0 && page < seenPage) break;
+            } else if (!(lastPage > 0)) {
+                break;
+            }
+            extraPages.push(page);
+            if (seenPage > 0 && page === seenPage) break;
+            page += step;
+        }
+        let remainingPages = 0;
+        if (seenPage > 0) {
+            const cursor = extraPages.length ? extraPages[extraPages.length - 1] + step : startPage + step;
+            if (step > 0) remainingPages = cursor <= seenPage ? (seenPage - cursor + 1) : 0;
+            else remainingPages = cursor >= seenPage && cursor >= 1 ? (cursor - seenPage + 1) : 0;
+        }
+        return { mode, startPage, seenPage, lastPage, step, extraPages, remainingPages };
+    }
+
+    function applyTrackingUnreadEstimate(record, unread, options = {}) {
+        if (!record || typeof record !== 'object') return record;
+        const value = Math.max(0, Math.floor(Number(unread) || 0));
+        record.unread_estimate = value;
+        record.unread_span = options.span !== false;
+        return record;
+    }
+
     function getTrackingUnreadMetrics(record) {
         const topCode = normalizeCode(record?.top_avid || '');
         const seenCode = normalizeCode(record?.last_seen_avid || '');
@@ -82,11 +142,16 @@
         const unreadEstimate = Number(record?.unread_estimate || 0) || 0;
         const pageSizeHint = Number(record?.page_size_hint || 0) || 0;
         const pageDelta = topPage > 0 && seenPage > 0 ? Math.abs(topPage - seenPage) : 0;
-        const estimatedCount = hasUpdate
-            ? ((pageDelta > 0 && pageSizeHint > 0)
-                ? (pageDelta * pageSizeHint + unreadEstimate)
-                : unreadEstimate)
-            : 0;
+        const spanComplete = record?.unread_span === true || record?.unread_span === 1;
+        let estimatedCount = 0;
+        if (hasUpdate) {
+            if (spanComplete && unreadEstimate > 0) estimatedCount = unreadEstimate;
+            else if (pageDelta > 0 && pageSizeHint > 0) {
+                estimatedCount = pageDelta * pageSizeHint + (spanComplete ? 0 : unreadEstimate);
+            } else {
+                estimatedCount = unreadEstimate;
+            }
+        }
         return {
             hasUpdate,
             topPage,
@@ -351,7 +416,7 @@
             record.last_seen_at = now;
             record.last_seen_page_hint = pageHint;
             record.last_found_at = now;
-            record.unread_estimate = 0;
+            applyTrackingUnreadEstimate(record, 0);
             record.check_status = 'latest';
             record.check_note = '初始断点已设为当前首项';
         }
@@ -364,7 +429,14 @@
             record.last_found_at = now;
             const explicitUnreadEstimate = Number(options.explicitLastSeen.unread_estimate);
             if (Number.isFinite(explicitUnreadEstimate) && explicitUnreadEstimate >= 0) {
-                record.unread_estimate = Math.max(0, Math.floor(explicitUnreadEstimate));
+                const totalUnread = estimateTrackingUnreadTotal(record, {
+                    localUnread: explicitUnreadEstimate,
+                    localFound: true,
+                    localPage: record.last_seen_page_hint,
+                    topPage: record.top_page_hint,
+                    pageSize: record.page_size_hint
+                });
+                applyTrackingUnreadEstimate(record, totalUnread >= 0 ? totalUnread : explicitUnreadEstimate);
             }
             record.check_status = record.top_avid && normalizeCode(record.top_avid) === normalizeCode(record.last_seen_avid) ? 'latest' : 'checked';
             record.check_note = '断点已更新';
@@ -394,7 +466,7 @@
         record.last_seen_at = now;
         record.last_seen_page_hint = pageHint;
         record.last_found_at = now;
-        record.unread_estimate = 0;
+        applyTrackingUnreadEstimate(record, 0);
         record.check_status = 'latest';
         record.check_note = '已设为已读';
         await saveTrackingRecord(record);

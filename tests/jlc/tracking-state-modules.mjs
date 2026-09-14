@@ -36,6 +36,13 @@ assert.doesNotMatch(stateSource, /async function refreshSingleTrackingRecord/);
 assert.match(refreshSource, /async function refreshSingleTrackingRecord/);
 assert.match(refreshSource, /async function refreshAllTrackingSearches/);
 assert.doesNotMatch(refreshSource, /function getCurrentTrackingPageContext/);
+const uiSource = fs.readFileSync(path.join(partsRoot, expectedParts[3]), 'utf8');
+assert.match(uiSource, /async function continueTrackingBreakpointSearch/);
+assert.doesNotMatch(
+  uiSource,
+  /maxStepsPerDirection|maxTotalSteps|已连续翻到限制页数/,
+  'one continue-breakpoint click must keep walking until hit, boundary, or request failure'
+);
 
 function extract(source, pattern, label) {
   const match = source.match(pattern);

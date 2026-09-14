@@ -2,7 +2,7 @@
 // @name         Creamu · JavLibrary
 // @name:zh-CN   Creamu · JavLibrary
 // @namespace    https://github.com/wayneze/Creamu
-// @version      3.8.4
+// @version      3.8.5
 // @description  Creamu：JavLibrary 奶油工作台；WebDAV 同步；追更 / Emby / 备份
 // @author       wayneze
 // @include      *javbus.com/*
@@ -13379,20 +13379,21 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (!grid) return null;
 
         trackingPageSearchPromise = (async () => {
-            const maxStepsPerDirection = 12;
-            const maxTotalSteps = 18;
-            let totalStep = 0;
             let lastFailure = '';
+            const visitedUrls = new Set();
             for (const direction of availableDirections) {
                 let nextUrl = directionSeeds[direction];
                 if (!nextUrl) continue;
                 let refererUrl = location.href;
-                let directionStep = 0;
                 const directionLabel = getTrackingBreakpointDirectionLabel(direction);
                 setContinueBreakpointProgress({ loading: true, text: '正在' + directionLabel + '查找…' });
-                while (nextUrl && directionStep < maxStepsPerDirection && totalStep < maxTotalSteps) {
-                    directionStep += 1;
-                    totalStep += 1;
+                while (nextUrl) {
+                    const visitKey = compactText(nextUrl);
+                    if (!visitKey || visitedUrls.has(visitKey)) {
+                        cursorState[direction] = '';
+                        break;
+                    }
+                    visitedUrls.add(visitKey);
                     cursorState[direction] = nextUrl || '';
                     const response = await requestPageWithBrowserFetch(nextUrl, buildTrackingPageRequestOptions(nextUrl, refererUrl, { timeout: 18000 }));
                     if (!response.ok || !response.responseText) {
@@ -13440,15 +13441,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                         await delayMs(480 + Math.random() * 320);
                     }
                 }
-                if (directionStep >= maxStepsPerDirection || totalStep >= maxTotalSteps) {
-                    lastFailure = '已连续翻到限制页数，断点还没出现';
-                    break;
-                }
             }
             const remainingDirections = directions.filter(direction => !!(trackingPageState.breakpointCursor || {})[direction]);
             setContinueBreakpointProgress({ loading: false });
             if (remainingDirections.length) {
-                showAlert(lastFailure ? ('断点定位未完成：' + lastFailure) : '这次先翻到这里，再点一次「继续断点」即可。');
+                showAlert(lastFailure ? ('断点定位未完成：' + lastFailure) : '断点定位未完成，可再点一次「继续断点」。');
                 return null;
             }
             showAlert(lastFailure ? ('断点定位失败：' + lastFailure) : '已经翻到前后边界，仍未找到断点。');

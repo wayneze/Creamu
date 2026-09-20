@@ -127,7 +127,7 @@
       '<span class="exc-track-status" id="exc-track-status">未收藏</span>' +
       '<div class="exc-track-actions">' +
       // 继续断点放最前：有断点时最显眼，不再排在「已追更」后面
-      '<button type="button" class="jlc-wb-btn primary exc-track-btn exc-bp-continue" id="exc-goto-bp" hidden title="跳到断点作品并定位">继续断点</button>' +
+      '<button type="button" class="jlc-wb-btn primary exc-track-btn exc-bp-continue" id="exc-goto-bp" hidden title="在当前列表向后加载直到命中断点">继续断点</button>' +
       '<button type="button" class="jlc-wb-btn ghost exc-track-btn" id="exc-save-tracking">⭐ 收藏追更</button>' +
       '<button type="button" class="jlc-wb-btn ghost exc-track-btn" id="exc-untrack" hidden title="从追更列表移除">取消追更</button>' +
       '</div>' +
@@ -148,7 +148,7 @@
             ? await findTrackingForContext(ctx)
             : await getTrackingBySignature(ctx.query_signature);
         if (!rec) return;
-        await openTrackingBreakpoint(rec);
+        await continueTrackingBreakpointSearch(rec);
       };
     }
     const untrack = document.getElementById('exc-untrack');
@@ -225,9 +225,18 @@
       btn.title = '已在追更列表';
       if (untrack) untrack.hidden = false;
       const hasBp = trackingHasAnyBreakpoint(rec);
+      const searching =
+        typeof trackingBreakpointSearchRuntime !== 'undefined' &&
+        trackingBreakpointSearchRuntime &&
+        trackingBreakpointSearchRuntime.active;
       if (gotoBp) {
-        gotoBp.hidden = !hasBp;
-        if (hasBp) {
+        gotoBp.hidden = !hasBp && !searching;
+        if (searching) {
+          gotoBp.disabled = true;
+          gotoBp.classList.add('is-loading');
+        } else if (hasBp) {
+          gotoBp.disabled = false;
+          gotoBp.classList.remove('is-loading');
           const bpPage = Number(rec.breakpoint_page);
           const bpPageLabel =
             Number.isFinite(bpPage) && bpPage >= 0
@@ -245,10 +254,10 @@
             ? '继续断点 · ' + bpPosted
             : '继续断点 · 第' + bpPageLabel + '页';
           gotoBp.title =
-            '定位断点作品' +
+            '在当前列表加载直到命中断点' +
             (bpTitle ? '「' + bpTitle + '」' : '') +
             (bpPosted ? ' · ' + bpPosted : '') +
-            '（列表第 ' +
+            '（约第 ' +
             bpPageLabel +
             ' 页）· 在封面点「断」可改断点';
         }
@@ -297,7 +306,10 @@
           latest.last_browsed_at = nowMs();
           if (latest.open_url && typeof canonicalizeTrackingOpenUrl === 'function') {
             const canon = canonicalizeTrackingOpenUrl(latest.open_url);
-            if (latest.open_url !== canon) {
+            const losesIdentity =
+              typeof trackingOpenUrlLosesIdentity === 'function' &&
+              trackingOpenUrlLosesIdentity(latest.open_url, canon);
+            if (latest.open_url !== canon && !losesIdentity) {
               latest.open_url = canon;
               latest.page_url = canon;
             }

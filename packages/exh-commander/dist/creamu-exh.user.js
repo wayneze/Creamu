@@ -2,7 +2,7 @@
 // @name         Creamu · ExH
 // @name:zh-CN   Creamu · ExH
 // @namespace    https://github.com/wayneze/Creamu
-// @version      0.9.53
+// @version      0.9.60
 // @description  Creamu：e/exhentai 奶油工作台；WebDAV 同步；LRR 只读对照
 // @author       wayneze
 // @match        *://e-hentai.org/*
@@ -13,21 +13,25 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_addValueChangeListener
 // @grant        GM_setClipboard
+// @grant        GM_openInTab
 // @connect      *
 // @run-at       document-idle
 // ==/UserScript==
 
 (function () {
   'use strict';
-  const VERSION = '0.9.53';
+  const VERSION = '0.9.60';
   const NS = 'exh-commander';
   const DB_NAME = 'exh_commander_db';
   const DB_VERSION = 2;
   const GM_CFG_KEY = 'exh_commander_config_v1';
   const GM_SESSION_KEY = 'exh_commander_session_v1';
+  const WORKBENCH_PAGE_UI_KEY = 'exc_wb_page_ui_v1';
   const GM_LRR_META_KEY = 'exh_commander_lrr_meta_v1';
   const GM_SEEN_GIDS_KEY = 'exh_commander_seen_gids_v1';
+  const GM_TRACKING_REV_KEY = 'exh_commander_tracking_rev_v1';
 
   /** 本机专用配置，不进 WebDAV / 备份的 config 段 */
   const CONFIG_LOCAL_ONLY_KEYS = [
@@ -101,13 +105,7 @@
     /** 追更检查更新：每条请求间隔（ms），默认 5～10 秒防限流 */
     tracking_check_interval_min_ms: 5000,
     tracking_check_interval_max_ms: 10000,
-    /**
-     * 检查更新时是否跨页精确数未读（慢）。
-     * false（默认）：只拉首页；断点不在首页则用断点页码估算。
-     * true：从首页向后扫到断点（page=/next=）。
-     */
-    tracking_unread_deep_scan: false,
-    /** 深度扫描最大页数（仅 deep_scan 开启时） */
+    /** 检查更新从首页向后翻到断点的最大页数 */
     tracking_unread_scan_max_pages: 12,
     webdav_enabled: false,
     webdav_url: 'https://dav.jianguoyun.com/dav/',
@@ -179,7 +177,6 @@
       if (!Number.isFinite(hi) || hi < lo) hi = Math.max(lo, DEFAULT_CONFIG.tracking_check_interval_max_ms);
       config.tracking_check_interval_min_ms = Math.min(60000, lo);
       config.tracking_check_interval_max_ms = Math.min(120000, Math.max(config.tracking_check_interval_min_ms, hi));
-      config.tracking_unread_deep_scan = config.tracking_unread_deep_scan === true;
       let maxP = Math.floor(Number(config.tracking_unread_scan_max_pages));
       if (!Number.isFinite(maxP) || maxP < 1) maxP = DEFAULT_CONFIG.tracking_unread_scan_max_pages;
       config.tracking_unread_scan_max_pages = Math.min(40, Math.max(1, maxP));
@@ -265,7 +262,87 @@
     return config;
   }
 
+  let workbenchSessionCache = null;
+
+  function isWorkbenchDomOpen() {
+    try {
+      const wb = typeof document !== 'undefined' ? document.getElementById('jlc-wb') : null;
+      return !!(wb && wb.classList && wb.classList.contains('is-open'));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function getWorkbenchPageInstanceId() {
+    try {
+      const name = String(window.name || '');
+      if (name.startsWith('exc-wb:')) return name.slice(7);
+    } catch (_) { /* ignore */ }
+    return '';
+  }
+
+  function readStoredWorkbenchPageUi() {
+    try {
+      const raw = sessionStorage.getItem(WORKBENCH_PAGE_UI_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function assignWorkbenchPageInstanceId(id) {
+    const nextId = compactText(id || '');
+    if (!nextId) return '';
+    try {
+      const current = String(window.name || '');
+      if (!current || current.startsWith('exc-wb:')) window.name = 'exc-wb:' + nextId;
+    } catch (_) { /* ignore */ }
+    return getWorkbenchPageInstanceId() || nextId;
+  }
+
+  function ensureWorkbenchPageInstanceId() {
+    const stored = readStoredWorkbenchPageUi();
+    const storedId = compactText(stored && stored.pageId);
+    // 本标签已有开合记录：window.name 被 GM_openInTab / 后台回收清掉时，写回去，不要当成新标签
+    if (storedId) return assignWorkbenchPageInstanceId(storedId);
+    // 新标签常会抄到 opener 的 window.name；没有本页记录就另起身份，避免和原页撞名
+    const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    return assignWorkbenchPageInstanceId(id);
+  }
+
+  function readWorkbenchPageUi() {
+    try {
+      const parsed = readStoredWorkbenchPageUi();
+      if (!parsed) return { open: false };
+      const storedId = compactText(parsed.pageId);
+      let pageId = getWorkbenchPageInstanceId();
+      if (!pageId && storedId) pageId = assignWorkbenchPageInstanceId(storedId);
+      if (pageId && storedId && storedId !== pageId) return { open: false };
+      return { open: parsed.open === true };
+    } catch (_) {
+      return { open: false };
+    }
+  }
+
+  function writeWorkbenchPageUi(open) {
+    try {
+      sessionStorage.setItem(
+        WORKBENCH_PAGE_UI_KEY,
+        JSON.stringify({
+          pageId: ensureWorkbenchPageInstanceId(),
+          open: !!open,
+        })
+      );
+    } catch (_) { /* private mode / blocked storage */ }
+  }
+
   function loadSession() {
+    if (workbenchSessionCache) {
+      if (isWorkbenchDomOpen()) workbenchSessionCache.open = true;
+      return workbenchSessionCache;
+    }
     const raw = typeof GM_getValue === 'function' ? GM_getValue(GM_SESSION_KEY, null) : null;
     const saved = typeof raw === 'string' ? safeJsonParse(raw, null) : raw;
     const base = {
@@ -281,18 +358,24 @@
     // 旧会话默认 open=true：升级时先收起一次
     const prevVer = Number(saved && saved.session_version);
     if (!Number.isFinite(prevVer) || prevVer < 2) {
-      next.open = false;
       next.session_version = 2;
     } else {
-      next.open = next.open === true;
       next.session_version = Math.max(2, prevVer);
     }
+    // 开合只属于当前标签：活着的面板优先，否则读本页 sessionStorage
+    next.open = isWorkbenchDomOpen() || readWorkbenchPageUi().open === true;
+    workbenchSessionCache = next;
     return next;
   }
 
   function saveSession(session) {
+    const current = session || workbenchSessionCache || {};
+    if (isWorkbenchDomOpen()) current.open = true;
+    workbenchSessionCache = current;
+    writeWorkbenchPageUi(current.open === true);
     if (typeof GM_setValue === 'function') {
-      GM_setValue(GM_SESSION_KEY, JSON.stringify(session || {}));
+      // 共享存储始终写成收起，避免追更开出的新页把面板带过去/带回来
+      GM_setValue(GM_SESSION_KEY, JSON.stringify(Object.assign({}, current, { open: false })));
     }
   }
 
@@ -355,6 +438,35 @@
     read: '已读',
     dropped: '抛弃',
   };
+
+  function openUrlInNewTab(url) {
+    const href = compactText(url);
+    if (!href) return false;
+    try {
+      if (typeof GM_openInTab === 'function') {
+        GM_openInTab(href, { active: true, insert: true, setParent: true });
+        return true;
+      }
+    } catch (_) { /* fall through */ }
+    try {
+      if (typeof document !== 'undefined' && document.body) {
+        const anchor = document.createElement('a');
+        anchor.href = href;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        return true;
+      }
+    } catch (_) { /* fall through */ }
+    try {
+      return !!(typeof window !== 'undefined' && window.open(href, '_blank', 'noopener,noreferrer'));
+    } catch (_) {
+      return false;
+    }
+  }
 
   function gmRequest(options) {
     return new Promise((resolve, reject) => {
@@ -571,14 +683,72 @@
         .exc-tool-btn.is-on { opacity: 1; color: #e8a24e; text-shadow: 0 0 8px rgba(232,162,78,.45); }
         .exc-tool-btn.is-bp { opacity: 1; color: #ff8a7a; font-weight: 800; text-shadow: 0 0 8px rgba(255,95,86,.4); }
         .exc-tool-btn.is-want { opacity: 1; color: #7dd3fc; text-shadow: 0 0 8px rgba(125,211,252,.4); }
-        /* 断点作品：洋红描边，别跟点过/库内/心动混 */
-        .exc-gl-item.is-exc-breakpoint {
-            outline: 2px solid rgba(232, 72, 90, 0.95) !important;
-            outline-offset: -2px;
-            box-shadow: 0 0 0 1px rgba(232, 72, 90, 0.25), 0 6px 16px rgba(180, 40, 50, 0.15) !important;
+        /* 断点作品：整卡外框；表格行打在格子上，tr 自己的 outline 几乎看不见 */
+        .exc-gl-item.is-exc-breakpoint,
+        .gl1t.exc-gl-item.is-exc-breakpoint,
+        .gl2t.exc-gl-item.is-exc-breakpoint {
+            outline: 3px solid #ff5f56 !important;
+            outline-offset: 3px;
+            box-shadow: 0 0 0 1px rgba(255,95,86,.18), 0 0 22px rgba(255,95,86,.22) !important;
+            position: relative !important;
+            z-index: 3;
+        }
+        tr.exc-gl-item.is-exc-breakpoint > td {
+            box-shadow: inset 0 0 0 2px #ff5f56 !important;
         }
         tr.exc-gl-item.is-exc-breakpoint > td.gl1e {
-            box-shadow: inset 3px 0 0 #e8485a !important;
+            box-shadow: inset 3px 0 0 #ff5f56, inset 0 0 0 2px #ff5f56 !important;
+        }
+        .exc-gl-item.is-exc-breakpoint.is-exc-bp-locating,
+        tr.exc-gl-item.is-exc-breakpoint.is-exc-bp-locating > td {
+            animation: exc-bp-pulse 0.9s ease-in-out 2;
+        }
+        @keyframes exc-bp-pulse {
+            0%, 100% { box-shadow: 0 0 0 1px rgba(255,95,86,.18), 0 0 22px rgba(255,95,86,.22); }
+            50% { box-shadow: 0 0 0 3px rgba(255,95,86,.45), 0 0 28px rgba(255,95,86,.4); }
+        }
+        .exc-tracking-divider:not(tr) {
+            margin: 8px 0 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #ff9b95;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .2px;
+            pointer-events: none;
+        }
+        .exc-tracking-divider:not(tr)::before,
+        tr.exc-tracking-divider td::before {
+            content: '断点';
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(255,95,86,.18);
+            border: 1px solid rgba(255,95,86,.45);
+            color: #ffb4af;
+            flex: 0 0 auto;
+        }
+        .exc-tracking-divider:not(tr)::after,
+        tr.exc-tracking-divider td::after {
+            content: '';
+            flex: 1 1 auto;
+            min-width: 24px;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(255,95,86,.55), rgba(255,95,86,.08));
+        }
+        tr.exc-tracking-divider td {
+            padding: 8px 6px 10px !important;
+            background: transparent !important;
+            border: 0 !important;
+            color: #ff9b95;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .exc-last-seen-mark {
             position: absolute; left: 4px; bottom: 4px; z-index: 22;
@@ -935,6 +1105,10 @@
             border-color: transparent !important; color: #fff !important;
             box-shadow: 0 3px 0 #b8322b, 0 6px 14px rgba(255,95,86,.22) !important;
             font-weight: 800 !important;
+        }
+        #exc-tracking-bar .exc-bp-continue.is-loading {
+            opacity: .78;
+            pointer-events: none;
         }
         #exc-tracking-bar .exc-track-btn {
             flex: 0 0 auto;
@@ -4671,8 +4845,17 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   ]);
   let idbSyncSuppress = false;
 
+  function notifyTrackingStoreChanged() {
+    if (idbSyncSuppress) return;
+    if (typeof GM_setValue !== 'function') return;
+    try {
+      GM_setValue(GM_TRACKING_REV_KEY, String(nowMs()) + ':' + Math.random().toString(36).slice(2, 8));
+    } catch (_) { /* private mode / blocked storage */ }
+  }
+
   function markIdbStoreDirty(store) {
     if (idbSyncSuppress) return;
+    if (store === STORE_TRACKING) notifyTrackingStoreChanged();
     if (!SYNCABLE_IDB_STORES.has(store)) return;
     if (typeof markCreamuLocalDirty === 'function') markCreamuLocalDirty();
   }
@@ -4752,8 +4935,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       }
     }
     await done;
-    if (!idbSyncSuppress && names.some((name) => SYNCABLE_IDB_STORES.has(name))) {
-      if (typeof markCreamuLocalDirty === 'function') markCreamuLocalDirty();
+    if (!idbSyncSuppress) {
+      if (names.indexOf(STORE_TRACKING) >= 0) notifyTrackingStoreChanged();
+      if (names.some((name) => SYNCABLE_IDB_STORES.has(name))) {
+        if (typeof markCreamuLocalDirty === 'function') markCreamuLocalDirty();
+      }
     }
     return count;
   }
@@ -6114,7 +6300,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           typeof canonicalizeTrackingOpenUrl === 'function'
             ? canonicalizeTrackingOpenUrl(context.open_url)
             : context.open_url;
-        if (one.open_url !== canon) {
+        const losesIdentity =
+          typeof trackingOpenUrlLosesIdentity === 'function' &&
+          trackingOpenUrlLosesIdentity(one.open_url, canon);
+        if (one.open_url !== canon && !losesIdentity) {
           one.open_url = canon;
           one.page_url = canon;
           dirty = true;
@@ -6144,6 +6333,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           keep.breakpoint_page = other.breakpoint_page;
           keep.breakpoint_url = other.breakpoint_url;
           keep.breakpoint_posted_at = other.breakpoint_posted_at;
+          keep.breakpoint_newer_gid = other.breakpoint_newer_gid;
+          keep.breakpoint_older_gid = other.breakpoint_older_gid;
         }
         if (!keep.top_gid && other.top_gid) {
           keep.top_gid = other.top_gid;
@@ -6170,8 +6361,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         typeof canonicalizeTrackingOpenUrl === 'function'
           ? canonicalizeTrackingOpenUrl(context.open_url)
           : context.open_url;
-      keep.open_url = canon;
-      keep.page_url = canon;
+      const losesIdentity =
+        typeof trackingOpenUrlLosesIdentity === 'function' &&
+        trackingOpenUrlLosesIdentity(keep.open_url, canon);
+      if (!losesIdentity) {
+        keep.open_url = canon;
+        keep.page_url = canon;
+      }
     }
     if (context.f_search) keep.f_search = context.f_search;
     if (context.label) keep.label = context.label;
@@ -6221,8 +6417,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
     if (existing && !options.forceNew) {
       existing.query_signature = context.query_signature || existing.query_signature;
-      existing.open_url = openCanon;
-      existing.page_url = openCanon;
+      const losesIdentity =
+        typeof trackingOpenUrlLosesIdentity === 'function' &&
+        trackingOpenUrlLosesIdentity(existing.open_url, openCanon);
+      if (!losesIdentity) {
+        existing.open_url = openCanon;
+        existing.page_url = openCanon;
+      }
       existing.label = context.label || existing.label;
       existing.group_type = context.group_type || existing.group_type;
       existing.f_search = context.f_search || existing.f_search;
@@ -6292,6 +6493,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       breakpoint_token: initialBreakpointToken,
       breakpoint_title: initialBreakpointTitle,
       breakpoint_posted_at: initialBreakpointPostedAt,
+      breakpoint_newer_gid: compactText(context.page_head_newer_gid || ''),
+      breakpoint_older_gid: compactText(context.page_head_older_gid || ''),
       breakpoint_page: initialBreakpointGid ? initialPage : '',
       breakpoint_page_known: initialBreakpointGid && initialPageKnown ? 1 : 0,
       breakpoint_page_mode: initialBreakpointGid ? compactText(context.page_mode || '') : '',
@@ -6508,6 +6711,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       out.breakpoint_url = remote.breakpoint_url || '';
       out.breakpoint_at = remote.breakpoint_at;
       out.breakpoint_posted_at = remote.breakpoint_posted_at || 0;
+      out.breakpoint_newer_gid = remote.breakpoint_newer_gid || '';
+      out.breakpoint_older_gid = remote.breakpoint_older_gid || '';
     } else if (local.breakpoint_gid) {
       out.breakpoint_gid = local.breakpoint_gid;
       out.breakpoint_token = local.breakpoint_token || out.breakpoint_token || '';
@@ -6516,6 +6721,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       out.breakpoint_url = local.breakpoint_url || out.breakpoint_url || '';
       out.breakpoint_at = local.breakpoint_at || out.breakpoint_at;
       out.breakpoint_posted_at = local.breakpoint_posted_at || out.breakpoint_posted_at || 0;
+      out.breakpoint_newer_gid = local.breakpoint_newer_gid || out.breakpoint_newer_gid || '';
+      out.breakpoint_older_gid = local.breakpoint_older_gid || out.breakpoint_older_gid || '';
     }
     // 未读：跟断点会变小，不能 Math.max 把旧大数粘回来；跟较新断点一侧
     const top = compactText(out.top_gid || '');
@@ -7221,6 +7428,97 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
   }
 
+  /** 搜索/收藏夹身份参数：EH 点「>」常只留下 next=，这些必须从首页补回 */
+  const TRACKING_LIST_IDENTITY_PARAMS = [
+    'f_search',
+    'f_cats',
+    'favcat',
+    'f_sh',
+    'f_sto',
+    'f_spf',
+    'f_spt',
+    'f_sfl',
+    'f_sfu',
+    'f_sft',
+    'f_sr',
+    'f_srdd',
+    'f_min',
+    'f_max',
+    'advsearch',
+  ];
+
+  function inheritTrackingListIdentity(url, homeUrl) {
+    try {
+      const home = new URL(homeUrl || '', location.origin);
+      const next = new URL(url || '', home);
+      if (home.pathname && home.pathname !== '/' && (next.pathname === '/' || next.pathname === '')) {
+        next.pathname = home.pathname;
+      }
+      TRACKING_LIST_IDENTITY_PARAMS.forEach((key) => {
+        const hv = home.searchParams.get(key);
+        if (hv != null && hv !== '' && !next.searchParams.has(key)) {
+          next.searchParams.set(key, hv);
+        }
+      });
+      return next.href;
+    } catch (_) {
+      return url || homeUrl || '';
+    }
+  }
+
+  /** 深页丢掉 f_search/favcat 后，禁止把 open_url 收成更宽的首页 */
+  function trackingOpenUrlLosesIdentity(previous, next) {
+    try {
+      const a = new URL(previous || '', location.origin);
+      const b = new URL(next || '', location.origin);
+      if (a.pathname && a.pathname !== '/' && (b.pathname === '/' || b.pathname === '')) return true;
+      for (let i = 0; i < TRACKING_LIST_IDENTITY_PARAMS.length; i++) {
+        const key = TRACKING_LIST_IDENTITY_PARAMS[i];
+        const av = compactText(a.searchParams.get(key) || '');
+        const bv = compactText(b.searchParams.get(key) || '');
+        if (av && !bv) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function isCurrentDocumentUrl(url) {
+    if (typeof location === 'undefined') return false;
+    try {
+      const parsed = new URL(url || '', location.origin);
+      const here = new URL(location.href, location.origin);
+      return parsed.pathname === here.pathname && parsed.search === here.search;
+    } catch (_) {
+      return compactText(url) === compactText(location.href);
+    }
+  }
+
+  /** 翻页 URL 丢掉身份后，用已恢复的搜索词/收藏夹把首页地址补回去 */
+  function applyRecoveredTrackingIdentity(parsed, parts) {
+    const fallback = canonicalizeTrackingOpenUrl(parsed && parsed.href);
+    try {
+      const u = new URL(fallback, location.origin);
+      if (parts.kind === 'favorites') {
+        if (!/favorites\.php/i.test(u.pathname || '')) u.pathname = '/favorites.php';
+        if (parts.favcat && parts.favcat !== 'all') u.searchParams.set('favcat', String(parts.favcat));
+        return u.href;
+      }
+      if (
+        (u.pathname === '/' || u.pathname === '') &&
+        parts.f_search &&
+        !u.searchParams.get('f_search') &&
+        !/^(favorites:|browse:|f_cats:|toplist$)/i.test(parts.f_search)
+      ) {
+        u.searchParams.set('f_search', parts.f_search);
+      }
+      return u.href;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   function parseExhPageContext(url) {
     let parsed;
     try {
@@ -7261,6 +7559,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     let favcat_label = '';
     let f_cats = compactText(params.get('f_cats') || '');
     let browse_key = '';
+    const currentDoc = isCurrentDocumentUrl(parsed.href);
 
     // /tag/artist:name  or /tag/group:foo/
     const tagMatch = path.match(/\/tag\/([^/?#]+)/i);
@@ -7290,7 +7589,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     } else if (kind === 'favorites') {
       group_type = 'favorites';
       const cat = params.get('favcat');
-      favcat = cat != null && cat !== '' ? String(cat) : 'all';
+      if (cat != null && cat !== '') {
+        favcat = String(cat);
+      } else if (currentDoc) {
+        // next=/prev= 常丢掉 favcat；用页上当前选中的收藏夹，不能默认成「全部」
+        try {
+          const sel =
+            document.querySelector('#favcat') ||
+            document.querySelector('select[name="favcat"]');
+          if (sel && sel.value != null && String(sel.value) !== '') favcat = String(sel.value);
+        } catch (_) { /* ignore */ }
+      }
+      if (!favcat) favcat = 'all';
       try {
         const sel =
           document.querySelector('#favcat option[selected]') ||
@@ -7315,17 +7625,26 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       label = '排行榜';
       f_search = 'toplist';
       browse_key = 'toplist';
-    } else if (f_search) {
-      label = f_search;
-      group_type = 'search';
-      if (/^artist:"/i.test(f_search) || /^artist:/i.test(f_search)) group_type = 'artist';
-      else if (/^group:"/i.test(f_search) || /^group:/i.test(f_search)) group_type = 'group';
-      else if (/^parody:"/i.test(f_search) || /^parody:/i.test(f_search)) group_type = 'parody';
-      else if (/^character:"/i.test(f_search)) group_type = 'character';
-      else if (/^female:"/i.test(f_search)) group_type = 'female';
-      else if (/^male:"/i.test(f_search)) group_type = 'male';
     } else {
-      if (f_cats && f_cats !== '0') {
+      if (!f_search && currentDoc && kind === 'list') {
+        // 搜索翻页后 URL 常只剩 next=；搜索框还在，不能把这条追更认成首页
+        try {
+          const box =
+            document.querySelector('input[name="f_search"]') ||
+            document.querySelector('#f_search');
+          if (box && box.value) f_search = compactText(box.value);
+        } catch (_) { /* ignore */ }
+      }
+      if (f_search) {
+        label = f_search;
+        group_type = 'search';
+        if (/^artist:"/i.test(f_search) || /^artist:/i.test(f_search)) group_type = 'artist';
+        else if (/^group:"/i.test(f_search) || /^group:/i.test(f_search)) group_type = 'group';
+        else if (/^parody:"/i.test(f_search) || /^parody:/i.test(f_search)) group_type = 'parody';
+        else if (/^character:"/i.test(f_search)) group_type = 'character';
+        else if (/^female:"/i.test(f_search)) group_type = 'female';
+        else if (/^male:"/i.test(f_search)) group_type = 'male';
+      } else if (f_cats && f_cats !== '0') {
         group_type = 'category';
         label = '分类 f_cats=' + f_cats;
         f_search = 'f_cats:' + f_cats;
@@ -7391,7 +7710,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       }
     }
 
-    const open_url = canonicalizeTrackingOpenUrl(parsed.href);
+    const open_url = applyRecoveredTrackingIdentity(parsed, {
+      kind,
+      f_search,
+      favcat,
+    });
     const query_signature = buildTrackingQuerySignature({
       site,
       group_type,
@@ -8465,6 +8788,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         );
       }
       if (posted) rec.breakpoint_posted_at = posted;
+      const neighbors = resolveBreakpointNeighbors(rec.breakpoint_gid, {
+        newerGid: opts.newerGid,
+        olderGid: opts.olderGid,
+        gids: opts.gids,
+        live: !fromGallery,
+      });
+      rec.breakpoint_newer_gid = neighbors.newer;
+      rec.breakpoint_older_gid = neighbors.older;
     }
     // 设断点后回写未读（画廊页无列表 DOM，跳过估数）
     try {
@@ -8606,13 +8937,19 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       40,
       Math.max(8, Math.floor(Number(config.tracking_unread_scan_max_pages) || 20))
     );
-    const scan = await scanTrackingUnreadAcrossPages(home, bp, { maxPages: maxPages });
+    const scan = await scanTrackingUnreadAcrossPages(home, bp, {
+      maxPages: maxPages,
+      newerGid: rec.breakpoint_newer_gid,
+      olderGid: rec.breakpoint_older_gid,
+    });
     if (scan.topGal && scan.topGal.gid) {
       rec.top_gid = String(scan.topGal.gid);
       if (scan.topGal.token) rec.top_token = compactText(scan.topGal.token);
       if (scan.topGal.title) rec.top_title = String(scan.topGal.title).slice(0, 160);
       if (scan.topGal.cover) applyTrackingCoverFields(rec, scan.topGal.cover);
     }
+    rec.breakpoint_missing = 0;
+    rec.breakpoint_anchor_kind = '';
     if (scan.found) {
       // 精确值：跟断点后应比旧未读小（或相等）；异常偏高时取较小者
       let n = Math.max(0, Number(scan.count) || 0);
@@ -8620,6 +8957,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       rec.unread_estimate = n;
       rec.unread_estimate_capped = 0;
       rec.unread_estimate_source = 'deep_scan';
+      rec.breakpoint_anchor_kind = scan.kind || 'exact';
+      rec.last_check_error = '';
       rec.has_update = n > 0 ? 1 : 0;
       if (scan.pagesScanned > 0) {
         rec.breakpoint_page = Math.max(0, scan.pagesScanned - 1);
@@ -8628,6 +8967,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       }
     } else {
       rec.has_update = 1;
+      rec.breakpoint_missing = 1;
       const floor = Math.max(0, Number(scan.count) || 0);
       // 未扫到断点：用已扫条数作下限；若有旧值则取 min（跟断后不应更大）
       if (floor > 0) {
@@ -8639,20 +8979,58 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         rec.unread_estimate = prevEst;
         rec.unread_estimate_capped = 1;
       }
-      if (scan.lastError) {
-        rec.last_check_error = String(scan.lastError).slice(0, 160);
-      }
+      rec.last_check_error = scan.lastError ? String(scan.lastError).slice(0, 160) : '';
     }
     rec.unread_scan_pages = scan.pagesScanned || 0;
     await saveTrackingRecord(rec);
     if (typeof showToast === 'function' && (scan.found || Number(rec.unread_estimate) >= 0)) {
       const n = Math.max(0, Math.floor(Number(rec.unread_estimate) || 0));
       if (scan.found) {
-        showToast(n > 0 ? '未读 +' + n : '已追上最新');
+        showToast(
+          n > 0
+            ? '未读 +' + n + (scan.kind && scan.kind !== 'exact' ? '（按相邻作品）' : '')
+            : '已追上最新'
+        );
       }
     }
     if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
     return rec;
+  }
+
+  function captureBreakpointNeighbors(gid, gids) {
+    const list = Array.isArray(gids) ? gids.map((value) => String(value || '')).filter(Boolean) : [];
+    const target = compactText(gid || '');
+    const idx = target ? list.indexOf(target) : -1;
+    if (idx < 0) return { newer: '', older: '' };
+    return {
+      newer: idx > 0 ? list[idx - 1] : '',
+      older: idx < list.length - 1 ? list[idx + 1] : '',
+    };
+  }
+
+  function getTrackingBreakpointNeighborGids(rec) {
+    return {
+      newer: compactText((rec && rec.breakpoint_newer_gid) || ''),
+      older: compactText((rec && rec.breakpoint_older_gid) || ''),
+    };
+  }
+
+  function resolveBreakpointNeighbors(gid, opts) {
+    opts = opts || {};
+    let newer = compactText(opts.newerGid || '');
+    let older = compactText(opts.olderGid || '');
+    const liveGids =
+      Array.isArray(opts.gids) && opts.gids.length
+        ? opts.gids
+        : opts.live !== false && typeof extractOrderedGidsFromDocument === 'function'
+          ? extractOrderedGidsFromDocument(document)
+          : [];
+    if ((!newer || !older) && liveGids && liveGids.length) {
+      const captured = captureBreakpointNeighbors(gid, liveGids);
+      if (!newer) newer = captured.newer;
+      if (!older) older = captured.older;
+    }
+    return { newer, older };
   }
 
   function trackingHasWorkBreakpoint(rec) {
@@ -8668,94 +9046,348 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     );
   }
 
-  /** 打开断点：优先原 breakpoint_url（含 next= 游标），否则 page= 跳转 */
+  let trackingBreakpointSearchRuntime = null;
+  let trackingBreakpointSearchCursor = { prev: '', next: '' };
+
+  function resetTrackingBreakpointSearchCursor() {
+    trackingBreakpointSearchCursor = { prev: '', next: '' };
+  }
+
+  function listItemGid(el) {
+    if (!el) return '';
+    if (el.dataset && compactText(el.dataset.excGid)) return compactText(el.dataset.excGid);
+    const card = typeof parseListCard === 'function' ? parseListCard(el) : null;
+    if (card && card.gid) return compactText(card.gid);
+    const link = el.querySelector && el.querySelector('a[href*="/g/"]');
+    const href = (link && (link.getAttribute('href') || link.href)) || '';
+    const match = String(href).match(/\/g\/(\d+)\//);
+    return match ? match[1] : '';
+  }
+
+  function findBreakpointListItem(gid) {
+    const target = compactText(gid || '');
+    if (!target) return null;
+    const items = typeof queryListItems === 'function' ? queryListItems() : [];
+    for (let i = 0; i < items.length; i++) {
+      if (listItemGid(items[i]) === target) return items[i];
+    }
+    return null;
+  }
+
+  function locateTrackingBreakpointOnPage(rec) {
+    const gid = compactText((rec && rec.breakpoint_gid) || '');
+    const neighbors = getTrackingBreakpointNeighborGids(rec);
+    const exact = gid ? findBreakpointListItem(gid) : null;
+    if (exact) {
+      return { found: true, proxy: false, kind: 'exact', gid, el: exact };
+    }
+    const older = neighbors.older ? findBreakpointListItem(neighbors.older) : null;
+    if (older) {
+      return { found: true, proxy: true, kind: 'older', gid: neighbors.older, el: older };
+    }
+    const newer = neighbors.newer ? findBreakpointListItem(neighbors.newer) : null;
+    if (newer) {
+      return { found: true, proxy: true, kind: 'newer', gid: neighbors.newer, el: newer };
+    }
+    return { found: false, proxy: false, kind: '', gid: '', el: null };
+  }
+
+  function getLiveListInsertRoot() {
+    const table = document.querySelector('#ido table.itg, table.itg');
+    if (table) return (table.tBodies && table.tBodies[0]) || table;
+    return (
+      document.querySelector('#ido .itg') ||
+      document.querySelector('.itg') ||
+      document.querySelector('#ido') ||
+      document.body
+    );
+  }
+
+  function getTrackingBreakpointSearchDirections(rec) {
+    const pageState =
+      typeof getListPageState === 'function' ? getListPageState(location.href, document) : null;
+    const current = pageState && pageState.known && pageState.index >= 0 ? pageState.index : -1;
+    const bpPage = Number(rec && rec.breakpoint_page);
+    if (current >= 0 && Number.isFinite(bpPage) && bpPage >= 0) {
+      if (current < bpPage) return ['next', 'prev'];
+      if (current > bpPage) return ['prev', 'next'];
+    }
+    return ['next', 'prev'];
+  }
+
+  function setContinueBreakpointProgress(options) {
+    options = options || {};
+    const btn = document.getElementById('exc-goto-bp');
+    if (!btn) return;
+    if (options.loading) {
+      btn.hidden = false;
+      btn.disabled = true;
+      btn.classList.add('is-loading');
+      btn.textContent = compactText(options.text) || '查找断点中…';
+    } else {
+      btn.disabled = false;
+      btn.classList.remove('is-loading');
+    }
+  }
+
+  function importTrackingListPageItems(html, baseUrl, direction) {
+    const imported = [];
+    let nextUrl = '';
+    let prevUrl = '';
+    const liveRoot = getLiveListInsertRoot();
+    if (!liveRoot || typeof DOMParser === 'undefined') {
+      return { imported, nextUrl, prevUrl };
+    }
+    let doc = null;
+    try {
+      doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    } catch (_) {
+      return { imported, nextUrl, prevUrl };
+    }
+    nextUrl = extractListNextPageUrl(doc, baseUrl);
+    prevUrl = extractListPrevPageUrl(doc, baseUrl);
+    const remoteItems = typeof queryListItems === 'function' ? queryListItems(doc) : [];
+    const seen = new Set(
+      typeof extractOrderedGidsFromDocument === 'function'
+        ? extractOrderedGidsFromDocument(document)
+        : []
+    );
+    const nodes = [];
+    remoteItems.forEach((el) => {
+      const card = typeof parseListCard === 'function' ? parseListCard(el) : null;
+      const gid = card && card.gid ? String(card.gid) : '';
+      if (!gid || seen.has(gid)) return;
+      seen.add(gid);
+      const node = document.importNode(el, true);
+      if (node.dataset) {
+        delete node.dataset.excEnhanced;
+        delete node.dataset.excTrackOpenBound;
+      }
+      nodes.push(node);
+    });
+    if (!nodes.length) return { imported, nextUrl, prevUrl };
+    const frag = document.createDocumentFragment();
+    nodes.forEach((node) => frag.appendChild(node));
+    if (direction === 'prev') {
+      let before = liveRoot.firstElementChild;
+      while (before && before.querySelector && before.querySelector('th')) {
+        before = before.nextElementSibling;
+      }
+      liveRoot.insertBefore(frag, before || null);
+    } else {
+      liveRoot.appendChild(frag);
+    }
+    return { imported: nodes, nextUrl, prevUrl };
+  }
+
+  /**
+   * 在当前列表向后/向前接页，直到命中断点作品或真正没有下一页。
+   * 不跳走、不另开标签、不拿「检查更新」的页数上限当停手条件。
+   */
+  async function continueTrackingBreakpointSearch(rec) {
+    if (!rec) return null;
+    if (trackingBreakpointSearchRuntime && trackingBreakpointSearchRuntime.active) {
+      showToast('正在查找断点…');
+      return trackingBreakpointSearchRuntime.pending;
+    }
+    const gid = compactText(rec.breakpoint_gid || '');
+    if (!gid) {
+      showToast('没有作品断点。请先在封面点「断」。');
+      return null;
+    }
+    if (scrollToTrackingBreakpoint(rec, { quietIfMissing: true })) {
+      resetTrackingBreakpointSearchCursor();
+      return true;
+    }
+
+    const home = canonicalizeTrackingOpenUrl(rec.open_url || rec.page_url || location.href);
+    const directions = getTrackingBreakpointSearchDirections(rec);
+    const currentGids =
+      typeof extractOrderedGidsFromDocument === 'function'
+        ? extractOrderedGidsFromDocument(document)
+        : [];
+    const inherit = (url) =>
+      url && typeof inheritTrackingListIdentity === 'function'
+        ? inheritTrackingListIdentity(url, home)
+        : url || '';
+    const cursor = trackingBreakpointSearchCursor || (trackingBreakpointSearchCursor = { prev: '', next: '' });
+    const seeds = {
+      next: inherit(
+        cursor.next ||
+          extractListNextPageUrl(document, location.href) ||
+          buildListUrlWithNextGid(home, currentGids[currentGids.length - 1])
+      ),
+      prev: inherit(cursor.prev || extractListPrevPageUrl(document, location.href)),
+    };
+    const available = directions.filter((direction) => !!seeds[direction]);
+    if (!available.length) {
+      showToast('前后都没有更多页面了。');
+      return null;
+    }
+    const runtime = { active: true, pending: null };
+    trackingBreakpointSearchRuntime = runtime;
+    runtime.pending = (async () => {
+      try {
+        const visited = new Set();
+        let lastFailure = '';
+        for (let d = 0; d < available.length; d++) {
+          const direction = available[d];
+          let url = seeds[direction];
+          if (!url) continue;
+          const label = direction === 'prev' ? '向前' : '向后';
+          let pages = 0;
+          setContinueBreakpointProgress({ loading: true, text: '正在' + label + '查找…' });
+          while (url) {
+            const visitKey = compactText(url).split('#')[0];
+            if (!visitKey || visited.has(visitKey)) {
+              cursor[direction] = '';
+              break;
+            }
+            visited.add(visitKey);
+            cursor[direction] = url;
+            pages += 1;
+            if (pages > 1) {
+              await (typeof sleepMs === 'function'
+                ? sleepMs(
+                    typeof pickTrackingPageScanDelayMs === 'function'
+                      ? pickTrackingPageScanDelayMs()
+                      : 400
+                  )
+                : new Promise((resolve) => setTimeout(resolve, 400)));
+            }
+            setContinueBreakpointProgress({
+              loading: true,
+              text: label + '第' + pages + '页…',
+            });
+            let html = '';
+            try {
+              html = await fetchTrackingPageHtml(url);
+            } catch (err) {
+              lastFailure = (err && err.message) || String(err || '请求失败');
+              break;
+            }
+            const imported = importTrackingListPageItems(html, url, direction);
+            if (imported.imported.length && typeof enhanceListPage === 'function') {
+              await enhanceListPage({ items: imported.imported, reapplyFold: true });
+              const last = imported.imported[imported.imported.length - 1];
+              try {
+                last.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              } catch (_) { /* ignore */ }
+            }
+            if (scrollToTrackingBreakpoint(rec, { quietIfMissing: true })) {
+              resetTrackingBreakpointSearchCursor();
+              setContinueBreakpointProgress({ loading: false });
+              return true;
+            }
+            let follow =
+              direction === 'prev'
+                ? imported.prevUrl || extractListPrevPageUrl(html, url)
+                : imported.nextUrl || extractListNextPageUrl(html, url);
+            if (!follow && direction !== 'prev' && imported.imported.length) {
+              const lastCard =
+                typeof parseListCard === 'function'
+                  ? parseListCard(imported.imported[imported.imported.length - 1])
+                  : null;
+              follow = buildListUrlWithNextGid(home, lastCard && lastCard.gid);
+            }
+            url = inherit(follow);
+            cursor[direction] = url || '';
+          }
+        }
+        const remaining = directions.filter(
+          (direction) => !!((trackingBreakpointSearchCursor || {})[direction])
+        );
+        setContinueBreakpointProgress({ loading: false });
+        if (remaining.length) {
+          showToast(lastFailure ? '断点查找中断：' + lastFailure : '断点查找中断');
+          return false;
+        }
+        showToast(
+          lastFailure
+            ? '断点查找失败：' + lastFailure
+            : '已经翻到前后边界，仍未找到断点（作品可能已下架）'
+        );
+        return false;
+      } finally {
+        runtime.active = false;
+        if (trackingBreakpointSearchRuntime === runtime) trackingBreakpointSearchRuntime = null;
+        if (typeof refreshTrackingBarState === 'function') void refreshTrackingBarState();
+      }
+    })();
+    return runtime.pending;
+  }
+
+  /** 当前列表则接页定位；否则新标签打开该搜索首页 */
   async function openTrackingBreakpoint(rec) {
     if (!rec) return;
-    const gid = compactText(rec.breakpoint_gid || '');
-    if (gid) {
-      try {
-        sessionStorage.setItem('exc_bp_scroll_gid', gid);
-      } catch (_) { /* ignore */ }
-    }
-    const bpUrl = compactText(rec.breakpoint_url || '');
-    let url = '';
-    // 游标断点：原 URL 最可靠（page= 重建对不上 next= 位置）
-    if (bpUrl && listUrlHasCursorNav(bpUrl)) {
-      url = bpUrl.split('#')[0];
-    } else if (bpUrl && (Number(rec.breakpoint_page) || 0) < 0) {
-      // 未知深页但存了 URL
-      url = bpUrl.split('#')[0];
-    } else {
-      const targetPage =
-        Number(rec.breakpoint_page) >= 0 ? Number(rec.breakpoint_page) : 0;
-      const base =
-        bpUrl || rec.open_url || rec.page_url || location.href;
-      // 从首页规范 URL 建 page=，避免 base 仍带 next=
-      const home = canonicalizeTrackingOpenUrl(base);
-      url = buildListUrlWithPage(home, targetPage);
-    }
-    try {
-      const savedPage = Number(rec.breakpoint_page);
-      if (rec.id && Number.isFinite(savedPage) && savedPage >= 0) {
-        sessionStorage.setItem('exc_trk_depth_' + rec.id, String(Math.floor(savedPage)));
-        sessionStorage.setItem('exc_trk_url_' + rec.id, url.split('#')[0]);
+    const ctx = typeof parseExhPageContext === 'function' ? parseExhPageContext(location.href) : null;
+    let onThisList = false;
+    if (ctx && ctx.trackable) {
+      if (rec.query_signature && ctx.query_signature === rec.query_signature) onThisList = true;
+      else if (typeof findTrackingForContext === 'function') {
+        try {
+          const current = await findTrackingForContext(ctx);
+          onThisList = !!(current && rec.id && current.id === rec.id);
+        } catch (_) { /* ignore */ }
       }
-    } catch (_) { /* ignore */ }
-    const here = location.href.split('#')[0];
-    if (url.split('#')[0] === here) {
-      void scrollToBreakpointGid(gid);
+    }
+    if (onThisList) {
+      await continueTrackingBreakpointSearch(rec);
       return;
     }
+    const url = rec.open_url || rec.page_url;
+    if (!url) {
+      showToast('没有可打开的地址');
+      return;
+    }
+    if (openUrlInNewTab(url)) return;
+    showToast('浏览器拦截了新标签，已改为本页打开');
     location.href = url;
   }
 
-  function scrollToBreakpointGid(gid) {
-    if (!gid) return false;
-    const items = document.querySelectorAll('.exc-gl-item, a[href*="/g/"]');
-    let target = null;
-    items.forEach((el) => {
-      if (target) return;
-      const g = el.dataset && el.dataset.excGid;
-      if (g && String(g) === String(gid)) {
-        target = el.classList && el.classList.contains('exc-gl-item') ? el : el.closest('.exc-gl-item') || el;
-        return;
+  function scrollToTrackingBreakpoint(rec, opts) {
+    opts = opts || {};
+    const hit = locateTrackingBreakpointOnPage(rec);
+    if (!hit.found || !hit.el) {
+      if (opts.quietIfMissing !== true) {
+        const gid = compactText((rec && rec.breakpoint_gid) || '');
+        showToast('本页未找到断点作品' + (gid ? ' g' + gid : '') + '，可能已翻页、下架或不在当前列表');
       }
-      const href = el.getAttribute && (el.getAttribute('href') || '');
-      const m = String(href).match(/\/g\/(\d+)\//);
-      if (m && m[1] === String(gid)) {
-        target = el.closest('.gl1t, tr, .exc-gl-item') || el;
-      }
-    });
-    if (!target) {
-      showToast('本页未找到断点作品 g' + gid + '，可能已翻页或不在当前列表');
       return false;
     }
-    document.querySelectorAll('.is-exc-breakpoint').forEach((n) => n.classList.remove('is-exc-breakpoint'));
-    target.classList.add('is-exc-breakpoint');
-    try {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } catch (_) {
-      target.scrollIntoView(true);
+    if (typeof applyTrackingBreakpointDecorations === 'function') {
+      applyTrackingBreakpointDecorations(rec, { locating: true });
+    } else {
+      document.querySelectorAll('.is-exc-breakpoint').forEach((n) => n.classList.remove('is-exc-breakpoint'));
+      hit.el.classList.add('is-exc-breakpoint');
     }
-    showToast('已定位到断点作品');
+    const marked =
+      document.querySelector('.is-exc-breakpoint') ||
+      document.querySelector('.exc-tracking-divider') ||
+      hit.el;
+    try {
+      marked.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (_) {
+      marked.scrollIntoView(true);
+    }
+    if (hit.kind === 'exact') showToast('已定位到断点作品');
+    else if (hit.kind === 'older') showToast('断点作品已下架，已停在它后面那部');
+    else showToast('断点作品已下架，已停在它前面那部');
+    const later =
+      (typeof window !== 'undefined' && window.setTimeout) ||
+      (typeof setTimeout === 'function' ? setTimeout : null);
+    if (later) {
+      later(() => {
+        document.querySelectorAll('.is-exc-bp-locating').forEach((node) => {
+          node.classList.remove('is-exc-bp-locating');
+        });
+      }, 1200);
+    }
     return true;
   }
 
-  function tryConsumeBreakpointScroll() {
-    let gid = '';
-    try {
-      gid = sessionStorage.getItem('exc_bp_scroll_gid') || '';
-      if (gid) sessionStorage.removeItem('exc_bp_scroll_gid');
-    } catch (_) {
-      return;
-    }
-    if (!gid) return;
-    // 等列表增强完再滚
-    setTimeout(() => {
-      if (!scrollToBreakpointGid(gid)) {
-        setTimeout(() => scrollToBreakpointGid(gid), 800);
-      }
-    }, 400);
+  function scrollToBreakpointGid(gid, opts) {
+    return scrollToTrackingBreakpoint({ breakpoint_gid: gid }, opts);
   }
 
   /** 列表点开作品时暂存追更上下文（画廊页/乐观跟断点） */
@@ -8778,6 +9410,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           // 当页序号（0 起），配合 pageIndex 算未读
           listIndex: payload.listIndex != null ? Number(payload.listIndex) : -1,
           pageLen: payload.pageLen != null ? Number(payload.pageLen) : 0,
+          newerGid: compactText(payload.newerGid || ''),
+          olderGid: compactText(payload.olderGid || ''),
           at: nowMs(),
         })
       );
@@ -9209,66 +9843,117 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   /** 相对锚点估算未读条数：found=锚点在本页，count=其前条数 */
-  function estimateUnreadFromGids(gids, anchorGid) {
+  function estimateUnreadFromGids(gids, anchorGid, opts) {
     const list = Array.isArray(gids) ? gids.map(String) : [];
-    const anchor = compactText(anchorGid || '');
-    if (!list.length || !anchor) return { found: false, count: 0, pageLen: list.length };
-    const idx = list.indexOf(anchor);
-    if (idx < 0) return { found: false, count: 0, pageLen: list.length };
-    return { found: true, count: idx, pageLen: list.length };
+    const pageLen = list.length;
+    const anchors = [];
+    const primary = compactText(anchorGid || '');
+    if (primary) anchors.push({ gid: primary, kind: 'exact', shift: 0 });
+    const older = compactText((opts && opts.olderGid) || '');
+    const newer = compactText((opts && opts.newerGid) || '');
+    if (older) anchors.push({ gid: older, kind: 'older', shift: 0 });
+    if (newer) anchors.push({ gid: newer, kind: 'newer', shift: 1 });
+    if (!list.length || !anchors.length) return { found: false, count: 0, pageLen, kind: '' };
+    for (let i = 0; i < anchors.length; i++) {
+      const idx = list.indexOf(anchors[i].gid);
+      if (idx < 0) continue;
+      return {
+        found: true,
+        count: Math.max(0, idx + anchors[i].shift),
+        pageLen,
+        kind: anchors[i].kind,
+      };
+    }
+    return { found: false, count: 0, pageLen, kind: '' };
   }
 
   /**
-   * 从列表 HTML 取「下一页」URL。
-   * 优先分页表 > / » 链（常带 next=gid）；其次任意 next=；再否则 null（由调用方用 page=/next= 拼）。
+   * 从列表文档取相邻页 URL。
+   * next：分页表 > / » 或 href 带 next=；prev：< / « 或 href 带 prev=。
+   * 不要取最大 page=，会直接跳到末页。
    */
-  function extractListNextPageUrl(html, baseUrl) {
+  function extractListAdjacentPageUrlFromDocument(doc, baseUrl, direction) {
+    if (!doc || !doc.querySelectorAll) return '';
     baseUrl = baseUrl || (typeof location !== 'undefined' ? location.href : '');
+    const wantNext = direction !== 'prev';
+    const cursorRe = wantNext ? /[?&]next=\d+/i : /[?&]prev=\d+/i;
+    const arrowRe = wantNext ? /^[>›»]+$/ : /^[<‹«]+$/;
+    const roots = doc.querySelectorAll('table.ptt, table.ptb, .ptt, .ptb');
+    const prefer = [];
+    const collect = (root) => {
+      if (!root || !root.querySelectorAll) return;
+      root.querySelectorAll('a[href]').forEach((a) => {
+        const t = compactText(a.textContent || '');
+        const href = a.getAttribute('href') || '';
+        if (!href || href === '#' || /^javascript:/i.test(href)) return;
+        let abs = '';
+        try {
+          abs = new URL(href, baseUrl).href;
+        } catch (_) {
+          return;
+        }
+        if (arrowRe.test(t) || cursorRe.test(href)) {
+          prefer.push(inheritTrackingListIdentity(abs, baseUrl));
+        }
+      });
+    };
+    for (let i = 0; i < roots.length; i++) collect(roots[i]);
+    if (!prefer.length) collect(doc);
+    for (let i = 0; i < prefer.length; i++) {
+      if (cursorRe.test(prefer[i])) return prefer[i];
+    }
+    return prefer[0] || '';
+  }
+
+  function extractListAdjacentPageUrl(html, baseUrl, direction) {
+    baseUrl = baseUrl || (typeof location !== 'undefined' ? location.href : '');
+    if (html && html.querySelectorAll && typeof html !== 'string') {
+      return extractListAdjacentPageUrlFromDocument(html, baseUrl, direction);
+    }
     const s = String(html || '');
     try {
       if (typeof DOMParser !== 'undefined') {
         const doc = new DOMParser().parseFromString(s, 'text/html');
-        const roots = doc.querySelectorAll('table.ptt, table.ptb, .ptt, .ptb');
-        const prefer = [];
-        const collect = (root) => {
-          if (!root) return;
-          root.querySelectorAll('a[href]').forEach((a) => {
-            const t = compactText(a.textContent || '');
-            const href = a.getAttribute('href') || '';
-            if (!href || href === '#' || /^javascript:/i.test(href)) return;
-            let abs = '';
-            try {
-              abs = new URL(href, baseUrl).href;
-            } catch (_) {
-              return;
-            }
-            // 只认明确「下一页」：> » ›，或 href 带 next=
-            // （不要取最大 page=，会直接跳到末页）
-            const isFwd = /^[>›»]+$/.test(t) || /[?&]next=\d+/i.test(href);
-            if (isFwd) prefer.push(abs);
-          });
-        };
-        for (let i = 0; i < roots.length; i++) collect(roots[i]);
-        if (!prefer.length) collect(doc);
-        for (let i = 0; i < prefer.length; i++) {
-          if (/[?&]next=\d+/i.test(prefer[i])) return prefer[i];
-        }
-        if (prefer.length) return prefer[0];
+        const fromDom = extractListAdjacentPageUrlFromDocument(doc, baseUrl, direction);
+        if (fromDom) return fromDom;
       }
     } catch (_) { /* regex */ }
-    let m = s.match(/href=["']([^"']*[?&]next=\d+[^"']*)["']/i);
+    const wantNext = direction !== 'prev';
+    let m = s.match(
+      wantNext
+        ? /href=["']([^"']*[?&]next=\d+[^"']*)["']/i
+        : /href=["']([^"']*[?&]prev=\d+[^"']*)["']/i
+    );
     if (m) {
       try {
-        return new URL(m[1].replace(/&amp;/g, '&'), baseUrl).href;
+        return inheritTrackingListIdentity(
+          new URL(m[1].replace(/&amp;/g, '&'), baseUrl).href,
+          baseUrl
+        );
       } catch (_) { /* ignore */ }
     }
-    m = s.match(/href=["']([^"']*)["'][^>]*>\s*(?:&gt;|>|›|»)\s*</i);
+    m = s.match(
+      wantNext
+        ? /href=["']([^"']*)["'][^>]*>\s*(?:&gt;|>|›|»)\s*</i
+        : /href=["']([^"']*)["'][^>]*>\s*(?:&lt;|<|‹|«)\s*</i
+    );
     if (m) {
       try {
-        return new URL(m[1].replace(/&amp;/g, '&'), baseUrl).href;
+        return inheritTrackingListIdentity(
+          new URL(m[1].replace(/&amp;/g, '&'), baseUrl).href,
+          baseUrl
+        );
       } catch (_) { /* ignore */ }
     }
     return '';
+  }
+
+  function extractListNextPageUrl(html, baseUrl) {
+    return extractListAdjacentPageUrl(html, baseUrl, 'next');
+  }
+
+  function extractListPrevPageUrl(html, baseUrl) {
+    return extractListAdjacentPageUrl(html, baseUrl, 'prev');
   }
 
   /** 用本页最后一条 gid 拼 next= 游标 URL（EH 翻页主路径） */
@@ -9282,7 +9967,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       u.searchParams.delete('seek');
       u.searchParams.delete('jump');
       u.searchParams.set('next', g);
-      return u.href;
+      return inheritTrackingListIdentity(u.href, homeUrl);
     } catch (_) {
       return '';
     }
@@ -9312,7 +9997,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       return { count: 0, capped: 0, has_update: 0, source: 'home_caught_up' };
     }
 
-    const onHome = estimateUnreadFromGids(homeGids, bp);
+    const onHome = estimateUnreadFromGids(homeGids, bp, {
+      newerGid: rec.breakpoint_newer_gid,
+      olderGid: rec.breakpoint_older_gid,
+    });
     if (onHome.found) {
       return {
         count: onHome.count,
@@ -9365,6 +10053,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const home = buildListUrlWithPage(canonicalizeTrackingOpenUrl(homeUrl), 0);
     const result = {
       found: false,
+      kind: '',
       count: 0,
       capped: 0,
       pagesScanned: 0,
@@ -9372,7 +10061,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       firstGids: [],
       lastError: '',
     };
-    if (!anchor) return result;
+    const neighborOpts = {
+      newerGid: compactText((opts && opts.newerGid) || ''),
+      olderGid: compactText((opts && opts.olderGid) || ''),
+    };
+    if (!anchor && !neighborOpts.newerGid && !neighborOpts.olderGid) return result;
 
     let url = home;
     let totalBefore = 0;
@@ -9413,9 +10106,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
       if (!gids.length) break;
 
-      const est = estimateUnreadFromGids(gids, anchor);
+      const est = estimateUnreadFromGids(gids, anchor, neighborOpts);
       if (est.found) {
         result.found = true;
+        result.kind = est.kind || 'exact';
         result.count = totalBefore + est.count;
         result.capped = 0;
         break;
@@ -9424,11 +10118,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
       // 下一页：HTML 链 → next=末 gid → page=N
       let nextUrl = extractListNextPageUrl(html, url);
+      if (nextUrl) nextUrl = inheritTrackingListIdentity(nextUrl, home);
       if (!nextUrl) {
         nextUrl = buildListUrlWithNextGid(home, gids[gids.length - 1]);
       }
       if (!nextUrl) {
-        nextUrl = buildListUrlWithPage(home, pages); // pages 已是下一页的 0 起下标
+        nextUrl = inheritTrackingListIdentity(buildListUrlWithPage(home, pages), home);
       }
       if (!nextUrl || nextUrl === url || seen.has(nextUrl)) break;
       // 避免 next 指回首页死循环
@@ -9610,7 +10305,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       return rec;
     }
 
-    const est = estimateUnreadFromGids(gids, anchor);
+    const est = estimateUnreadFromGids(gids, anchor, {
+      newerGid: rec.breakpoint_newer_gid,
+      olderGid: rec.breakpoint_older_gid,
+    });
 
     // 浏览/游标深页：禁止当页局部覆盖总量
     if (mode === 'browse' || (deepUnknown && !isFirst)) {
@@ -9672,7 +10370,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
    * 主动检查单条追更。
    * @param {object} rec
    * @param {{ deepScan?: boolean }} [opts]
-   *   deepScan：true 时跨页精确数未读（慢）；默认跟 config.tracking_unread_deep_scan
+   *   deepScan：false 才强制只看首页；默认从首页向后翻到断点。
    */
   async function refreshSingleTrackingRecord(rec, opts) {
     if (!rec) throw new Error('无记录');
@@ -9680,14 +10378,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const raw = rec.open_url || rec.page_url;
     if (!raw) throw new Error('无 URL');
     const home = buildListUrlWithPage(canonicalizeTrackingOpenUrl(raw), 0);
-    // 顺手纠正历史脏 open_url（带深页 page/next）
-    if (rec.open_url && rec.open_url !== home) {
+    // 顺手纠正历史脏 open_url（带深页 page/next）；丢掉 f_search/favcat 的首页不算纠正
+    if (
+      rec.open_url &&
+      rec.open_url !== home &&
+      !(typeof trackingOpenUrlLosesIdentity === 'function' && trackingOpenUrlLosesIdentity(rec.open_url, home))
+    ) {
       rec.open_url = home;
       rec.page_url = home;
     }
     const previousTop = compactText(rec.top_gid || '');
     const bp = compactText(rec.breakpoint_gid || '');
-    // 断点不在首页时默认跨页扫；否则只会得到假 +25。opts.deepScan===false 才强制快路径
+    // 断点不在首页时跨页扫；否则只会得到假 +25。opts.deepScan===false 才强制快路径
     const allowDeep = opts.deepScan !== false;
     rec.last_check_at = nowMs();
     rec.last_check_error = '';
@@ -9705,10 +10407,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     top = topGal && topGal.gid ? String(topGal.gid) : gids[0] || '';
 
     if (bp && top) {
-      const onHome = estimateUnreadFromGids(gids, bp);
+      const onHome = estimateUnreadFromGids(gids, bp, {
+        newerGid: rec.breakpoint_newer_gid,
+        olderGid: rec.breakpoint_older_gid,
+      });
       if (onHome.found) {
         scan = {
           found: true,
+          kind: onHome.kind || 'exact',
           count: onHome.count,
           capped: 0,
           pagesScanned: 1,
@@ -9726,6 +10432,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           ),
           seedHtml: homeHtml,
           seedUrl: home,
+          newerGid: rec.breakpoint_newer_gid,
+          olderGid: rec.breakpoint_older_gid,
         });
         if (scan.topGal) topGal = scan.topGal;
         if (scan.firstGids && scan.firstGids.length) gids = scan.firstGids;
@@ -9784,12 +10492,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       if (posted) rec.top_posted_at = posted;
 
       if (bp && scan) {
+        rec.breakpoint_missing = 0;
+        rec.breakpoint_anchor_kind = '';
         if (scan.found) {
           rec.unread_estimate = Math.max(0, Number(scan.count) || 0);
           rec.unread_estimate_capped = 0;
           rec.unread_estimate_source = usedDeep ? 'deep_scan' : 'home_exact';
+          rec.breakpoint_anchor_kind = scan.kind || 'exact';
+          rec.last_check_error = '';
           if (rec.unread_estimate > 0) rec.has_update = 1;
-          else if (top === bp) {
+          else if (top === bp || scan.kind === 'newer' || scan.kind === 'older') {
             rec.has_update = 0;
             rec.unread_estimate = 0;
             rec.unread_estimate_source = 'home_caught_up';
@@ -9813,8 +10525,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           }
           rec.unread_estimate_source = scan.source || 'page_formula';
         } else {
-          // 深度扫满仍未见断点
+          // 深度扫满仍未见断点：列表检查本身成功，只是作品可能已下架
           rec.has_update = 1;
+          rec.breakpoint_missing = 1;
           rec.unread_estimate = Math.max(
             Number(rec.unread_estimate) || 0,
             Number(scan.count) || 0,
@@ -9822,12 +10535,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           );
           rec.unread_estimate_capped = 1;
           rec.unread_estimate_source = 'deep_scan';
+          rec.last_check_error = '';
           if (scan.lastError) {
-            rec.last_check_error =
-              (rec.last_check_error ? rec.last_check_error + '；' : '') + scan.lastError;
-          } else if (scan.pagesScanned > 0) {
-            rec.last_check_error =
-              '断点未在前 ' + scan.pagesScanned + ' 页内找到（未读≥' + rec.unread_estimate + '）';
+            rec.last_check_error = scan.lastError;
           }
         }
         rec.unread_scan_pages = scan.pagesScanned || 0;
@@ -9990,7 +10700,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     });
   }
 
-  function queryListItems() {
+  function queryListItems(root) {
+    const scope = root && root.querySelectorAll ? root : document;
     const selectors = [
       'table.itg > tbody > tr',
       'table.itg tr',
@@ -10005,7 +10716,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const seen = new Set();
     const items = [];
     for (const sel of selectors) {
-      document.querySelectorAll(sel).forEach((el) => {
+      scope.querySelectorAll(sel).forEach((el) => {
         if (seen.has(el)) return;
         // skip header row
         if (el.querySelector && el.querySelector('th')) return;
@@ -10016,11 +10727,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       if (items.length) break;
     }
     if (!items.length) {
-      document.querySelectorAll('a[href*="/g/"]').forEach((a) => {
+      scope.querySelectorAll('a[href*="/g/"]').forEach((a) => {
         const row = a.closest('tr, .gl1t, .gl2t, .gl3t, .gl1e, .gl2e, li, div') || a.parentElement;
         if (row && !seen.has(row) && row.querySelectorAll) {
           // avoid grabbing entire body
-          if (row === document.body || row.id === 'gdt') return;
+          if (row === document.body || (row.id && row.id === 'gdt')) return;
           seen.add(row);
           items.push(row);
         }
@@ -11341,10 +12052,26 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
   }
 
+  function getListHoverPreviewAnchor(el) {
+    if (!el || !el.querySelector) return null;
+    const cover =
+      el.querySelector('.exc-cover-host') ||
+      el.querySelector('.glthumb') ||
+      el.querySelector('td.gl1e') ||
+      el.querySelector('.gl3t a[href*="/g/"]') ||
+      el.querySelector('.gl1t a[href*="/g/"]');
+    if (cover && cover !== el) return cover;
+    const img = el.querySelector('img');
+    if (!img) return null;
+    return img.closest('a[href*="/g/"], .glthumb, td.gl1e, .gl3t') || img;
+  }
+
   function bindListHoverPreview(el, partial) {
     if (!el || !partial || !partial.gid) return;
-    if (el.dataset.excHoverBound === '1') return;
-    el.dataset.excHoverBound = '1';
+    const anchor = getListHoverPreviewAnchor(el);
+    if (!anchor) return;
+    if (anchor.dataset.excHoverBound === '1') return;
+    anchor.dataset.excHoverBound = '1';
 
     let enterTimer = null;
     let localGen = 0;
@@ -11356,7 +12083,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       }
     };
 
-    el.addEventListener('mouseenter', () => {
+    // 只认封面：标题/标签/卡片空白不触发，避免列表贴太紧误开
+    anchor.addEventListener('mouseenter', () => {
       if (config.list_hover_preview === false) return;
       clearEnter();
       const my = ++localGen;
@@ -11368,11 +12096,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           clearTimeout(hoverPreviewHideTimer);
           hoverPreviewHideTimer = null;
         }
-        showHoverPreview(el, partial).catch(() => {});
+        showHoverPreview(anchor, partial).catch(() => {});
       }, delay);
     });
 
-    el.addEventListener('mouseleave', (ev) => {
+    anchor.addEventListener('mouseleave', (ev) => {
       clearEnter();
       localGen++;
       const to = ev.relatedTarget;
@@ -11395,9 +12123,84 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     if (!marker) {
       marker = document.createElement('span');
       marker.className = 'exc-last-seen-mark';
-      marker.textContent = '上次看到';
     }
+    marker.textContent = el.classList.contains('is-exc-bp-proxy') ? '断点附近' : '上次看到';
     if (marker.parentNode !== host) host.appendChild(marker);
+  }
+
+  function clearTrackingBreakpointDecorations() {
+    document.querySelectorAll('.exc-tracking-divider').forEach((node) => node.remove());
+    document.querySelectorAll('.is-exc-breakpoint, .is-exc-bp-proxy, .is-exc-bp-locating').forEach((el) => {
+      el.classList.remove('is-exc-breakpoint', 'is-exc-bp-proxy', 'is-exc-bp-locating');
+      if (typeof syncListLastSeenMarker === 'function') syncListLastSeenMarker(el, false);
+      const btn = el.querySelector && el.querySelector('[data-exc-act="breakpoint"]');
+      if (btn) btn.classList.remove('is-on', 'is-bp');
+    });
+  }
+
+  function insertTrackingBreakpointDivider(beforeEl, text) {
+    if (!beforeEl || !beforeEl.parentNode) return null;
+    const existing = document.querySelector('.exc-tracking-divider');
+    if (existing) existing.remove();
+    const tagName = beforeEl.tagName === 'TR' ? 'tr' : 'div';
+    const divider = document.createElement(tagName);
+    divider.className = 'exc-tracking-divider';
+    if (tagName === 'tr') {
+      const cell = document.createElement('td');
+      const span = Math.max(1, beforeEl.children ? beforeEl.children.length : 1);
+      cell.colSpan = span;
+      cell.textContent = text;
+      divider.appendChild(cell);
+    } else {
+      divider.textContent = text;
+    }
+    beforeEl.parentNode.insertBefore(divider, beforeEl);
+    return divider;
+  }
+
+  function applyTrackingBreakpointDecorations(rec, opts) {
+    opts = opts || {};
+    clearTrackingBreakpointDecorations();
+    if (!rec) return null;
+    const hit =
+      typeof locateTrackingBreakpointOnPage === 'function'
+        ? locateTrackingBreakpointOnPage(rec)
+        : { found: false };
+    if (!hit.found || !hit.el) return hit;
+    hit.el.classList.add('is-exc-breakpoint');
+    hit.el.classList.remove('is-exc-folded-child');
+    if (opts.locating) hit.el.classList.add('is-exc-bp-locating');
+    if (hit.proxy) hit.el.classList.add('is-exc-bp-proxy');
+    const btn = hit.el.querySelector && hit.el.querySelector('[data-exc-act="breakpoint"]');
+    if (btn && hit.kind === 'exact') btn.classList.add('is-on', 'is-bp');
+    syncListLastSeenMarker(hit.el, true);
+    const label =
+      hit.kind === 'exact'
+        ? '上次看到这里'
+        : hit.kind === 'older'
+          ? '断点已下架，停在后面这部'
+          : '断点已下架，停在前面这部';
+    if (hit.kind === 'newer' && !hit.el.nextElementSibling && hit.el.parentNode) {
+      const existing = document.querySelector('.exc-tracking-divider');
+      if (existing) existing.remove();
+      const tagName = hit.el.tagName === 'TR' ? 'tr' : 'div';
+      const divider = document.createElement(tagName);
+      divider.className = 'exc-tracking-divider';
+      if (tagName === 'tr') {
+        const cell = document.createElement('td');
+        cell.colSpan = Math.max(1, hit.el.children ? hit.el.children.length : 1);
+        cell.textContent = label;
+        divider.appendChild(cell);
+      } else {
+        divider.textContent = label;
+      }
+      hit.el.parentNode.appendChild(divider);
+    } else {
+      const dividerHost =
+        hit.kind === 'newer' && hit.el.nextElementSibling ? hit.el.nextElementSibling : hit.el;
+      insertTrackingBreakpointDivider(dividerHost, label);
+    }
+    return hit;
   }
 
   async function enhanceListItem(el, ctx) {
@@ -11409,8 +12212,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     el.classList.add('exc-gl-item');
     el.dataset.excGid = partial.gid;
     el.dataset.excToken = partial.token;
-    // 悬停预览尽早绑定（不等 DB）
-    bindListHoverPreview(el, partial);
 
     // 列表打开方式：设置里「新标签页打开」
     try {
@@ -11477,19 +12278,21 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     // 封面 host：点过/库内描边仍打在图上
     let coverHost =
       el.querySelector('.glthumb') ||
-      el.querySelector('.gl1e') ||
-      el.querySelector('.gl3t') ||
-      el.querySelector('a[href*="/g/"]') ||
-      el;
+      el.querySelector('td.gl1e') ||
+      el.querySelector('.gl3t');
     if (!(coverHost && coverHost.querySelector && coverHost.querySelector('img'))) {
       const img = el.querySelector('img');
-      if (img && img.parentElement) coverHost = img.parentElement;
+      if (img) {
+        coverHost = img.closest('a[href*="/g/"], .glthumb, td.gl1e, .gl3t') || img;
+      }
     }
+    if (coverHost === el) coverHost = null;
     if (coverHost && coverHost.nodeType === 1) {
       coverHost.classList.add('exc-cover-host');
       const cs = window.getComputedStyle(coverHost);
       if (cs.position === 'static') coverHost.style.position = 'relative';
     }
+    bindListHoverPreview(el, partial);
 
     // 徽章左上 + 标签流左下，都挂卡片框
     const badgeHost = el;
@@ -11860,12 +12663,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
               '已设断点' + (bpPosted ? ' · ' + bpPosted : '') + ' · ' + pgBit
             );
             // 刷新本页作品工具条状态
-            document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
-              n.classList.remove('is-exc-breakpoint');
-              syncListLastSeenMarker(n, false);
-            });
-            el.classList.add('is-exc-breakpoint');
-            syncListLastSeenMarker(el, true, coverHost);
+            if (typeof applyTrackingBreakpointDecorations === 'function') {
+              applyTrackingBreakpointDecorations(rec);
+            } else {
+              document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
+                n.classList.remove('is-exc-breakpoint');
+                syncListLastSeenMarker(n, false);
+              });
+              el.classList.add('is-exc-breakpoint');
+              syncListLastSeenMarker(el, true, coverHost);
+            }
             await enhanceListItemForce(el);
             if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
             void refreshTrackingBarState();
@@ -11950,6 +12757,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 ? extractListItemPostedAt(el, gid)
                 : 0) ||
               0;
+            const neighbors =
+              typeof captureBreakpointNeighbors === 'function'
+                ? captureBreakpointNeighbors(
+                    gid,
+                    typeof extractOrderedGidsFromDocument === 'function'
+                      ? extractOrderedGidsFromDocument(document)
+                      : []
+                  )
+                : { newer: '', older: '' };
             const pending = {
               trackingId: tid,
               gid: gid,
@@ -11963,6 +12779,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
               pageMode: (st && st.mode) || '',
               listIndex: listIndex,
               pageLen: pageLen,
+              newerGid: neighbors.newer,
+              olderGid: neighbors.older,
             };
             if (typeof setPendingTrackingOpen === 'function') {
               setPendingTrackingOpen(pending);
@@ -11980,16 +12798,20 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             ).then((advanced) => {
               if (!advanced) return;
               // 更新本页断点高亮
-              document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
-                n.classList.remove('is-exc-breakpoint');
-                syncListLastSeenMarker(n, false);
-                const btn = n.querySelector('[data-exc-act="breakpoint"]');
-                if (btn) btn.classList.remove('is-on', 'is-bp');
-              });
-              el.classList.add('is-exc-breakpoint');
-              syncListLastSeenMarker(el, true, coverHost);
-              const bpBtn = el.querySelector('[data-exc-act="breakpoint"]');
-              if (bpBtn) bpBtn.classList.add('is-on', 'is-bp');
+              if (typeof applyTrackingBreakpointDecorations === 'function') {
+                applyTrackingBreakpointDecorations(advanced);
+              } else {
+                document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
+                  n.classList.remove('is-exc-breakpoint');
+                  syncListLastSeenMarker(n, false);
+                  const btn = n.querySelector('[data-exc-act="breakpoint"]');
+                  if (btn) btn.classList.remove('is-on', 'is-bp');
+                });
+                el.classList.add('is-exc-breakpoint');
+                syncListLastSeenMarker(el, true, coverHost);
+                const bpBtn = el.querySelector('[data-exc-act="breakpoint"]');
+                if (bpBtn) bpBtn.classList.add('is-on', 'is-bp');
+              }
               if (typeof refreshTrackingBarState === 'function') void refreshTrackingBarState();
             });
           } catch (_) { /* ignore */ }
@@ -12039,8 +12861,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       return;
     }
     const url = best.url || buildGalleryUrl(location.origin, best.gid, best.token);
-    if (config.open_best_in_new_tab) window.open(url, '_blank');
-    else location.href = url;
+    if (config.open_best_in_new_tab) {
+      if (!openUrlInNewTab(url)) location.href = url;
+    } else location.href = url;
   }
 
   function describePrimaryEdition(ed) {
@@ -12289,7 +13112,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       '<span class="exc-track-status" id="exc-track-status">未收藏</span>' +
       '<div class="exc-track-actions">' +
       // 继续断点放最前：有断点时最显眼，不再排在「已追更」后面
-      '<button type="button" class="jlc-wb-btn primary exc-track-btn exc-bp-continue" id="exc-goto-bp" hidden title="跳到断点作品并定位">继续断点</button>' +
+      '<button type="button" class="jlc-wb-btn primary exc-track-btn exc-bp-continue" id="exc-goto-bp" hidden title="在当前列表向后加载直到命中断点">继续断点</button>' +
       '<button type="button" class="jlc-wb-btn ghost exc-track-btn" id="exc-save-tracking">⭐ 收藏追更</button>' +
       '<button type="button" class="jlc-wb-btn ghost exc-track-btn" id="exc-untrack" hidden title="从追更列表移除">取消追更</button>' +
       '</div>' +
@@ -12310,7 +13133,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             ? await findTrackingForContext(ctx)
             : await getTrackingBySignature(ctx.query_signature);
         if (!rec) return;
-        await openTrackingBreakpoint(rec);
+        await continueTrackingBreakpointSearch(rec);
       };
     }
     const untrack = document.getElementById('exc-untrack');
@@ -12387,9 +13210,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       btn.title = '已在追更列表';
       if (untrack) untrack.hidden = false;
       const hasBp = trackingHasAnyBreakpoint(rec);
+      const searching =
+        typeof trackingBreakpointSearchRuntime !== 'undefined' &&
+        trackingBreakpointSearchRuntime &&
+        trackingBreakpointSearchRuntime.active;
       if (gotoBp) {
-        gotoBp.hidden = !hasBp;
-        if (hasBp) {
+        gotoBp.hidden = !hasBp && !searching;
+        if (searching) {
+          gotoBp.disabled = true;
+          gotoBp.classList.add('is-loading');
+        } else if (hasBp) {
+          gotoBp.disabled = false;
+          gotoBp.classList.remove('is-loading');
           const bpPage = Number(rec.breakpoint_page);
           const bpPageLabel =
             Number.isFinite(bpPage) && bpPage >= 0
@@ -12407,10 +13239,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             ? '继续断点 · ' + bpPosted
             : '继续断点 · 第' + bpPageLabel + '页';
           gotoBp.title =
-            '定位断点作品' +
+            '在当前列表加载直到命中断点' +
             (bpTitle ? '「' + bpTitle + '」' : '') +
             (bpPosted ? ' · ' + bpPosted : '') +
-            '（列表第 ' +
+            '（约第 ' +
             bpPageLabel +
             ' 页）· 在封面点「断」可改断点';
         }
@@ -12459,7 +13291,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           latest.last_browsed_at = nowMs();
           if (latest.open_url && typeof canonicalizeTrackingOpenUrl === 'function') {
             const canon = canonicalizeTrackingOpenUrl(latest.open_url);
-            if (latest.open_url !== canon) {
+            const losesIdentity =
+              typeof trackingOpenUrlLosesIdentity === 'function' &&
+              trackingOpenUrlLosesIdentity(latest.open_url, canon);
+            if (latest.open_url !== canon && !losesIdentity) {
               latest.open_url = canon;
               latest.page_url = canon;
             }
@@ -12665,6 +13500,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       pageMode: pending.pageMode || '',
       listIndex: pending.listIndex,
       pageLen: pending.pageLen,
+      newerGid: pending.newerGid,
+      olderGid: pending.olderGid,
       skipUnreadScan: opts.skipUnreadScan === true,
     });
     showToast('断点已跟到当前作品');
@@ -13081,6 +13918,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     if (!entries.length) {
       injectTrackingBar(trackingStatePromise);
       if (opts.reapplyFold) applyWorkFold(getCurrentListRuntimeItems());
+      const existing = await trackingStatePromise;
+      if (existing && existing.record && typeof applyTrackingBreakpointDecorations === 'function') {
+        applyTrackingBreakpointDecorations(existing.record);
+      }
       return 0;
     }
 
@@ -13138,7 +13979,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
 
     applyWorkFold(getCurrentListRuntimeItems());
-    tryConsumeBreakpointScroll();
+    if (trackingRecord && typeof applyTrackingBreakpointDecorations === 'function') {
+      applyTrackingBreakpointDecorations(trackingRecord);
+    }
     return enhanced.length;
   }
 
@@ -13153,20 +13996,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     document.querySelectorAll('.exc-gl-item').forEach((el) => {
       const gid = String(el.dataset.excGid || '');
       el.classList.toggle('is-exc-seen', !!(gid && seenGids && seenGids[gid]));
-      const isBreakpoint = !!(
-        gid &&
-        trackingRecord &&
-        String(trackingRecord.breakpoint_gid || '') === gid
-      );
-      el.classList.toggle('is-exc-breakpoint', isBreakpoint);
-      if (typeof syncListLastSeenMarker === 'function') {
-        syncListLastSeenMarker(el, isBreakpoint);
-      }
-      const breakpointButton = el.querySelector('[data-exc-act="breakpoint"]');
-      if (breakpointButton) {
-        breakpointButton.classList.toggle('is-on', isBreakpoint);
-        breakpointButton.classList.toggle('is-bp', isBreakpoint);
-      }
       if (trackingRecord && trackingRecord.id) {
         el.dataset.excTrackId = String(trackingRecord.id);
         if (trackingRecord.last_page != null) {
@@ -13177,6 +14006,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         delete el.dataset.excTrackLastPage;
       }
     });
+    if (typeof applyTrackingBreakpointDecorations === 'function') {
+      applyTrackingBreakpointDecorations(trackingRecord);
+    }
   }
 
   async function refreshListVolatileState() {
@@ -13229,7 +14061,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     let timer = null;
     const runtimeUiSelector =
       '#exc-tracking-bar, #jlc-wb, #jlc-wb-fab, #exc-hover-preview, ' +
-      '.exc-badge-container, .exc-tag-stream, .exc-tool-bar, .exc-enhance-host';
+      '.exc-badge-container, .exc-tag-stream, .exc-tool-bar, .exc-enhance-host, .exc-tracking-divider';
     const isRuntimeUiNode = (node) =>
       !!(
         node &&
@@ -13450,7 +14282,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       '  <div class="jlc-wb-footer-summary" id="jlc-wb-footer-summary">—</div>' +
       '  <div class="jlc-wb-footer-actions">' +
       '    <button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">⭐ 收藏当前</button>' +
-      '    <button type="button" class="jlc-wb-btn ghost" id="exc-check-updates" title="默认只查首页（快）；可在设置开启跨页精确未读。条目间隔 5～10 秒">检查更新</button>' +
+      '    <button type="button" class="jlc-wb-btn ghost" id="exc-check-updates" title="从每条追更首页向后翻到断点。条目间隔 5～10 秒">检查更新</button>' +
       '    <button type="button" class="jlc-wb-btn ghost" id="exc-sync-all" title="同时同步 WebDAV 与 LRR（已配置的项）">同步</button>' +
       '  </div>' +
       '</div>' +
@@ -13903,7 +14735,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   /**
-   * 从工作台打开追更项：先收起面板（新标签不带弹层；本页跳转也不挡内容）
+   * 从工作台打开追更项。
+   * 新标签：当前页面板保持开着（开合只记在本标签）；本页跳转才收起。
    * @param {object} rec
    * @param {'default'|'tab'|'same'} mode
    */
@@ -13914,15 +14747,22 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       showToast('没有可打开的地址');
       return;
     }
+    const wantTab = mode !== 'same';
     wbSession = wbSession || loadSession();
-    wbSession.open = false;
     wbSession.nav = 'tracking';
     wbSession.lastOpenedId = rec.id;
     wbSession.lastOpenedAt = nowMs();
-    saveSession(wbSession);
-    try {
-      toggleWorkbench(false);
-    } catch (_) { /* ignore */ }
+    if (wantTab) {
+      // 开合只记在本标签：新标签不得把原页「开着」写成关
+      if (isWorkbenchDomOpen()) wbSession.open = true;
+      saveSession(wbSession);
+    } else {
+      wbSession.open = false;
+      saveSession(wbSession);
+      try {
+        toggleWorkbench(false);
+      } catch (_) { /* ignore */ }
+    }
 
     rec.last_browsed_at = nowMs();
     // 仅清「新检查到」旗标；若顶仍≠断点，角标/leaf 仍算有更新
@@ -13931,11 +14771,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       await saveTrackingRecord(rec);
     } catch (_) { /* ignore */ }
 
-    const wantTab =
-      mode === 'tab' || (mode !== 'same' && (mode === 'default' ? !!config.open_best_in_new_tab : false));
     if (wantTab) {
-      const opened = window.open(url, '_blank', 'noopener');
-      if (!opened) {
+      if (!openUrlInNewTab(url)) {
         showToast('浏览器拦截了新标签，已改为本页打开');
         location.href = url;
         return;
@@ -14338,6 +15175,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
     const top = compactText(r.top_gid || '');
     const bp = compactText(r.breakpoint_gid || '');
+    const missingBp = r.breakpoint_missing === 1;
+    const anchorKind = compactText(r.breakpoint_anchor_kind || '');
     const pill =
       typeof getTrackingUpdatePillText === 'function' ? getTrackingUpdatePillText(r) : '';
     const unreadN =
@@ -14347,12 +15186,25 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         ? '约 ' + unreadN + '+ 条未读'
         : '约 ' + unreadN + ' 条未读'
       : '';
+    if (missingBp) {
+      const noteBits = [
+        '断点作品可能已下架',
+        unreadNote,
+        getTrackingBpMetaLabel(r) ? '原断点 ' + getTrackingBpMetaLabel(r) : '',
+      ].filter(Boolean);
+      return {
+        tone: 'yellow',
+        text: pill || '断点已下架',
+        note: noteBits.join(' · '),
+      };
+    }
     // 最新 ≠ 断点作品 → 必有更新（用户贴的就是这种：不该显示「已检查」）
     if (top && bp && top !== bp) {
       const noteBits = [
         '最新 ' + (getTrackingTopMetaLabel(r) || '—'),
         '上次看到 ' + (getTrackingBpMetaLabel(r) || '—'),
       ];
+      if (anchorKind === 'older' || anchorKind === 'newer') noteBits.push('按相邻作品定位');
       if (unreadNote) noteBits.push(unreadNote);
       return {
         tone: 'red',
@@ -14505,6 +15357,45 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     );
   }
 
+  function trackingRecordHasPendingForSort(r) {
+    if (!r) return false;
+    if (typeof trackingHasPendingUpdate === 'function') return !!trackingHasPendingUpdate(r);
+    if (r.has_update) return true;
+    const top = compactText(r.top_gid || '');
+    const bp = compactText(r.breakpoint_gid || '');
+    return !!(top && bp && top !== bp);
+  }
+
+  function trackingRecordIsCaughtUp(r) {
+    if (!r) return false;
+    if (r.last_check_error) return false;
+    if (r.breakpoint_missing === 1) return false;
+    if (trackingRecordHasPendingForSort(r)) return false;
+    const top = compactText(r.top_gid || '');
+    const bp = compactText(r.breakpoint_gid || '');
+    return !!(top && bp && top === bp);
+  }
+
+  function compareTrackingRecordsForWorkbench(a, b) {
+    const aCaught = trackingRecordIsCaughtUp(a) ? 1 : 0;
+    const bCaught = trackingRecordIsCaughtUp(b) ? 1 : 0;
+    if (aCaught !== bCaught) return aCaught - bCaught;
+    const aMiss = a && a.breakpoint_missing === 1 ? 1 : 0;
+    const bMiss = b && b.breakpoint_missing === 1 ? 1 : 0;
+    const aPend = trackingRecordHasPendingForSort(a) && !aMiss;
+    const bPend = trackingRecordHasPendingForSort(b) && !bMiss;
+    if (!!aPend !== !!bPend) return aPend ? -1 : 1;
+    if (aMiss !== bMiss) return bMiss - aMiss;
+    const aTime = Number((a && (a.updated_at || a.last_check_at || a.last_browsed_at)) || 0);
+    const bTime = Number((b && (b.updated_at || b.last_check_at || b.last_browsed_at)) || 0);
+    if (aTime !== bTime) return bTime - aTime;
+    return String((a && a.id) || '').localeCompare(String((b && b.id) || ''));
+  }
+
+  function sortTrackingRecordsForWorkbench(list) {
+    return (list || []).slice().sort(compareTrackingRecordsForWorkbench);
+  }
+
   async function paintTrackingList() {
     cancelScheduledTrackingListPaint();
     const paintId = ++trackingListPaintId;
@@ -14545,6 +15436,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       await enrichTrackingListPosted(list, { shouldContinue: isCurrentPaint });
     } catch (_) { /* ignore */ }
     if (!isCurrentPaint()) return;
+
+    list = sortTrackingRecordsForWorkbench(list);
 
     if (!(trackingCheckRuntime && trackingCheckRuntime.active)) {
       const pending = list.filter((r) =>
@@ -14735,7 +15628,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       }
 
       if (!tactBtn) {
-        // 点卡片空白：按默认方式打开，并收起工作台
+        // 点卡片空白：默认新标签打开，原页面板保持开着
         await openTrackingRecordFromWorkbench(rec, 'default');
         return;
       }
@@ -14762,9 +15655,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             const pill =
               typeof getTrackingUpdatePillText === 'function' ? getTrackingUpdatePillText(rec) : '';
             showToast(
-              pending
-                ? '有更新' + (pill && pill !== '更新' ? ' ' + pill : '') + '：' + getTrackingDisplayTitle(rec)
-                : '无新顶栏'
+              rec.breakpoint_missing
+                ? '检查完成，断点作品可能已下架：' + getTrackingDisplayTitle(rec)
+                : pending
+                  ? '有更新' + (pill && pill !== '更新' ? ' ' + pill : '') + '：' + getTrackingDisplayTitle(rec)
+                  : rec.breakpoint_anchor_kind && rec.breakpoint_anchor_kind !== 'exact'
+                    ? '已按相邻作品定位：' + getTrackingDisplayTitle(rec)
+                    : '无新顶栏'
             );
           }
         } catch (err) {
@@ -14773,12 +15670,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         paintTrackingList();
         updateFabBadge();
       } else if (act === 'bp') {
-        wbSession = wbSession || loadSession();
-        wbSession.open = false;
-        saveSession(wbSession);
-        try {
-          toggleWorkbench(false);
-        } catch (_) { /* ignore */ }
         await openTrackingBreakpoint(rec);
       } else if (act === 'clear-bp') {
         rec.breakpoint_page = '';
@@ -14788,6 +15679,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         rec.breakpoint_token = '';
         rec.breakpoint_title = '';
         rec.breakpoint_posted_at = 0;
+        rec.breakpoint_newer_gid = '';
+        rec.breakpoint_older_gid = '';
         await saveTrackingRecord(rec);
         showToast('已清除断点');
         paintTrackingList();
@@ -15587,7 +16480,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           .join('') +
         '</select>' +
         '<h3 class="jlc-wb-section-title">列表悬停预览</h3>' +
-        '<div class="legacy-row legacy-toggle"><span>悬停显示前几张</span><input type="checkbox" id="exc-cfg-hover-preview" ' +
+        '<div class="legacy-row legacy-toggle"><span>悬停封面显示前几张</span><input type="checkbox" id="exc-cfg-hover-preview" ' +
         (config.list_hover_preview !== false ? 'checked' : '') +
         '></div>' +
         '<label>预览张数</label><select id="exc-cfg-hover-count" class="jlc-wb-select">' +
@@ -15627,10 +16520,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           .join('') +
         '</select>' +
         '<h3 class="jlc-wb-section-title">追更检查更新</h3>' +
-        '<div class="legacy-note">默认只请求每条追更的<strong>首页</strong>（与改跨页扫描前一样快）。断点不在首页时用断点页码估算未读（显示 +N+）。开启「跨页精确未读」才会向后翻页计数，会明显变慢。</div>' +
-        '<div class="legacy-row legacy-toggle"><span>跨页精确未读（较慢）</span><input type="checkbox" id="exc-cfg-deep-scan" ' +
-        (config.tracking_unread_deep_scan === true ? 'checked' : '') +
-        '></div>' +
+        '<div class="legacy-note">检查更新从每条追更的首页向后翻到断点。断点不在前几页时会继续翻，直到找到或达到下方页数上限。</div>' +
         '<div class="jlc-wb-field-grid">' +
         '<div><label>条目间隔最小（秒）</label><input id="exc-cfg-chk-lo" type="number" min="2" max="60" step="1" value="' +
         escapeHtml(String(Math.round((Number(config.tracking_check_interval_min_ms) || 5000) / 1000))) +
@@ -15782,9 +16672,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             if (Number.isFinite(scanP) && scanP >= 1) {
               patch.tracking_unread_scan_max_pages = Math.min(40, Math.max(1, Math.floor(scanP)));
             }
-            if (body.querySelector('#exc-cfg-deep-scan')) {
-              patch.tracking_unread_deep_scan = !!body.querySelector('#exc-cfg-deep-scan').checked;
-            }
           }
         }
         // data 页无表单保存
@@ -15797,6 +16684,32 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
       };
     }
+  }
+
+  function bindTrackingStoreLiveRefresh() {
+    if (window.__excTrackingStoreLiveBound) return;
+    window.__excTrackingStoreLiveBound = true;
+    let timer = null;
+    const kick = (includeList) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        if (typeof window.__excRefreshWorkbench === 'function') window.__excRefreshWorkbench();
+        if (includeList && typeof refreshListVolatileState === 'function') {
+          refreshListVolatileState().catch(() => {});
+        }
+      }, 80);
+    };
+    if (typeof GM_addValueChangeListener === 'function') {
+      GM_addValueChangeListener(GM_TRACKING_REV_KEY, (_name, _old, _next, remote) => {
+        if (remote) kick(true);
+      });
+    }
+    window.addEventListener('pageshow', () => kick(false));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') kick(false);
+    });
+    window.addEventListener('focus', () => kick(false));
   }
 
   function createWorkbench() {
@@ -15814,6 +16727,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     window.__excRefreshPage = () => {
       refreshCurrentPageUi().catch(() => {});
     };
+    bindTrackingStoreLiveRefresh();
     const ctx = parseExhPageContext(location.href);
     const trackingState = (async () => {
       const records = await listTrackingSearches();
@@ -15835,7 +16749,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       rec.last_page = pageIdx;
       if (rec.open_url && typeof canonicalizeTrackingOpenUrl === 'function') {
         const canon = canonicalizeTrackingOpenUrl(rec.open_url);
-        if (rec.open_url !== canon) {
+        const losesIdentity =
+          typeof trackingOpenUrlLosesIdentity === 'function' &&
+          trackingOpenUrlLosesIdentity(rec.open_url, canon);
+        if (rec.open_url !== canon && !losesIdentity) {
           rec.open_url = canon;
           rec.page_url = canon;
         }

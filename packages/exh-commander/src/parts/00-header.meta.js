@@ -2,7 +2,7 @@
 // @name         Creamu · ExH
 // @name:zh-CN   Creamu · ExH
 // @namespace    https://github.com/wayneze/Creamu
-// @version      0.9.53
+// @version      0.9.60
 // @description  Creamu：e/exhentai 奶油工作台；WebDAV 同步；LRR 只读对照
 // @author       wayneze
 // @match        *://e-hentai.org/*
@@ -13,7 +13,9 @@
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_addValueChangeListener
 // @grant        GM_setClipboard
+// @grant        GM_openInTab
 // @connect      *
 // @run-at       document-idle
 // ==/UserScript==

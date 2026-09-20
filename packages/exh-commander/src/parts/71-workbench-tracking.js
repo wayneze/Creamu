@@ -346,6 +346,8 @@
     }
     const top = compactText(r.top_gid || '');
     const bp = compactText(r.breakpoint_gid || '');
+    const missingBp = r.breakpoint_missing === 1;
+    const anchorKind = compactText(r.breakpoint_anchor_kind || '');
     const pill =
       typeof getTrackingUpdatePillText === 'function' ? getTrackingUpdatePillText(r) : '';
     const unreadN =
@@ -355,12 +357,25 @@
         ? '约 ' + unreadN + '+ 条未读'
         : '约 ' + unreadN + ' 条未读'
       : '';
+    if (missingBp) {
+      const noteBits = [
+        '断点作品可能已下架',
+        unreadNote,
+        getTrackingBpMetaLabel(r) ? '原断点 ' + getTrackingBpMetaLabel(r) : '',
+      ].filter(Boolean);
+      return {
+        tone: 'yellow',
+        text: pill || '断点已下架',
+        note: noteBits.join(' · '),
+      };
+    }
     // 最新 ≠ 断点作品 → 必有更新（用户贴的就是这种：不该显示「已检查」）
     if (top && bp && top !== bp) {
       const noteBits = [
         '最新 ' + (getTrackingTopMetaLabel(r) || '—'),
         '上次看到 ' + (getTrackingBpMetaLabel(r) || '—'),
       ];
+      if (anchorKind === 'older' || anchorKind === 'newer') noteBits.push('按相邻作品定位');
       if (unreadNote) noteBits.push(unreadNote);
       return {
         tone: 'red',
@@ -513,6 +528,45 @@
     );
   }
 
+  function trackingRecordHasPendingForSort(r) {
+    if (!r) return false;
+    if (typeof trackingHasPendingUpdate === 'function') return !!trackingHasPendingUpdate(r);
+    if (r.has_update) return true;
+    const top = compactText(r.top_gid || '');
+    const bp = compactText(r.breakpoint_gid || '');
+    return !!(top && bp && top !== bp);
+  }
+
+  function trackingRecordIsCaughtUp(r) {
+    if (!r) return false;
+    if (r.last_check_error) return false;
+    if (r.breakpoint_missing === 1) return false;
+    if (trackingRecordHasPendingForSort(r)) return false;
+    const top = compactText(r.top_gid || '');
+    const bp = compactText(r.breakpoint_gid || '');
+    return !!(top && bp && top === bp);
+  }
+
+  function compareTrackingRecordsForWorkbench(a, b) {
+    const aCaught = trackingRecordIsCaughtUp(a) ? 1 : 0;
+    const bCaught = trackingRecordIsCaughtUp(b) ? 1 : 0;
+    if (aCaught !== bCaught) return aCaught - bCaught;
+    const aMiss = a && a.breakpoint_missing === 1 ? 1 : 0;
+    const bMiss = b && b.breakpoint_missing === 1 ? 1 : 0;
+    const aPend = trackingRecordHasPendingForSort(a) && !aMiss;
+    const bPend = trackingRecordHasPendingForSort(b) && !bMiss;
+    if (!!aPend !== !!bPend) return aPend ? -1 : 1;
+    if (aMiss !== bMiss) return bMiss - aMiss;
+    const aTime = Number((a && (a.updated_at || a.last_check_at || a.last_browsed_at)) || 0);
+    const bTime = Number((b && (b.updated_at || b.last_check_at || b.last_browsed_at)) || 0);
+    if (aTime !== bTime) return bTime - aTime;
+    return String((a && a.id) || '').localeCompare(String((b && b.id) || ''));
+  }
+
+  function sortTrackingRecordsForWorkbench(list) {
+    return (list || []).slice().sort(compareTrackingRecordsForWorkbench);
+  }
+
   async function paintTrackingList() {
     cancelScheduledTrackingListPaint();
     const paintId = ++trackingListPaintId;
@@ -553,6 +607,8 @@
       await enrichTrackingListPosted(list, { shouldContinue: isCurrentPaint });
     } catch (_) { /* ignore */ }
     if (!isCurrentPaint()) return;
+
+    list = sortTrackingRecordsForWorkbench(list);
 
     if (!(trackingCheckRuntime && trackingCheckRuntime.active)) {
       const pending = list.filter((r) =>
@@ -743,7 +799,7 @@
       }
 
       if (!tactBtn) {
-        // 点卡片空白：按默认方式打开，并收起工作台
+        // 点卡片空白：默认新标签打开，原页面板保持开着
         await openTrackingRecordFromWorkbench(rec, 'default');
         return;
       }
@@ -770,9 +826,13 @@
             const pill =
               typeof getTrackingUpdatePillText === 'function' ? getTrackingUpdatePillText(rec) : '';
             showToast(
-              pending
-                ? '有更新' + (pill && pill !== '更新' ? ' ' + pill : '') + '：' + getTrackingDisplayTitle(rec)
-                : '无新顶栏'
+              rec.breakpoint_missing
+                ? '检查完成，断点作品可能已下架：' + getTrackingDisplayTitle(rec)
+                : pending
+                  ? '有更新' + (pill && pill !== '更新' ? ' ' + pill : '') + '：' + getTrackingDisplayTitle(rec)
+                  : rec.breakpoint_anchor_kind && rec.breakpoint_anchor_kind !== 'exact'
+                    ? '已按相邻作品定位：' + getTrackingDisplayTitle(rec)
+                    : '无新顶栏'
             );
           }
         } catch (err) {
@@ -781,12 +841,6 @@
         paintTrackingList();
         updateFabBadge();
       } else if (act === 'bp') {
-        wbSession = wbSession || loadSession();
-        wbSession.open = false;
-        saveSession(wbSession);
-        try {
-          toggleWorkbench(false);
-        } catch (_) { /* ignore */ }
         await openTrackingBreakpoint(rec);
       } else if (act === 'clear-bp') {
         rec.breakpoint_page = '';
@@ -796,6 +850,8 @@
         rec.breakpoint_token = '';
         rec.breakpoint_title = '';
         rec.breakpoint_posted_at = 0;
+        rec.breakpoint_newer_gid = '';
+        rec.breakpoint_older_gid = '';
         await saveTrackingRecord(rec);
         showToast('已清除断点');
         paintTrackingList();

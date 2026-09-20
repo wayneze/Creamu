@@ -59,6 +59,10 @@
     if (!entries.length) {
       injectTrackingBar(trackingStatePromise);
       if (opts.reapplyFold) applyWorkFold(getCurrentListRuntimeItems());
+      const existing = await trackingStatePromise;
+      if (existing && existing.record && typeof applyTrackingBreakpointDecorations === 'function') {
+        applyTrackingBreakpointDecorations(existing.record);
+      }
       return 0;
     }
 
@@ -116,7 +120,9 @@
     }
 
     applyWorkFold(getCurrentListRuntimeItems());
-    tryConsumeBreakpointScroll();
+    if (trackingRecord && typeof applyTrackingBreakpointDecorations === 'function') {
+      applyTrackingBreakpointDecorations(trackingRecord);
+    }
     return enhanced.length;
   }
 
@@ -131,20 +137,6 @@
     document.querySelectorAll('.exc-gl-item').forEach((el) => {
       const gid = String(el.dataset.excGid || '');
       el.classList.toggle('is-exc-seen', !!(gid && seenGids && seenGids[gid]));
-      const isBreakpoint = !!(
-        gid &&
-        trackingRecord &&
-        String(trackingRecord.breakpoint_gid || '') === gid
-      );
-      el.classList.toggle('is-exc-breakpoint', isBreakpoint);
-      if (typeof syncListLastSeenMarker === 'function') {
-        syncListLastSeenMarker(el, isBreakpoint);
-      }
-      const breakpointButton = el.querySelector('[data-exc-act="breakpoint"]');
-      if (breakpointButton) {
-        breakpointButton.classList.toggle('is-on', isBreakpoint);
-        breakpointButton.classList.toggle('is-bp', isBreakpoint);
-      }
       if (trackingRecord && trackingRecord.id) {
         el.dataset.excTrackId = String(trackingRecord.id);
         if (trackingRecord.last_page != null) {
@@ -155,6 +147,9 @@
         delete el.dataset.excTrackLastPage;
       }
     });
+    if (typeof applyTrackingBreakpointDecorations === 'function') {
+      applyTrackingBreakpointDecorations(trackingRecord);
+    }
   }
 
   async function refreshListVolatileState() {
@@ -207,7 +202,7 @@
     let timer = null;
     const runtimeUiSelector =
       '#exc-tracking-bar, #jlc-wb, #jlc-wb-fab, #exc-hover-preview, ' +
-      '.exc-badge-container, .exc-tag-stream, .exc-tool-bar, .exc-enhance-host';
+      '.exc-badge-container, .exc-tag-stream, .exc-tool-bar, .exc-enhance-host, .exc-tracking-divider';
     const isRuntimeUiNode = (node) =>
       !!(
         node &&

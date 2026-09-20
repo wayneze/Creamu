@@ -12,9 +12,84 @@
     if (!marker) {
       marker = document.createElement('span');
       marker.className = 'exc-last-seen-mark';
-      marker.textContent = '上次看到';
     }
+    marker.textContent = el.classList.contains('is-exc-bp-proxy') ? '断点附近' : '上次看到';
     if (marker.parentNode !== host) host.appendChild(marker);
+  }
+
+  function clearTrackingBreakpointDecorations() {
+    document.querySelectorAll('.exc-tracking-divider').forEach((node) => node.remove());
+    document.querySelectorAll('.is-exc-breakpoint, .is-exc-bp-proxy, .is-exc-bp-locating').forEach((el) => {
+      el.classList.remove('is-exc-breakpoint', 'is-exc-bp-proxy', 'is-exc-bp-locating');
+      if (typeof syncListLastSeenMarker === 'function') syncListLastSeenMarker(el, false);
+      const btn = el.querySelector && el.querySelector('[data-exc-act="breakpoint"]');
+      if (btn) btn.classList.remove('is-on', 'is-bp');
+    });
+  }
+
+  function insertTrackingBreakpointDivider(beforeEl, text) {
+    if (!beforeEl || !beforeEl.parentNode) return null;
+    const existing = document.querySelector('.exc-tracking-divider');
+    if (existing) existing.remove();
+    const tagName = beforeEl.tagName === 'TR' ? 'tr' : 'div';
+    const divider = document.createElement(tagName);
+    divider.className = 'exc-tracking-divider';
+    if (tagName === 'tr') {
+      const cell = document.createElement('td');
+      const span = Math.max(1, beforeEl.children ? beforeEl.children.length : 1);
+      cell.colSpan = span;
+      cell.textContent = text;
+      divider.appendChild(cell);
+    } else {
+      divider.textContent = text;
+    }
+    beforeEl.parentNode.insertBefore(divider, beforeEl);
+    return divider;
+  }
+
+  function applyTrackingBreakpointDecorations(rec, opts) {
+    opts = opts || {};
+    clearTrackingBreakpointDecorations();
+    if (!rec) return null;
+    const hit =
+      typeof locateTrackingBreakpointOnPage === 'function'
+        ? locateTrackingBreakpointOnPage(rec)
+        : { found: false };
+    if (!hit.found || !hit.el) return hit;
+    hit.el.classList.add('is-exc-breakpoint');
+    hit.el.classList.remove('is-exc-folded-child');
+    if (opts.locating) hit.el.classList.add('is-exc-bp-locating');
+    if (hit.proxy) hit.el.classList.add('is-exc-bp-proxy');
+    const btn = hit.el.querySelector && hit.el.querySelector('[data-exc-act="breakpoint"]');
+    if (btn && hit.kind === 'exact') btn.classList.add('is-on', 'is-bp');
+    syncListLastSeenMarker(hit.el, true);
+    const label =
+      hit.kind === 'exact'
+        ? '上次看到这里'
+        : hit.kind === 'older'
+          ? '断点已下架，停在后面这部'
+          : '断点已下架，停在前面这部';
+    if (hit.kind === 'newer' && !hit.el.nextElementSibling && hit.el.parentNode) {
+      const existing = document.querySelector('.exc-tracking-divider');
+      if (existing) existing.remove();
+      const tagName = hit.el.tagName === 'TR' ? 'tr' : 'div';
+      const divider = document.createElement(tagName);
+      divider.className = 'exc-tracking-divider';
+      if (tagName === 'tr') {
+        const cell = document.createElement('td');
+        cell.colSpan = Math.max(1, hit.el.children ? hit.el.children.length : 1);
+        cell.textContent = label;
+        divider.appendChild(cell);
+      } else {
+        divider.textContent = label;
+      }
+      hit.el.parentNode.appendChild(divider);
+    } else {
+      const dividerHost =
+        hit.kind === 'newer' && hit.el.nextElementSibling ? hit.el.nextElementSibling : hit.el;
+      insertTrackingBreakpointDivider(dividerHost, label);
+    }
+    return hit;
   }
 
   async function enhanceListItem(el, ctx) {
@@ -26,8 +101,6 @@
     el.classList.add('exc-gl-item');
     el.dataset.excGid = partial.gid;
     el.dataset.excToken = partial.token;
-    // 悬停预览尽早绑定（不等 DB）
-    bindListHoverPreview(el, partial);
 
     // 列表打开方式：设置里「新标签页打开」
     try {
@@ -94,19 +167,21 @@
     // 封面 host：点过/库内描边仍打在图上
     let coverHost =
       el.querySelector('.glthumb') ||
-      el.querySelector('.gl1e') ||
-      el.querySelector('.gl3t') ||
-      el.querySelector('a[href*="/g/"]') ||
-      el;
+      el.querySelector('td.gl1e') ||
+      el.querySelector('.gl3t');
     if (!(coverHost && coverHost.querySelector && coverHost.querySelector('img'))) {
       const img = el.querySelector('img');
-      if (img && img.parentElement) coverHost = img.parentElement;
+      if (img) {
+        coverHost = img.closest('a[href*="/g/"], .glthumb, td.gl1e, .gl3t') || img;
+      }
     }
+    if (coverHost === el) coverHost = null;
     if (coverHost && coverHost.nodeType === 1) {
       coverHost.classList.add('exc-cover-host');
       const cs = window.getComputedStyle(coverHost);
       if (cs.position === 'static') coverHost.style.position = 'relative';
     }
+    bindListHoverPreview(el, partial);
 
     // 徽章左上 + 标签流左下，都挂卡片框
     const badgeHost = el;
@@ -477,12 +552,16 @@
               '已设断点' + (bpPosted ? ' · ' + bpPosted : '') + ' · ' + pgBit
             );
             // 刷新本页作品工具条状态
-            document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
-              n.classList.remove('is-exc-breakpoint');
-              syncListLastSeenMarker(n, false);
-            });
-            el.classList.add('is-exc-breakpoint');
-            syncListLastSeenMarker(el, true, coverHost);
+            if (typeof applyTrackingBreakpointDecorations === 'function') {
+              applyTrackingBreakpointDecorations(rec);
+            } else {
+              document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
+                n.classList.remove('is-exc-breakpoint');
+                syncListLastSeenMarker(n, false);
+              });
+              el.classList.add('is-exc-breakpoint');
+              syncListLastSeenMarker(el, true, coverHost);
+            }
             await enhanceListItemForce(el);
             if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
             void refreshTrackingBarState();
@@ -567,6 +646,15 @@
                 ? extractListItemPostedAt(el, gid)
                 : 0) ||
               0;
+            const neighbors =
+              typeof captureBreakpointNeighbors === 'function'
+                ? captureBreakpointNeighbors(
+                    gid,
+                    typeof extractOrderedGidsFromDocument === 'function'
+                      ? extractOrderedGidsFromDocument(document)
+                      : []
+                  )
+                : { newer: '', older: '' };
             const pending = {
               trackingId: tid,
               gid: gid,
@@ -580,6 +668,8 @@
               pageMode: (st && st.mode) || '',
               listIndex: listIndex,
               pageLen: pageLen,
+              newerGid: neighbors.newer,
+              olderGid: neighbors.older,
             };
             if (typeof setPendingTrackingOpen === 'function') {
               setPendingTrackingOpen(pending);
@@ -597,16 +687,20 @@
             ).then((advanced) => {
               if (!advanced) return;
               // 更新本页断点高亮
-              document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
-                n.classList.remove('is-exc-breakpoint');
-                syncListLastSeenMarker(n, false);
-                const btn = n.querySelector('[data-exc-act="breakpoint"]');
-                if (btn) btn.classList.remove('is-on', 'is-bp');
-              });
-              el.classList.add('is-exc-breakpoint');
-              syncListLastSeenMarker(el, true, coverHost);
-              const bpBtn = el.querySelector('[data-exc-act="breakpoint"]');
-              if (bpBtn) bpBtn.classList.add('is-on', 'is-bp');
+              if (typeof applyTrackingBreakpointDecorations === 'function') {
+                applyTrackingBreakpointDecorations(advanced);
+              } else {
+                document.querySelectorAll('.exc-gl-item.is-exc-breakpoint').forEach((n) => {
+                  n.classList.remove('is-exc-breakpoint');
+                  syncListLastSeenMarker(n, false);
+                  const btn = n.querySelector('[data-exc-act="breakpoint"]');
+                  if (btn) btn.classList.remove('is-on', 'is-bp');
+                });
+                el.classList.add('is-exc-breakpoint');
+                syncListLastSeenMarker(el, true, coverHost);
+                const bpBtn = el.querySelector('[data-exc-act="breakpoint"]');
+                if (bpBtn) bpBtn.classList.add('is-on', 'is-bp');
+              }
               if (typeof refreshTrackingBarState === 'function') void refreshTrackingBarState();
             });
           } catch (_) { /* ignore */ }
@@ -656,8 +750,9 @@
       return;
     }
     const url = best.url || buildGalleryUrl(location.origin, best.gid, best.token);
-    if (config.open_best_in_new_tab) window.open(url, '_blank');
-    else location.href = url;
+    if (config.open_best_in_new_tab) {
+      if (!openUrlInNewTab(url)) location.href = url;
+    } else location.href = url;
   }
 
   function describePrimaryEdition(ed) {

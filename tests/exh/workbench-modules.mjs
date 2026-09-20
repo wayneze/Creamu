@@ -55,5 +55,15 @@ assert.match(
   /if \(!entries\.length\) \{\s*injectTrackingBar\(trackingStatePromise\);/,
   'an empty list refresh should still update the tracking bar'
 );
+assert.match(
+  sources['74-workbench-runtime.js'],
+  /function bindTrackingStoreLiveRefresh/,
+  'open workbench should listen for tracking writes from other tabs'
+);
+assert.match(
+  sources['71-workbench-tracking.js'],
+  /list = sortTrackingRecordsForWorkbench\(list\)/,
+  'tracking list paint should sink caught-up rows'
+);
 
 console.log('ExH workbench module tests passed (4)');

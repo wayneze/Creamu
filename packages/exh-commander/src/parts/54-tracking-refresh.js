@@ -33,66 +33,117 @@
   }
 
   /** 相对锚点估算未读条数：found=锚点在本页，count=其前条数 */
-  function estimateUnreadFromGids(gids, anchorGid) {
+  function estimateUnreadFromGids(gids, anchorGid, opts) {
     const list = Array.isArray(gids) ? gids.map(String) : [];
-    const anchor = compactText(anchorGid || '');
-    if (!list.length || !anchor) return { found: false, count: 0, pageLen: list.length };
-    const idx = list.indexOf(anchor);
-    if (idx < 0) return { found: false, count: 0, pageLen: list.length };
-    return { found: true, count: idx, pageLen: list.length };
+    const pageLen = list.length;
+    const anchors = [];
+    const primary = compactText(anchorGid || '');
+    if (primary) anchors.push({ gid: primary, kind: 'exact', shift: 0 });
+    const older = compactText((opts && opts.olderGid) || '');
+    const newer = compactText((opts && opts.newerGid) || '');
+    if (older) anchors.push({ gid: older, kind: 'older', shift: 0 });
+    if (newer) anchors.push({ gid: newer, kind: 'newer', shift: 1 });
+    if (!list.length || !anchors.length) return { found: false, count: 0, pageLen, kind: '' };
+    for (let i = 0; i < anchors.length; i++) {
+      const idx = list.indexOf(anchors[i].gid);
+      if (idx < 0) continue;
+      return {
+        found: true,
+        count: Math.max(0, idx + anchors[i].shift),
+        pageLen,
+        kind: anchors[i].kind,
+      };
+    }
+    return { found: false, count: 0, pageLen, kind: '' };
   }
 
   /**
-   * 从列表 HTML 取「下一页」URL。
-   * 优先分页表 > / » 链（常带 next=gid）；其次任意 next=；再否则 null（由调用方用 page=/next= 拼）。
+   * 从列表文档取相邻页 URL。
+   * next：分页表 > / » 或 href 带 next=；prev：< / « 或 href 带 prev=。
+   * 不要取最大 page=，会直接跳到末页。
    */
-  function extractListNextPageUrl(html, baseUrl) {
+  function extractListAdjacentPageUrlFromDocument(doc, baseUrl, direction) {
+    if (!doc || !doc.querySelectorAll) return '';
     baseUrl = baseUrl || (typeof location !== 'undefined' ? location.href : '');
+    const wantNext = direction !== 'prev';
+    const cursorRe = wantNext ? /[?&]next=\d+/i : /[?&]prev=\d+/i;
+    const arrowRe = wantNext ? /^[>›»]+$/ : /^[<‹«]+$/;
+    const roots = doc.querySelectorAll('table.ptt, table.ptb, .ptt, .ptb');
+    const prefer = [];
+    const collect = (root) => {
+      if (!root || !root.querySelectorAll) return;
+      root.querySelectorAll('a[href]').forEach((a) => {
+        const t = compactText(a.textContent || '');
+        const href = a.getAttribute('href') || '';
+        if (!href || href === '#' || /^javascript:/i.test(href)) return;
+        let abs = '';
+        try {
+          abs = new URL(href, baseUrl).href;
+        } catch (_) {
+          return;
+        }
+        if (arrowRe.test(t) || cursorRe.test(href)) {
+          prefer.push(inheritTrackingListIdentity(abs, baseUrl));
+        }
+      });
+    };
+    for (let i = 0; i < roots.length; i++) collect(roots[i]);
+    if (!prefer.length) collect(doc);
+    for (let i = 0; i < prefer.length; i++) {
+      if (cursorRe.test(prefer[i])) return prefer[i];
+    }
+    return prefer[0] || '';
+  }
+
+  function extractListAdjacentPageUrl(html, baseUrl, direction) {
+    baseUrl = baseUrl || (typeof location !== 'undefined' ? location.href : '');
+    if (html && html.querySelectorAll && typeof html !== 'string') {
+      return extractListAdjacentPageUrlFromDocument(html, baseUrl, direction);
+    }
     const s = String(html || '');
     try {
       if (typeof DOMParser !== 'undefined') {
         const doc = new DOMParser().parseFromString(s, 'text/html');
-        const roots = doc.querySelectorAll('table.ptt, table.ptb, .ptt, .ptb');
-        const prefer = [];
-        const collect = (root) => {
-          if (!root) return;
-          root.querySelectorAll('a[href]').forEach((a) => {
-            const t = compactText(a.textContent || '');
-            const href = a.getAttribute('href') || '';
-            if (!href || href === '#' || /^javascript:/i.test(href)) return;
-            let abs = '';
-            try {
-              abs = new URL(href, baseUrl).href;
-            } catch (_) {
-              return;
-            }
-            // 只认明确「下一页」：> » ›，或 href 带 next=
-            // （不要取最大 page=，会直接跳到末页）
-            const isFwd = /^[>›»]+$/.test(t) || /[?&]next=\d+/i.test(href);
-            if (isFwd) prefer.push(abs);
-          });
-        };
-        for (let i = 0; i < roots.length; i++) collect(roots[i]);
-        if (!prefer.length) collect(doc);
-        for (let i = 0; i < prefer.length; i++) {
-          if (/[?&]next=\d+/i.test(prefer[i])) return prefer[i];
-        }
-        if (prefer.length) return prefer[0];
+        const fromDom = extractListAdjacentPageUrlFromDocument(doc, baseUrl, direction);
+        if (fromDom) return fromDom;
       }
     } catch (_) { /* regex */ }
-    let m = s.match(/href=["']([^"']*[?&]next=\d+[^"']*)["']/i);
+    const wantNext = direction !== 'prev';
+    let m = s.match(
+      wantNext
+        ? /href=["']([^"']*[?&]next=\d+[^"']*)["']/i
+        : /href=["']([^"']*[?&]prev=\d+[^"']*)["']/i
+    );
     if (m) {
       try {
-        return new URL(m[1].replace(/&amp;/g, '&'), baseUrl).href;
+        return inheritTrackingListIdentity(
+          new URL(m[1].replace(/&amp;/g, '&'), baseUrl).href,
+          baseUrl
+        );
       } catch (_) { /* ignore */ }
     }
-    m = s.match(/href=["']([^"']*)["'][^>]*>\s*(?:&gt;|>|›|»)\s*</i);
+    m = s.match(
+      wantNext
+        ? /href=["']([^"']*)["'][^>]*>\s*(?:&gt;|>|›|»)\s*</i
+        : /href=["']([^"']*)["'][^>]*>\s*(?:&lt;|<|‹|«)\s*</i
+    );
     if (m) {
       try {
-        return new URL(m[1].replace(/&amp;/g, '&'), baseUrl).href;
+        return inheritTrackingListIdentity(
+          new URL(m[1].replace(/&amp;/g, '&'), baseUrl).href,
+          baseUrl
+        );
       } catch (_) { /* ignore */ }
     }
     return '';
+  }
+
+  function extractListNextPageUrl(html, baseUrl) {
+    return extractListAdjacentPageUrl(html, baseUrl, 'next');
+  }
+
+  function extractListPrevPageUrl(html, baseUrl) {
+    return extractListAdjacentPageUrl(html, baseUrl, 'prev');
   }
 
   /** 用本页最后一条 gid 拼 next= 游标 URL（EH 翻页主路径） */
@@ -106,7 +157,7 @@
       u.searchParams.delete('seek');
       u.searchParams.delete('jump');
       u.searchParams.set('next', g);
-      return u.href;
+      return inheritTrackingListIdentity(u.href, homeUrl);
     } catch (_) {
       return '';
     }
@@ -136,7 +187,10 @@
       return { count: 0, capped: 0, has_update: 0, source: 'home_caught_up' };
     }
 
-    const onHome = estimateUnreadFromGids(homeGids, bp);
+    const onHome = estimateUnreadFromGids(homeGids, bp, {
+      newerGid: rec.breakpoint_newer_gid,
+      olderGid: rec.breakpoint_older_gid,
+    });
     if (onHome.found) {
       return {
         count: onHome.count,
@@ -189,6 +243,7 @@
     const home = buildListUrlWithPage(canonicalizeTrackingOpenUrl(homeUrl), 0);
     const result = {
       found: false,
+      kind: '',
       count: 0,
       capped: 0,
       pagesScanned: 0,
@@ -196,7 +251,11 @@
       firstGids: [],
       lastError: '',
     };
-    if (!anchor) return result;
+    const neighborOpts = {
+      newerGid: compactText((opts && opts.newerGid) || ''),
+      olderGid: compactText((opts && opts.olderGid) || ''),
+    };
+    if (!anchor && !neighborOpts.newerGid && !neighborOpts.olderGid) return result;
 
     let url = home;
     let totalBefore = 0;
@@ -237,9 +296,10 @@
 
       if (!gids.length) break;
 
-      const est = estimateUnreadFromGids(gids, anchor);
+      const est = estimateUnreadFromGids(gids, anchor, neighborOpts);
       if (est.found) {
         result.found = true;
+        result.kind = est.kind || 'exact';
         result.count = totalBefore + est.count;
         result.capped = 0;
         break;
@@ -248,11 +308,12 @@
 
       // 下一页：HTML 链 → next=末 gid → page=N
       let nextUrl = extractListNextPageUrl(html, url);
+      if (nextUrl) nextUrl = inheritTrackingListIdentity(nextUrl, home);
       if (!nextUrl) {
         nextUrl = buildListUrlWithNextGid(home, gids[gids.length - 1]);
       }
       if (!nextUrl) {
-        nextUrl = buildListUrlWithPage(home, pages); // pages 已是下一页的 0 起下标
+        nextUrl = inheritTrackingListIdentity(buildListUrlWithPage(home, pages), home);
       }
       if (!nextUrl || nextUrl === url || seen.has(nextUrl)) break;
       // 避免 next 指回首页死循环
@@ -434,7 +495,10 @@
       return rec;
     }
 
-    const est = estimateUnreadFromGids(gids, anchor);
+    const est = estimateUnreadFromGids(gids, anchor, {
+      newerGid: rec.breakpoint_newer_gid,
+      olderGid: rec.breakpoint_older_gid,
+    });
 
     // 浏览/游标深页：禁止当页局部覆盖总量
     if (mode === 'browse' || (deepUnknown && !isFirst)) {
@@ -496,7 +560,7 @@
    * 主动检查单条追更。
    * @param {object} rec
    * @param {{ deepScan?: boolean }} [opts]
-   *   deepScan：true 时跨页精确数未读（慢）；默认跟 config.tracking_unread_deep_scan
+   *   deepScan：false 才强制只看首页；默认从首页向后翻到断点。
    */
   async function refreshSingleTrackingRecord(rec, opts) {
     if (!rec) throw new Error('无记录');
@@ -504,14 +568,18 @@
     const raw = rec.open_url || rec.page_url;
     if (!raw) throw new Error('无 URL');
     const home = buildListUrlWithPage(canonicalizeTrackingOpenUrl(raw), 0);
-    // 顺手纠正历史脏 open_url（带深页 page/next）
-    if (rec.open_url && rec.open_url !== home) {
+    // 顺手纠正历史脏 open_url（带深页 page/next）；丢掉 f_search/favcat 的首页不算纠正
+    if (
+      rec.open_url &&
+      rec.open_url !== home &&
+      !(typeof trackingOpenUrlLosesIdentity === 'function' && trackingOpenUrlLosesIdentity(rec.open_url, home))
+    ) {
       rec.open_url = home;
       rec.page_url = home;
     }
     const previousTop = compactText(rec.top_gid || '');
     const bp = compactText(rec.breakpoint_gid || '');
-    // 断点不在首页时默认跨页扫；否则只会得到假 +25。opts.deepScan===false 才强制快路径
+    // 断点不在首页时跨页扫；否则只会得到假 +25。opts.deepScan===false 才强制快路径
     const allowDeep = opts.deepScan !== false;
     rec.last_check_at = nowMs();
     rec.last_check_error = '';
@@ -529,10 +597,14 @@
     top = topGal && topGal.gid ? String(topGal.gid) : gids[0] || '';
 
     if (bp && top) {
-      const onHome = estimateUnreadFromGids(gids, bp);
+      const onHome = estimateUnreadFromGids(gids, bp, {
+        newerGid: rec.breakpoint_newer_gid,
+        olderGid: rec.breakpoint_older_gid,
+      });
       if (onHome.found) {
         scan = {
           found: true,
+          kind: onHome.kind || 'exact',
           count: onHome.count,
           capped: 0,
           pagesScanned: 1,
@@ -550,6 +622,8 @@
           ),
           seedHtml: homeHtml,
           seedUrl: home,
+          newerGid: rec.breakpoint_newer_gid,
+          olderGid: rec.breakpoint_older_gid,
         });
         if (scan.topGal) topGal = scan.topGal;
         if (scan.firstGids && scan.firstGids.length) gids = scan.firstGids;
@@ -608,12 +682,16 @@
       if (posted) rec.top_posted_at = posted;
 
       if (bp && scan) {
+        rec.breakpoint_missing = 0;
+        rec.breakpoint_anchor_kind = '';
         if (scan.found) {
           rec.unread_estimate = Math.max(0, Number(scan.count) || 0);
           rec.unread_estimate_capped = 0;
           rec.unread_estimate_source = usedDeep ? 'deep_scan' : 'home_exact';
+          rec.breakpoint_anchor_kind = scan.kind || 'exact';
+          rec.last_check_error = '';
           if (rec.unread_estimate > 0) rec.has_update = 1;
-          else if (top === bp) {
+          else if (top === bp || scan.kind === 'newer' || scan.kind === 'older') {
             rec.has_update = 0;
             rec.unread_estimate = 0;
             rec.unread_estimate_source = 'home_caught_up';
@@ -637,8 +715,9 @@
           }
           rec.unread_estimate_source = scan.source || 'page_formula';
         } else {
-          // 深度扫满仍未见断点
+          // 深度扫满仍未见断点：列表检查本身成功，只是作品可能已下架
           rec.has_update = 1;
+          rec.breakpoint_missing = 1;
           rec.unread_estimate = Math.max(
             Number(rec.unread_estimate) || 0,
             Number(scan.count) || 0,
@@ -646,12 +725,9 @@
           );
           rec.unread_estimate_capped = 1;
           rec.unread_estimate_source = 'deep_scan';
+          rec.last_check_error = '';
           if (scan.lastError) {
-            rec.last_check_error =
-              (rec.last_check_error ? rec.last_check_error + '；' : '') + scan.lastError;
-          } else if (scan.pagesScanned > 0) {
-            rec.last_check_error =
-              '断点未在前 ' + scan.pagesScanned + ' 页内找到（未读≥' + rec.unread_estimate + '）';
+            rec.last_check_error = scan.lastError;
           }
         }
         rec.unread_scan_pages = scan.pagesScanned || 0;

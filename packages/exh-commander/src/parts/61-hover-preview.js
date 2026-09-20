@@ -228,10 +228,26 @@
     }
   }
 
+  function getListHoverPreviewAnchor(el) {
+    if (!el || !el.querySelector) return null;
+    const cover =
+      el.querySelector('.exc-cover-host') ||
+      el.querySelector('.glthumb') ||
+      el.querySelector('td.gl1e') ||
+      el.querySelector('.gl3t a[href*="/g/"]') ||
+      el.querySelector('.gl1t a[href*="/g/"]');
+    if (cover && cover !== el) return cover;
+    const img = el.querySelector('img');
+    if (!img) return null;
+    return img.closest('a[href*="/g/"], .glthumb, td.gl1e, .gl3t') || img;
+  }
+
   function bindListHoverPreview(el, partial) {
     if (!el || !partial || !partial.gid) return;
-    if (el.dataset.excHoverBound === '1') return;
-    el.dataset.excHoverBound = '1';
+    const anchor = getListHoverPreviewAnchor(el);
+    if (!anchor) return;
+    if (anchor.dataset.excHoverBound === '1') return;
+    anchor.dataset.excHoverBound = '1';
 
     let enterTimer = null;
     let localGen = 0;
@@ -243,7 +259,8 @@
       }
     };
 
-    el.addEventListener('mouseenter', () => {
+    // 只认封面：标题/标签/卡片空白不触发，避免列表贴太紧误开
+    anchor.addEventListener('mouseenter', () => {
       if (config.list_hover_preview === false) return;
       clearEnter();
       const my = ++localGen;
@@ -255,11 +272,11 @@
           clearTimeout(hoverPreviewHideTimer);
           hoverPreviewHideTimer = null;
         }
-        showHoverPreview(el, partial).catch(() => {});
+        showHoverPreview(anchor, partial).catch(() => {});
       }, delay);
     });
 
-    el.addEventListener('mouseleave', (ev) => {
+    anchor.addEventListener('mouseleave', (ev) => {
       clearEnter();
       localGen++;
       const to = ev.relatedTarget;

@@ -77,6 +77,97 @@
     }
   }
 
+  /** 搜索/收藏夹身份参数：EH 点「>」常只留下 next=，这些必须从首页补回 */
+  const TRACKING_LIST_IDENTITY_PARAMS = [
+    'f_search',
+    'f_cats',
+    'favcat',
+    'f_sh',
+    'f_sto',
+    'f_spf',
+    'f_spt',
+    'f_sfl',
+    'f_sfu',
+    'f_sft',
+    'f_sr',
+    'f_srdd',
+    'f_min',
+    'f_max',
+    'advsearch',
+  ];
+
+  function inheritTrackingListIdentity(url, homeUrl) {
+    try {
+      const home = new URL(homeUrl || '', location.origin);
+      const next = new URL(url || '', home);
+      if (home.pathname && home.pathname !== '/' && (next.pathname === '/' || next.pathname === '')) {
+        next.pathname = home.pathname;
+      }
+      TRACKING_LIST_IDENTITY_PARAMS.forEach((key) => {
+        const hv = home.searchParams.get(key);
+        if (hv != null && hv !== '' && !next.searchParams.has(key)) {
+          next.searchParams.set(key, hv);
+        }
+      });
+      return next.href;
+    } catch (_) {
+      return url || homeUrl || '';
+    }
+  }
+
+  /** 深页丢掉 f_search/favcat 后，禁止把 open_url 收成更宽的首页 */
+  function trackingOpenUrlLosesIdentity(previous, next) {
+    try {
+      const a = new URL(previous || '', location.origin);
+      const b = new URL(next || '', location.origin);
+      if (a.pathname && a.pathname !== '/' && (b.pathname === '/' || b.pathname === '')) return true;
+      for (let i = 0; i < TRACKING_LIST_IDENTITY_PARAMS.length; i++) {
+        const key = TRACKING_LIST_IDENTITY_PARAMS[i];
+        const av = compactText(a.searchParams.get(key) || '');
+        const bv = compactText(b.searchParams.get(key) || '');
+        if (av && !bv) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function isCurrentDocumentUrl(url) {
+    if (typeof location === 'undefined') return false;
+    try {
+      const parsed = new URL(url || '', location.origin);
+      const here = new URL(location.href, location.origin);
+      return parsed.pathname === here.pathname && parsed.search === here.search;
+    } catch (_) {
+      return compactText(url) === compactText(location.href);
+    }
+  }
+
+  /** 翻页 URL 丢掉身份后，用已恢复的搜索词/收藏夹把首页地址补回去 */
+  function applyRecoveredTrackingIdentity(parsed, parts) {
+    const fallback = canonicalizeTrackingOpenUrl(parsed && parsed.href);
+    try {
+      const u = new URL(fallback, location.origin);
+      if (parts.kind === 'favorites') {
+        if (!/favorites\.php/i.test(u.pathname || '')) u.pathname = '/favorites.php';
+        if (parts.favcat && parts.favcat !== 'all') u.searchParams.set('favcat', String(parts.favcat));
+        return u.href;
+      }
+      if (
+        (u.pathname === '/' || u.pathname === '') &&
+        parts.f_search &&
+        !u.searchParams.get('f_search') &&
+        !/^(favorites:|browse:|f_cats:|toplist$)/i.test(parts.f_search)
+      ) {
+        u.searchParams.set('f_search', parts.f_search);
+      }
+      return u.href;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   function parseExhPageContext(url) {
     let parsed;
     try {
@@ -117,6 +208,7 @@
     let favcat_label = '';
     let f_cats = compactText(params.get('f_cats') || '');
     let browse_key = '';
+    const currentDoc = isCurrentDocumentUrl(parsed.href);
 
     // /tag/artist:name  or /tag/group:foo/
     const tagMatch = path.match(/\/tag\/([^/?#]+)/i);
@@ -146,7 +238,18 @@
     } else if (kind === 'favorites') {
       group_type = 'favorites';
       const cat = params.get('favcat');
-      favcat = cat != null && cat !== '' ? String(cat) : 'all';
+      if (cat != null && cat !== '') {
+        favcat = String(cat);
+      } else if (currentDoc) {
+        // next=/prev= 常丢掉 favcat；用页上当前选中的收藏夹，不能默认成「全部」
+        try {
+          const sel =
+            document.querySelector('#favcat') ||
+            document.querySelector('select[name="favcat"]');
+          if (sel && sel.value != null && String(sel.value) !== '') favcat = String(sel.value);
+        } catch (_) { /* ignore */ }
+      }
+      if (!favcat) favcat = 'all';
       try {
         const sel =
           document.querySelector('#favcat option[selected]') ||
@@ -171,17 +274,26 @@
       label = '排行榜';
       f_search = 'toplist';
       browse_key = 'toplist';
-    } else if (f_search) {
-      label = f_search;
-      group_type = 'search';
-      if (/^artist:"/i.test(f_search) || /^artist:/i.test(f_search)) group_type = 'artist';
-      else if (/^group:"/i.test(f_search) || /^group:/i.test(f_search)) group_type = 'group';
-      else if (/^parody:"/i.test(f_search) || /^parody:/i.test(f_search)) group_type = 'parody';
-      else if (/^character:"/i.test(f_search)) group_type = 'character';
-      else if (/^female:"/i.test(f_search)) group_type = 'female';
-      else if (/^male:"/i.test(f_search)) group_type = 'male';
     } else {
-      if (f_cats && f_cats !== '0') {
+      if (!f_search && currentDoc && kind === 'list') {
+        // 搜索翻页后 URL 常只剩 next=；搜索框还在，不能把这条追更认成首页
+        try {
+          const box =
+            document.querySelector('input[name="f_search"]') ||
+            document.querySelector('#f_search');
+          if (box && box.value) f_search = compactText(box.value);
+        } catch (_) { /* ignore */ }
+      }
+      if (f_search) {
+        label = f_search;
+        group_type = 'search';
+        if (/^artist:"/i.test(f_search) || /^artist:/i.test(f_search)) group_type = 'artist';
+        else if (/^group:"/i.test(f_search) || /^group:/i.test(f_search)) group_type = 'group';
+        else if (/^parody:"/i.test(f_search) || /^parody:/i.test(f_search)) group_type = 'parody';
+        else if (/^character:"/i.test(f_search)) group_type = 'character';
+        else if (/^female:"/i.test(f_search)) group_type = 'female';
+        else if (/^male:"/i.test(f_search)) group_type = 'male';
+      } else if (f_cats && f_cats !== '0') {
         group_type = 'category';
         label = '分类 f_cats=' + f_cats;
         f_search = 'f_cats:' + f_cats;
@@ -247,7 +359,11 @@
       }
     }
 
-    const open_url = canonicalizeTrackingOpenUrl(parsed.href);
+    const open_url = applyRecoveredTrackingIdentity(parsed, {
+      kind,
+      f_search,
+      favcat,
+    });
     const query_signature = buildTrackingQuerySignature({
       site,
       group_type,

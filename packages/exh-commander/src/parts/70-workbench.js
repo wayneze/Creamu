@@ -172,7 +172,7 @@
       '  <div class="jlc-wb-footer-summary" id="jlc-wb-footer-summary">—</div>' +
       '  <div class="jlc-wb-footer-actions">' +
       '    <button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">⭐ 收藏当前</button>' +
-      '    <button type="button" class="jlc-wb-btn ghost" id="exc-check-updates" title="默认只查首页（快）；可在设置开启跨页精确未读。条目间隔 5～10 秒">检查更新</button>' +
+      '    <button type="button" class="jlc-wb-btn ghost" id="exc-check-updates" title="从每条追更首页向后翻到断点。条目间隔 5～10 秒">检查更新</button>' +
       '    <button type="button" class="jlc-wb-btn ghost" id="exc-sync-all" title="同时同步 WebDAV 与 LRR（已配置的项）">同步</button>' +
       '  </div>' +
       '</div>' +
@@ -625,7 +625,8 @@
   }
 
   /**
-   * 从工作台打开追更项：先收起面板（新标签不带弹层；本页跳转也不挡内容）
+   * 从工作台打开追更项。
+   * 新标签：当前页面板保持开着（开合只记在本标签）；本页跳转才收起。
    * @param {object} rec
    * @param {'default'|'tab'|'same'} mode
    */
@@ -636,15 +637,22 @@
       showToast('没有可打开的地址');
       return;
     }
+    const wantTab = mode !== 'same';
     wbSession = wbSession || loadSession();
-    wbSession.open = false;
     wbSession.nav = 'tracking';
     wbSession.lastOpenedId = rec.id;
     wbSession.lastOpenedAt = nowMs();
-    saveSession(wbSession);
-    try {
-      toggleWorkbench(false);
-    } catch (_) { /* ignore */ }
+    if (wantTab) {
+      // 开合只记在本标签：新标签不得把原页「开着」写成关
+      if (isWorkbenchDomOpen()) wbSession.open = true;
+      saveSession(wbSession);
+    } else {
+      wbSession.open = false;
+      saveSession(wbSession);
+      try {
+        toggleWorkbench(false);
+      } catch (_) { /* ignore */ }
+    }
 
     rec.last_browsed_at = nowMs();
     // 仅清「新检查到」旗标；若顶仍≠断点，角标/leaf 仍算有更新
@@ -653,11 +661,8 @@
       await saveTrackingRecord(rec);
     } catch (_) { /* ignore */ }
 
-    const wantTab =
-      mode === 'tab' || (mode !== 'same' && (mode === 'default' ? !!config.open_best_in_new_tab : false));
     if (wantTab) {
-      const opened = window.open(url, '_blank', 'noopener');
-      if (!opened) {
+      if (!openUrlInNewTab(url)) {
         showToast('浏览器拦截了新标签，已改为本页打开');
         location.href = url;
         return;

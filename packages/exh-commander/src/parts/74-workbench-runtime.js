@@ -1,4 +1,30 @@
 
+  function bindTrackingStoreLiveRefresh() {
+    if (window.__excTrackingStoreLiveBound) return;
+    window.__excTrackingStoreLiveBound = true;
+    let timer = null;
+    const kick = (includeList) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        if (typeof window.__excRefreshWorkbench === 'function') window.__excRefreshWorkbench();
+        if (includeList && typeof refreshListVolatileState === 'function') {
+          refreshListVolatileState().catch(() => {});
+        }
+      }, 80);
+    };
+    if (typeof GM_addValueChangeListener === 'function') {
+      GM_addValueChangeListener(GM_TRACKING_REV_KEY, (_name, _old, _next, remote) => {
+        if (remote) kick(true);
+      });
+    }
+    window.addEventListener('pageshow', () => kick(false));
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') kick(false);
+    });
+    window.addEventListener('focus', () => kick(false));
+  }
+
   function createWorkbench() {
     wbSession = loadSession();
     if (!wbSession.nav) wbSession.nav = 'tracking';
@@ -14,6 +40,7 @@
     window.__excRefreshPage = () => {
       refreshCurrentPageUi().catch(() => {});
     };
+    bindTrackingStoreLiveRefresh();
     const ctx = parseExhPageContext(location.href);
     const trackingState = (async () => {
       const records = await listTrackingSearches();
@@ -35,7 +62,10 @@
       rec.last_page = pageIdx;
       if (rec.open_url && typeof canonicalizeTrackingOpenUrl === 'function') {
         const canon = canonicalizeTrackingOpenUrl(rec.open_url);
-        if (rec.open_url !== canon) {
+        const losesIdentity =
+          typeof trackingOpenUrlLosesIdentity === 'function' &&
+          trackingOpenUrlLosesIdentity(rec.open_url, canon);
+        if (rec.open_url !== canon && !losesIdentity) {
           rec.open_url = canon;
           rec.page_url = canon;
         }

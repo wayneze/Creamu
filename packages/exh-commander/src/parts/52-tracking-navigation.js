@@ -314,6 +314,14 @@
         );
       }
       if (posted) rec.breakpoint_posted_at = posted;
+      const neighbors = resolveBreakpointNeighbors(rec.breakpoint_gid, {
+        newerGid: opts.newerGid,
+        olderGid: opts.olderGid,
+        gids: opts.gids,
+        live: !fromGallery,
+      });
+      rec.breakpoint_newer_gid = neighbors.newer;
+      rec.breakpoint_older_gid = neighbors.older;
     }
     // 设断点后回写未读（画廊页无列表 DOM，跳过估数）
     try {
@@ -455,13 +463,19 @@
       40,
       Math.max(8, Math.floor(Number(config.tracking_unread_scan_max_pages) || 20))
     );
-    const scan = await scanTrackingUnreadAcrossPages(home, bp, { maxPages: maxPages });
+    const scan = await scanTrackingUnreadAcrossPages(home, bp, {
+      maxPages: maxPages,
+      newerGid: rec.breakpoint_newer_gid,
+      olderGid: rec.breakpoint_older_gid,
+    });
     if (scan.topGal && scan.topGal.gid) {
       rec.top_gid = String(scan.topGal.gid);
       if (scan.topGal.token) rec.top_token = compactText(scan.topGal.token);
       if (scan.topGal.title) rec.top_title = String(scan.topGal.title).slice(0, 160);
       if (scan.topGal.cover) applyTrackingCoverFields(rec, scan.topGal.cover);
     }
+    rec.breakpoint_missing = 0;
+    rec.breakpoint_anchor_kind = '';
     if (scan.found) {
       // 精确值：跟断点后应比旧未读小（或相等）；异常偏高时取较小者
       let n = Math.max(0, Number(scan.count) || 0);
@@ -469,6 +483,8 @@
       rec.unread_estimate = n;
       rec.unread_estimate_capped = 0;
       rec.unread_estimate_source = 'deep_scan';
+      rec.breakpoint_anchor_kind = scan.kind || 'exact';
+      rec.last_check_error = '';
       rec.has_update = n > 0 ? 1 : 0;
       if (scan.pagesScanned > 0) {
         rec.breakpoint_page = Math.max(0, scan.pagesScanned - 1);
@@ -477,6 +493,7 @@
       }
     } else {
       rec.has_update = 1;
+      rec.breakpoint_missing = 1;
       const floor = Math.max(0, Number(scan.count) || 0);
       // 未扫到断点：用已扫条数作下限；若有旧值则取 min（跟断后不应更大）
       if (floor > 0) {
@@ -488,20 +505,58 @@
         rec.unread_estimate = prevEst;
         rec.unread_estimate_capped = 1;
       }
-      if (scan.lastError) {
-        rec.last_check_error = String(scan.lastError).slice(0, 160);
-      }
+      rec.last_check_error = scan.lastError ? String(scan.lastError).slice(0, 160) : '';
     }
     rec.unread_scan_pages = scan.pagesScanned || 0;
     await saveTrackingRecord(rec);
     if (typeof showToast === 'function' && (scan.found || Number(rec.unread_estimate) >= 0)) {
       const n = Math.max(0, Math.floor(Number(rec.unread_estimate) || 0));
       if (scan.found) {
-        showToast(n > 0 ? '未读 +' + n : '已追上最新');
+        showToast(
+          n > 0
+            ? '未读 +' + n + (scan.kind && scan.kind !== 'exact' ? '（按相邻作品）' : '')
+            : '已追上最新'
+        );
       }
     }
     if (window.__excRefreshWorkbench) window.__excRefreshWorkbench();
     return rec;
+  }
+
+  function captureBreakpointNeighbors(gid, gids) {
+    const list = Array.isArray(gids) ? gids.map((value) => String(value || '')).filter(Boolean) : [];
+    const target = compactText(gid || '');
+    const idx = target ? list.indexOf(target) : -1;
+    if (idx < 0) return { newer: '', older: '' };
+    return {
+      newer: idx > 0 ? list[idx - 1] : '',
+      older: idx < list.length - 1 ? list[idx + 1] : '',
+    };
+  }
+
+  function getTrackingBreakpointNeighborGids(rec) {
+    return {
+      newer: compactText((rec && rec.breakpoint_newer_gid) || ''),
+      older: compactText((rec && rec.breakpoint_older_gid) || ''),
+    };
+  }
+
+  function resolveBreakpointNeighbors(gid, opts) {
+    opts = opts || {};
+    let newer = compactText(opts.newerGid || '');
+    let older = compactText(opts.olderGid || '');
+    const liveGids =
+      Array.isArray(opts.gids) && opts.gids.length
+        ? opts.gids
+        : opts.live !== false && typeof extractOrderedGidsFromDocument === 'function'
+          ? extractOrderedGidsFromDocument(document)
+          : [];
+    if ((!newer || !older) && liveGids && liveGids.length) {
+      const captured = captureBreakpointNeighbors(gid, liveGids);
+      if (!newer) newer = captured.newer;
+      if (!older) older = captured.older;
+    }
+    return { newer, older };
   }
 
   function trackingHasWorkBreakpoint(rec) {
@@ -517,94 +572,348 @@
     );
   }
 
-  /** 打开断点：优先原 breakpoint_url（含 next= 游标），否则 page= 跳转 */
+  let trackingBreakpointSearchRuntime = null;
+  let trackingBreakpointSearchCursor = { prev: '', next: '' };
+
+  function resetTrackingBreakpointSearchCursor() {
+    trackingBreakpointSearchCursor = { prev: '', next: '' };
+  }
+
+  function listItemGid(el) {
+    if (!el) return '';
+    if (el.dataset && compactText(el.dataset.excGid)) return compactText(el.dataset.excGid);
+    const card = typeof parseListCard === 'function' ? parseListCard(el) : null;
+    if (card && card.gid) return compactText(card.gid);
+    const link = el.querySelector && el.querySelector('a[href*="/g/"]');
+    const href = (link && (link.getAttribute('href') || link.href)) || '';
+    const match = String(href).match(/\/g\/(\d+)\//);
+    return match ? match[1] : '';
+  }
+
+  function findBreakpointListItem(gid) {
+    const target = compactText(gid || '');
+    if (!target) return null;
+    const items = typeof queryListItems === 'function' ? queryListItems() : [];
+    for (let i = 0; i < items.length; i++) {
+      if (listItemGid(items[i]) === target) return items[i];
+    }
+    return null;
+  }
+
+  function locateTrackingBreakpointOnPage(rec) {
+    const gid = compactText((rec && rec.breakpoint_gid) || '');
+    const neighbors = getTrackingBreakpointNeighborGids(rec);
+    const exact = gid ? findBreakpointListItem(gid) : null;
+    if (exact) {
+      return { found: true, proxy: false, kind: 'exact', gid, el: exact };
+    }
+    const older = neighbors.older ? findBreakpointListItem(neighbors.older) : null;
+    if (older) {
+      return { found: true, proxy: true, kind: 'older', gid: neighbors.older, el: older };
+    }
+    const newer = neighbors.newer ? findBreakpointListItem(neighbors.newer) : null;
+    if (newer) {
+      return { found: true, proxy: true, kind: 'newer', gid: neighbors.newer, el: newer };
+    }
+    return { found: false, proxy: false, kind: '', gid: '', el: null };
+  }
+
+  function getLiveListInsertRoot() {
+    const table = document.querySelector('#ido table.itg, table.itg');
+    if (table) return (table.tBodies && table.tBodies[0]) || table;
+    return (
+      document.querySelector('#ido .itg') ||
+      document.querySelector('.itg') ||
+      document.querySelector('#ido') ||
+      document.body
+    );
+  }
+
+  function getTrackingBreakpointSearchDirections(rec) {
+    const pageState =
+      typeof getListPageState === 'function' ? getListPageState(location.href, document) : null;
+    const current = pageState && pageState.known && pageState.index >= 0 ? pageState.index : -1;
+    const bpPage = Number(rec && rec.breakpoint_page);
+    if (current >= 0 && Number.isFinite(bpPage) && bpPage >= 0) {
+      if (current < bpPage) return ['next', 'prev'];
+      if (current > bpPage) return ['prev', 'next'];
+    }
+    return ['next', 'prev'];
+  }
+
+  function setContinueBreakpointProgress(options) {
+    options = options || {};
+    const btn = document.getElementById('exc-goto-bp');
+    if (!btn) return;
+    if (options.loading) {
+      btn.hidden = false;
+      btn.disabled = true;
+      btn.classList.add('is-loading');
+      btn.textContent = compactText(options.text) || '查找断点中…';
+    } else {
+      btn.disabled = false;
+      btn.classList.remove('is-loading');
+    }
+  }
+
+  function importTrackingListPageItems(html, baseUrl, direction) {
+    const imported = [];
+    let nextUrl = '';
+    let prevUrl = '';
+    const liveRoot = getLiveListInsertRoot();
+    if (!liveRoot || typeof DOMParser === 'undefined') {
+      return { imported, nextUrl, prevUrl };
+    }
+    let doc = null;
+    try {
+      doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    } catch (_) {
+      return { imported, nextUrl, prevUrl };
+    }
+    nextUrl = extractListNextPageUrl(doc, baseUrl);
+    prevUrl = extractListPrevPageUrl(doc, baseUrl);
+    const remoteItems = typeof queryListItems === 'function' ? queryListItems(doc) : [];
+    const seen = new Set(
+      typeof extractOrderedGidsFromDocument === 'function'
+        ? extractOrderedGidsFromDocument(document)
+        : []
+    );
+    const nodes = [];
+    remoteItems.forEach((el) => {
+      const card = typeof parseListCard === 'function' ? parseListCard(el) : null;
+      const gid = card && card.gid ? String(card.gid) : '';
+      if (!gid || seen.has(gid)) return;
+      seen.add(gid);
+      const node = document.importNode(el, true);
+      if (node.dataset) {
+        delete node.dataset.excEnhanced;
+        delete node.dataset.excTrackOpenBound;
+      }
+      nodes.push(node);
+    });
+    if (!nodes.length) return { imported, nextUrl, prevUrl };
+    const frag = document.createDocumentFragment();
+    nodes.forEach((node) => frag.appendChild(node));
+    if (direction === 'prev') {
+      let before = liveRoot.firstElementChild;
+      while (before && before.querySelector && before.querySelector('th')) {
+        before = before.nextElementSibling;
+      }
+      liveRoot.insertBefore(frag, before || null);
+    } else {
+      liveRoot.appendChild(frag);
+    }
+    return { imported: nodes, nextUrl, prevUrl };
+  }
+
+  /**
+   * 在当前列表向后/向前接页，直到命中断点作品或真正没有下一页。
+   * 不跳走、不另开标签、不拿「检查更新」的页数上限当停手条件。
+   */
+  async function continueTrackingBreakpointSearch(rec) {
+    if (!rec) return null;
+    if (trackingBreakpointSearchRuntime && trackingBreakpointSearchRuntime.active) {
+      showToast('正在查找断点…');
+      return trackingBreakpointSearchRuntime.pending;
+    }
+    const gid = compactText(rec.breakpoint_gid || '');
+    if (!gid) {
+      showToast('没有作品断点。请先在封面点「断」。');
+      return null;
+    }
+    if (scrollToTrackingBreakpoint(rec, { quietIfMissing: true })) {
+      resetTrackingBreakpointSearchCursor();
+      return true;
+    }
+
+    const home = canonicalizeTrackingOpenUrl(rec.open_url || rec.page_url || location.href);
+    const directions = getTrackingBreakpointSearchDirections(rec);
+    const currentGids =
+      typeof extractOrderedGidsFromDocument === 'function'
+        ? extractOrderedGidsFromDocument(document)
+        : [];
+    const inherit = (url) =>
+      url && typeof inheritTrackingListIdentity === 'function'
+        ? inheritTrackingListIdentity(url, home)
+        : url || '';
+    const cursor = trackingBreakpointSearchCursor || (trackingBreakpointSearchCursor = { prev: '', next: '' });
+    const seeds = {
+      next: inherit(
+        cursor.next ||
+          extractListNextPageUrl(document, location.href) ||
+          buildListUrlWithNextGid(home, currentGids[currentGids.length - 1])
+      ),
+      prev: inherit(cursor.prev || extractListPrevPageUrl(document, location.href)),
+    };
+    const available = directions.filter((direction) => !!seeds[direction]);
+    if (!available.length) {
+      showToast('前后都没有更多页面了。');
+      return null;
+    }
+    const runtime = { active: true, pending: null };
+    trackingBreakpointSearchRuntime = runtime;
+    runtime.pending = (async () => {
+      try {
+        const visited = new Set();
+        let lastFailure = '';
+        for (let d = 0; d < available.length; d++) {
+          const direction = available[d];
+          let url = seeds[direction];
+          if (!url) continue;
+          const label = direction === 'prev' ? '向前' : '向后';
+          let pages = 0;
+          setContinueBreakpointProgress({ loading: true, text: '正在' + label + '查找…' });
+          while (url) {
+            const visitKey = compactText(url).split('#')[0];
+            if (!visitKey || visited.has(visitKey)) {
+              cursor[direction] = '';
+              break;
+            }
+            visited.add(visitKey);
+            cursor[direction] = url;
+            pages += 1;
+            if (pages > 1) {
+              await (typeof sleepMs === 'function'
+                ? sleepMs(
+                    typeof pickTrackingPageScanDelayMs === 'function'
+                      ? pickTrackingPageScanDelayMs()
+                      : 400
+                  )
+                : new Promise((resolve) => setTimeout(resolve, 400)));
+            }
+            setContinueBreakpointProgress({
+              loading: true,
+              text: label + '第' + pages + '页…',
+            });
+            let html = '';
+            try {
+              html = await fetchTrackingPageHtml(url);
+            } catch (err) {
+              lastFailure = (err && err.message) || String(err || '请求失败');
+              break;
+            }
+            const imported = importTrackingListPageItems(html, url, direction);
+            if (imported.imported.length && typeof enhanceListPage === 'function') {
+              await enhanceListPage({ items: imported.imported, reapplyFold: true });
+              const last = imported.imported[imported.imported.length - 1];
+              try {
+                last.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+              } catch (_) { /* ignore */ }
+            }
+            if (scrollToTrackingBreakpoint(rec, { quietIfMissing: true })) {
+              resetTrackingBreakpointSearchCursor();
+              setContinueBreakpointProgress({ loading: false });
+              return true;
+            }
+            let follow =
+              direction === 'prev'
+                ? imported.prevUrl || extractListPrevPageUrl(html, url)
+                : imported.nextUrl || extractListNextPageUrl(html, url);
+            if (!follow && direction !== 'prev' && imported.imported.length) {
+              const lastCard =
+                typeof parseListCard === 'function'
+                  ? parseListCard(imported.imported[imported.imported.length - 1])
+                  : null;
+              follow = buildListUrlWithNextGid(home, lastCard && lastCard.gid);
+            }
+            url = inherit(follow);
+            cursor[direction] = url || '';
+          }
+        }
+        const remaining = directions.filter(
+          (direction) => !!((trackingBreakpointSearchCursor || {})[direction])
+        );
+        setContinueBreakpointProgress({ loading: false });
+        if (remaining.length) {
+          showToast(lastFailure ? '断点查找中断：' + lastFailure : '断点查找中断');
+          return false;
+        }
+        showToast(
+          lastFailure
+            ? '断点查找失败：' + lastFailure
+            : '已经翻到前后边界，仍未找到断点（作品可能已下架）'
+        );
+        return false;
+      } finally {
+        runtime.active = false;
+        if (trackingBreakpointSearchRuntime === runtime) trackingBreakpointSearchRuntime = null;
+        if (typeof refreshTrackingBarState === 'function') void refreshTrackingBarState();
+      }
+    })();
+    return runtime.pending;
+  }
+
+  /** 当前列表则接页定位；否则新标签打开该搜索首页 */
   async function openTrackingBreakpoint(rec) {
     if (!rec) return;
-    const gid = compactText(rec.breakpoint_gid || '');
-    if (gid) {
-      try {
-        sessionStorage.setItem('exc_bp_scroll_gid', gid);
-      } catch (_) { /* ignore */ }
-    }
-    const bpUrl = compactText(rec.breakpoint_url || '');
-    let url = '';
-    // 游标断点：原 URL 最可靠（page= 重建对不上 next= 位置）
-    if (bpUrl && listUrlHasCursorNav(bpUrl)) {
-      url = bpUrl.split('#')[0];
-    } else if (bpUrl && (Number(rec.breakpoint_page) || 0) < 0) {
-      // 未知深页但存了 URL
-      url = bpUrl.split('#')[0];
-    } else {
-      const targetPage =
-        Number(rec.breakpoint_page) >= 0 ? Number(rec.breakpoint_page) : 0;
-      const base =
-        bpUrl || rec.open_url || rec.page_url || location.href;
-      // 从首页规范 URL 建 page=，避免 base 仍带 next=
-      const home = canonicalizeTrackingOpenUrl(base);
-      url = buildListUrlWithPage(home, targetPage);
-    }
-    try {
-      const savedPage = Number(rec.breakpoint_page);
-      if (rec.id && Number.isFinite(savedPage) && savedPage >= 0) {
-        sessionStorage.setItem('exc_trk_depth_' + rec.id, String(Math.floor(savedPage)));
-        sessionStorage.setItem('exc_trk_url_' + rec.id, url.split('#')[0]);
+    const ctx = typeof parseExhPageContext === 'function' ? parseExhPageContext(location.href) : null;
+    let onThisList = false;
+    if (ctx && ctx.trackable) {
+      if (rec.query_signature && ctx.query_signature === rec.query_signature) onThisList = true;
+      else if (typeof findTrackingForContext === 'function') {
+        try {
+          const current = await findTrackingForContext(ctx);
+          onThisList = !!(current && rec.id && current.id === rec.id);
+        } catch (_) { /* ignore */ }
       }
-    } catch (_) { /* ignore */ }
-    const here = location.href.split('#')[0];
-    if (url.split('#')[0] === here) {
-      void scrollToBreakpointGid(gid);
+    }
+    if (onThisList) {
+      await continueTrackingBreakpointSearch(rec);
       return;
     }
+    const url = rec.open_url || rec.page_url;
+    if (!url) {
+      showToast('没有可打开的地址');
+      return;
+    }
+    if (openUrlInNewTab(url)) return;
+    showToast('浏览器拦截了新标签，已改为本页打开');
     location.href = url;
   }
 
-  function scrollToBreakpointGid(gid) {
-    if (!gid) return false;
-    const items = document.querySelectorAll('.exc-gl-item, a[href*="/g/"]');
-    let target = null;
-    items.forEach((el) => {
-      if (target) return;
-      const g = el.dataset && el.dataset.excGid;
-      if (g && String(g) === String(gid)) {
-        target = el.classList && el.classList.contains('exc-gl-item') ? el : el.closest('.exc-gl-item') || el;
-        return;
+  function scrollToTrackingBreakpoint(rec, opts) {
+    opts = opts || {};
+    const hit = locateTrackingBreakpointOnPage(rec);
+    if (!hit.found || !hit.el) {
+      if (opts.quietIfMissing !== true) {
+        const gid = compactText((rec && rec.breakpoint_gid) || '');
+        showToast('本页未找到断点作品' + (gid ? ' g' + gid : '') + '，可能已翻页、下架或不在当前列表');
       }
-      const href = el.getAttribute && (el.getAttribute('href') || '');
-      const m = String(href).match(/\/g\/(\d+)\//);
-      if (m && m[1] === String(gid)) {
-        target = el.closest('.gl1t, tr, .exc-gl-item') || el;
-      }
-    });
-    if (!target) {
-      showToast('本页未找到断点作品 g' + gid + '，可能已翻页或不在当前列表');
       return false;
     }
-    document.querySelectorAll('.is-exc-breakpoint').forEach((n) => n.classList.remove('is-exc-breakpoint'));
-    target.classList.add('is-exc-breakpoint');
-    try {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } catch (_) {
-      target.scrollIntoView(true);
+    if (typeof applyTrackingBreakpointDecorations === 'function') {
+      applyTrackingBreakpointDecorations(rec, { locating: true });
+    } else {
+      document.querySelectorAll('.is-exc-breakpoint').forEach((n) => n.classList.remove('is-exc-breakpoint'));
+      hit.el.classList.add('is-exc-breakpoint');
     }
-    showToast('已定位到断点作品');
+    const marked =
+      document.querySelector('.is-exc-breakpoint') ||
+      document.querySelector('.exc-tracking-divider') ||
+      hit.el;
+    try {
+      marked.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (_) {
+      marked.scrollIntoView(true);
+    }
+    if (hit.kind === 'exact') showToast('已定位到断点作品');
+    else if (hit.kind === 'older') showToast('断点作品已下架，已停在它后面那部');
+    else showToast('断点作品已下架，已停在它前面那部');
+    const later =
+      (typeof window !== 'undefined' && window.setTimeout) ||
+      (typeof setTimeout === 'function' ? setTimeout : null);
+    if (later) {
+      later(() => {
+        document.querySelectorAll('.is-exc-bp-locating').forEach((node) => {
+          node.classList.remove('is-exc-bp-locating');
+        });
+      }, 1200);
+    }
     return true;
   }
 
-  function tryConsumeBreakpointScroll() {
-    let gid = '';
-    try {
-      gid = sessionStorage.getItem('exc_bp_scroll_gid') || '';
-      if (gid) sessionStorage.removeItem('exc_bp_scroll_gid');
-    } catch (_) {
-      return;
-    }
-    if (!gid) return;
-    // 等列表增强完再滚
-    setTimeout(() => {
-      if (!scrollToBreakpointGid(gid)) {
-        setTimeout(() => scrollToBreakpointGid(gid), 800);
-      }
-    }, 400);
+  function scrollToBreakpointGid(gid, opts) {
+    return scrollToTrackingBreakpoint({ breakpoint_gid: gid }, opts);
   }
 
   /** 列表点开作品时暂存追更上下文（画廊页/乐观跟断点） */
@@ -627,6 +936,8 @@
           // 当页序号（0 起），配合 pageIndex 算未读
           listIndex: payload.listIndex != null ? Number(payload.listIndex) : -1,
           pageLen: payload.pageLen != null ? Number(payload.pageLen) : 0,
+          newerGid: compactText(payload.newerGid || ''),
+          olderGid: compactText(payload.olderGid || ''),
           at: nowMs(),
         })
       );

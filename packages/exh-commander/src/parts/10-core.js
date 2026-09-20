@@ -1,11 +1,13 @@
-  const VERSION = '0.9.53';
+  const VERSION = '0.9.60';
   const NS = 'exh-commander';
   const DB_NAME = 'exh_commander_db';
   const DB_VERSION = 2;
   const GM_CFG_KEY = 'exh_commander_config_v1';
   const GM_SESSION_KEY = 'exh_commander_session_v1';
+  const WORKBENCH_PAGE_UI_KEY = 'exc_wb_page_ui_v1';
   const GM_LRR_META_KEY = 'exh_commander_lrr_meta_v1';
   const GM_SEEN_GIDS_KEY = 'exh_commander_seen_gids_v1';
+  const GM_TRACKING_REV_KEY = 'exh_commander_tracking_rev_v1';
 
   /** 本机专用配置，不进 WebDAV / 备份的 config 段 */
   const CONFIG_LOCAL_ONLY_KEYS = [
@@ -79,13 +81,7 @@
     /** 追更检查更新：每条请求间隔（ms），默认 5～10 秒防限流 */
     tracking_check_interval_min_ms: 5000,
     tracking_check_interval_max_ms: 10000,
-    /**
-     * 检查更新时是否跨页精确数未读（慢）。
-     * false（默认）：只拉首页；断点不在首页则用断点页码估算。
-     * true：从首页向后扫到断点（page=/next=）。
-     */
-    tracking_unread_deep_scan: false,
-    /** 深度扫描最大页数（仅 deep_scan 开启时） */
+    /** 检查更新从首页向后翻到断点的最大页数 */
     tracking_unread_scan_max_pages: 12,
     webdav_enabled: false,
     webdav_url: 'https://dav.jianguoyun.com/dav/',
@@ -157,7 +153,6 @@
       if (!Number.isFinite(hi) || hi < lo) hi = Math.max(lo, DEFAULT_CONFIG.tracking_check_interval_max_ms);
       config.tracking_check_interval_min_ms = Math.min(60000, lo);
       config.tracking_check_interval_max_ms = Math.min(120000, Math.max(config.tracking_check_interval_min_ms, hi));
-      config.tracking_unread_deep_scan = config.tracking_unread_deep_scan === true;
       let maxP = Math.floor(Number(config.tracking_unread_scan_max_pages));
       if (!Number.isFinite(maxP) || maxP < 1) maxP = DEFAULT_CONFIG.tracking_unread_scan_max_pages;
       config.tracking_unread_scan_max_pages = Math.min(40, Math.max(1, maxP));
@@ -243,7 +238,87 @@
     return config;
   }
 
+  let workbenchSessionCache = null;
+
+  function isWorkbenchDomOpen() {
+    try {
+      const wb = typeof document !== 'undefined' ? document.getElementById('jlc-wb') : null;
+      return !!(wb && wb.classList && wb.classList.contains('is-open'));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function getWorkbenchPageInstanceId() {
+    try {
+      const name = String(window.name || '');
+      if (name.startsWith('exc-wb:')) return name.slice(7);
+    } catch (_) { /* ignore */ }
+    return '';
+  }
+
+  function readStoredWorkbenchPageUi() {
+    try {
+      const raw = sessionStorage.getItem(WORKBENCH_PAGE_UI_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function assignWorkbenchPageInstanceId(id) {
+    const nextId = compactText(id || '');
+    if (!nextId) return '';
+    try {
+      const current = String(window.name || '');
+      if (!current || current.startsWith('exc-wb:')) window.name = 'exc-wb:' + nextId;
+    } catch (_) { /* ignore */ }
+    return getWorkbenchPageInstanceId() || nextId;
+  }
+
+  function ensureWorkbenchPageInstanceId() {
+    const stored = readStoredWorkbenchPageUi();
+    const storedId = compactText(stored && stored.pageId);
+    // 本标签已有开合记录：window.name 被 GM_openInTab / 后台回收清掉时，写回去，不要当成新标签
+    if (storedId) return assignWorkbenchPageInstanceId(storedId);
+    // 新标签常会抄到 opener 的 window.name；没有本页记录就另起身份，避免和原页撞名
+    const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    return assignWorkbenchPageInstanceId(id);
+  }
+
+  function readWorkbenchPageUi() {
+    try {
+      const parsed = readStoredWorkbenchPageUi();
+      if (!parsed) return { open: false };
+      const storedId = compactText(parsed.pageId);
+      let pageId = getWorkbenchPageInstanceId();
+      if (!pageId && storedId) pageId = assignWorkbenchPageInstanceId(storedId);
+      if (pageId && storedId && storedId !== pageId) return { open: false };
+      return { open: parsed.open === true };
+    } catch (_) {
+      return { open: false };
+    }
+  }
+
+  function writeWorkbenchPageUi(open) {
+    try {
+      sessionStorage.setItem(
+        WORKBENCH_PAGE_UI_KEY,
+        JSON.stringify({
+          pageId: ensureWorkbenchPageInstanceId(),
+          open: !!open,
+        })
+      );
+    } catch (_) { /* private mode / blocked storage */ }
+  }
+
   function loadSession() {
+    if (workbenchSessionCache) {
+      if (isWorkbenchDomOpen()) workbenchSessionCache.open = true;
+      return workbenchSessionCache;
+    }
     const raw = typeof GM_getValue === 'function' ? GM_getValue(GM_SESSION_KEY, null) : null;
     const saved = typeof raw === 'string' ? safeJsonParse(raw, null) : raw;
     const base = {
@@ -259,18 +334,24 @@
     // 旧会话默认 open=true：升级时先收起一次
     const prevVer = Number(saved && saved.session_version);
     if (!Number.isFinite(prevVer) || prevVer < 2) {
-      next.open = false;
       next.session_version = 2;
     } else {
-      next.open = next.open === true;
       next.session_version = Math.max(2, prevVer);
     }
+    // 开合只属于当前标签：活着的面板优先，否则读本页 sessionStorage
+    next.open = isWorkbenchDomOpen() || readWorkbenchPageUi().open === true;
+    workbenchSessionCache = next;
     return next;
   }
 
   function saveSession(session) {
+    const current = session || workbenchSessionCache || {};
+    if (isWorkbenchDomOpen()) current.open = true;
+    workbenchSessionCache = current;
+    writeWorkbenchPageUi(current.open === true);
     if (typeof GM_setValue === 'function') {
-      GM_setValue(GM_SESSION_KEY, JSON.stringify(session || {}));
+      // 共享存储始终写成收起，避免追更开出的新页把面板带过去/带回来
+      GM_setValue(GM_SESSION_KEY, JSON.stringify(Object.assign({}, current, { open: false })));
     }
   }
 
@@ -333,6 +414,35 @@
     read: '已读',
     dropped: '抛弃',
   };
+
+  function openUrlInNewTab(url) {
+    const href = compactText(url);
+    if (!href) return false;
+    try {
+      if (typeof GM_openInTab === 'function') {
+        GM_openInTab(href, { active: true, insert: true, setParent: true });
+        return true;
+      }
+    } catch (_) { /* fall through */ }
+    try {
+      if (typeof document !== 'undefined' && document.body) {
+        const anchor = document.createElement('a');
+        anchor.href = href;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        return true;
+      }
+    } catch (_) { /* fall through */ }
+    try {
+      return !!(typeof window !== 'undefined' && window.open(href, '_blank', 'noopener,noreferrer'));
+    } catch (_) {
+      return false;
+    }
+  }
 
   function gmRequest(options) {
     return new Promise((resolve, reject) => {

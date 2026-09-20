@@ -119,6 +119,8 @@
       pageMode: pending.pageMode || '',
       listIndex: pending.listIndex,
       pageLen: pending.pageLen,
+      newerGid: pending.newerGid,
+      olderGid: pending.olderGid,
       skipUnreadScan: opts.skipUnreadScan === true,
     });
     showToast('断点已跟到当前作品');

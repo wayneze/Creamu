@@ -140,7 +140,10 @@
           typeof canonicalizeTrackingOpenUrl === 'function'
             ? canonicalizeTrackingOpenUrl(context.open_url)
             : context.open_url;
-        if (one.open_url !== canon) {
+        const losesIdentity =
+          typeof trackingOpenUrlLosesIdentity === 'function' &&
+          trackingOpenUrlLosesIdentity(one.open_url, canon);
+        if (one.open_url !== canon && !losesIdentity) {
           one.open_url = canon;
           one.page_url = canon;
           dirty = true;
@@ -170,6 +173,8 @@
           keep.breakpoint_page = other.breakpoint_page;
           keep.breakpoint_url = other.breakpoint_url;
           keep.breakpoint_posted_at = other.breakpoint_posted_at;
+          keep.breakpoint_newer_gid = other.breakpoint_newer_gid;
+          keep.breakpoint_older_gid = other.breakpoint_older_gid;
         }
         if (!keep.top_gid && other.top_gid) {
           keep.top_gid = other.top_gid;
@@ -196,8 +201,13 @@
         typeof canonicalizeTrackingOpenUrl === 'function'
           ? canonicalizeTrackingOpenUrl(context.open_url)
           : context.open_url;
-      keep.open_url = canon;
-      keep.page_url = canon;
+      const losesIdentity =
+        typeof trackingOpenUrlLosesIdentity === 'function' &&
+        trackingOpenUrlLosesIdentity(keep.open_url, canon);
+      if (!losesIdentity) {
+        keep.open_url = canon;
+        keep.page_url = canon;
+      }
     }
     if (context.f_search) keep.f_search = context.f_search;
     if (context.label) keep.label = context.label;
@@ -247,8 +257,13 @@
     }
     if (existing && !options.forceNew) {
       existing.query_signature = context.query_signature || existing.query_signature;
-      existing.open_url = openCanon;
-      existing.page_url = openCanon;
+      const losesIdentity =
+        typeof trackingOpenUrlLosesIdentity === 'function' &&
+        trackingOpenUrlLosesIdentity(existing.open_url, openCanon);
+      if (!losesIdentity) {
+        existing.open_url = openCanon;
+        existing.page_url = openCanon;
+      }
       existing.label = context.label || existing.label;
       existing.group_type = context.group_type || existing.group_type;
       existing.f_search = context.f_search || existing.f_search;
@@ -318,6 +333,8 @@
       breakpoint_token: initialBreakpointToken,
       breakpoint_title: initialBreakpointTitle,
       breakpoint_posted_at: initialBreakpointPostedAt,
+      breakpoint_newer_gid: compactText(context.page_head_newer_gid || ''),
+      breakpoint_older_gid: compactText(context.page_head_older_gid || ''),
       breakpoint_page: initialBreakpointGid ? initialPage : '',
       breakpoint_page_known: initialBreakpointGid && initialPageKnown ? 1 : 0,
       breakpoint_page_mode: initialBreakpointGid ? compactText(context.page_mode || '') : '',

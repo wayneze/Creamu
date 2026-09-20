@@ -142,7 +142,8 @@
     });
   }
 
-  function queryListItems() {
+  function queryListItems(root) {
+    const scope = root && root.querySelectorAll ? root : document;
     const selectors = [
       'table.itg > tbody > tr',
       'table.itg tr',
@@ -157,7 +158,7 @@
     const seen = new Set();
     const items = [];
     for (const sel of selectors) {
-      document.querySelectorAll(sel).forEach((el) => {
+      scope.querySelectorAll(sel).forEach((el) => {
         if (seen.has(el)) return;
         // skip header row
         if (el.querySelector && el.querySelector('th')) return;
@@ -168,11 +169,11 @@
       if (items.length) break;
     }
     if (!items.length) {
-      document.querySelectorAll('a[href*="/g/"]').forEach((a) => {
+      scope.querySelectorAll('a[href*="/g/"]').forEach((a) => {
         const row = a.closest('tr, .gl1t, .gl2t, .gl3t, .gl1e, .gl2e, li, div') || a.parentElement;
         if (row && !seen.has(row) && row.querySelectorAll) {
           // avoid grabbing entire body
-          if (row === document.body || row.id === 'gdt') return;
+          if (row === document.body || (row.id && row.id === 'gdt')) return;
           seen.add(row);
           items.push(row);
         }

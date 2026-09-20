@@ -93,8 +93,17 @@
   ]);
   let idbSyncSuppress = false;
 
+  function notifyTrackingStoreChanged() {
+    if (idbSyncSuppress) return;
+    if (typeof GM_setValue !== 'function') return;
+    try {
+      GM_setValue(GM_TRACKING_REV_KEY, String(nowMs()) + ':' + Math.random().toString(36).slice(2, 8));
+    } catch (_) { /* private mode / blocked storage */ }
+  }
+
   function markIdbStoreDirty(store) {
     if (idbSyncSuppress) return;
+    if (store === STORE_TRACKING) notifyTrackingStoreChanged();
     if (!SYNCABLE_IDB_STORES.has(store)) return;
     if (typeof markCreamuLocalDirty === 'function') markCreamuLocalDirty();
   }
@@ -174,8 +183,11 @@
       }
     }
     await done;
-    if (!idbSyncSuppress && names.some((name) => SYNCABLE_IDB_STORES.has(name))) {
-      if (typeof markCreamuLocalDirty === 'function') markCreamuLocalDirty();
+    if (!idbSyncSuppress) {
+      if (names.indexOf(STORE_TRACKING) >= 0) notifyTrackingStoreChanged();
+      if (names.some((name) => SYNCABLE_IDB_STORES.has(name))) {
+        if (typeof markCreamuLocalDirty === 'function') markCreamuLocalDirty();
+      }
     }
     return count;
   }

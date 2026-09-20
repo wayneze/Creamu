@@ -308,7 +308,7 @@
           .join('') +
         '</select>' +
         '<h3 class="jlc-wb-section-title">列表悬停预览</h3>' +
-        '<div class="legacy-row legacy-toggle"><span>悬停显示前几张</span><input type="checkbox" id="exc-cfg-hover-preview" ' +
+        '<div class="legacy-row legacy-toggle"><span>悬停封面显示前几张</span><input type="checkbox" id="exc-cfg-hover-preview" ' +
         (config.list_hover_preview !== false ? 'checked' : '') +
         '></div>' +
         '<label>预览张数</label><select id="exc-cfg-hover-count" class="jlc-wb-select">' +
@@ -348,10 +348,7 @@
           .join('') +
         '</select>' +
         '<h3 class="jlc-wb-section-title">追更检查更新</h3>' +
-        '<div class="legacy-note">默认只请求每条追更的<strong>首页</strong>（与改跨页扫描前一样快）。断点不在首页时用断点页码估算未读（显示 +N+）。开启「跨页精确未读」才会向后翻页计数，会明显变慢。</div>' +
-        '<div class="legacy-row legacy-toggle"><span>跨页精确未读（较慢）</span><input type="checkbox" id="exc-cfg-deep-scan" ' +
-        (config.tracking_unread_deep_scan === true ? 'checked' : '') +
-        '></div>' +
+        '<div class="legacy-note">检查更新从每条追更的首页向后翻到断点。断点不在前几页时会继续翻，直到找到或达到下方页数上限。</div>' +
         '<div class="jlc-wb-field-grid">' +
         '<div><label>条目间隔最小（秒）</label><input id="exc-cfg-chk-lo" type="number" min="2" max="60" step="1" value="' +
         escapeHtml(String(Math.round((Number(config.tracking_check_interval_min_ms) || 5000) / 1000))) +
@@ -502,9 +499,6 @@
             const scanP = Number(body.querySelector('#exc-cfg-scan-pages')?.value);
             if (Number.isFinite(scanP) && scanP >= 1) {
               patch.tracking_unread_scan_max_pages = Math.min(40, Math.max(1, Math.floor(scanP)));
-            }
-            if (body.querySelector('#exc-cfg-deep-scan')) {
-              patch.tracking_unread_deep_scan = !!body.querySelector('#exc-cfg-deep-scan').checked;
             }
           }
         }

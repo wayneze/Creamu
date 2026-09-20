@@ -45,6 +45,8 @@
       out.breakpoint_url = remote.breakpoint_url || '';
       out.breakpoint_at = remote.breakpoint_at;
       out.breakpoint_posted_at = remote.breakpoint_posted_at || 0;
+      out.breakpoint_newer_gid = remote.breakpoint_newer_gid || '';
+      out.breakpoint_older_gid = remote.breakpoint_older_gid || '';
     } else if (local.breakpoint_gid) {
       out.breakpoint_gid = local.breakpoint_gid;
       out.breakpoint_token = local.breakpoint_token || out.breakpoint_token || '';
@@ -53,6 +55,8 @@
       out.breakpoint_url = local.breakpoint_url || out.breakpoint_url || '';
       out.breakpoint_at = local.breakpoint_at || out.breakpoint_at;
       out.breakpoint_posted_at = local.breakpoint_posted_at || out.breakpoint_posted_at || 0;
+      out.breakpoint_newer_gid = local.breakpoint_newer_gid || out.breakpoint_newer_gid || '';
+      out.breakpoint_older_gid = local.breakpoint_older_gid || out.breakpoint_older_gid || '';
     }
     // 未读：跟断点会变小，不能 Math.max 把旧大数粘回来；跟较新断点一侧
     const top = compactText(out.top_gid || '');

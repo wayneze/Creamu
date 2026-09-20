@@ -171,14 +171,72 @@
         .exc-tool-btn.is-on { opacity: 1; color: #e8a24e; text-shadow: 0 0 8px rgba(232,162,78,.45); }
         .exc-tool-btn.is-bp { opacity: 1; color: #ff8a7a; font-weight: 800; text-shadow: 0 0 8px rgba(255,95,86,.4); }
         .exc-tool-btn.is-want { opacity: 1; color: #7dd3fc; text-shadow: 0 0 8px rgba(125,211,252,.4); }
-        /* 断点作品：洋红描边，别跟点过/库内/心动混 */
-        .exc-gl-item.is-exc-breakpoint {
-            outline: 2px solid rgba(232, 72, 90, 0.95) !important;
-            outline-offset: -2px;
-            box-shadow: 0 0 0 1px rgba(232, 72, 90, 0.25), 0 6px 16px rgba(180, 40, 50, 0.15) !important;
+        /* 断点作品：整卡外框；表格行打在格子上，tr 自己的 outline 几乎看不见 */
+        .exc-gl-item.is-exc-breakpoint,
+        .gl1t.exc-gl-item.is-exc-breakpoint,
+        .gl2t.exc-gl-item.is-exc-breakpoint {
+            outline: 3px solid #ff5f56 !important;
+            outline-offset: 3px;
+            box-shadow: 0 0 0 1px rgba(255,95,86,.18), 0 0 22px rgba(255,95,86,.22) !important;
+            position: relative !important;
+            z-index: 3;
+        }
+        tr.exc-gl-item.is-exc-breakpoint > td {
+            box-shadow: inset 0 0 0 2px #ff5f56 !important;
         }
         tr.exc-gl-item.is-exc-breakpoint > td.gl1e {
-            box-shadow: inset 3px 0 0 #e8485a !important;
+            box-shadow: inset 3px 0 0 #ff5f56, inset 0 0 0 2px #ff5f56 !important;
+        }
+        .exc-gl-item.is-exc-breakpoint.is-exc-bp-locating,
+        tr.exc-gl-item.is-exc-breakpoint.is-exc-bp-locating > td {
+            animation: exc-bp-pulse 0.9s ease-in-out 2;
+        }
+        @keyframes exc-bp-pulse {
+            0%, 100% { box-shadow: 0 0 0 1px rgba(255,95,86,.18), 0 0 22px rgba(255,95,86,.22); }
+            50% { box-shadow: 0 0 0 3px rgba(255,95,86,.45), 0 0 28px rgba(255,95,86,.4); }
+        }
+        .exc-tracking-divider:not(tr) {
+            margin: 8px 0 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #ff9b95;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .2px;
+            pointer-events: none;
+        }
+        .exc-tracking-divider:not(tr)::before,
+        tr.exc-tracking-divider td::before {
+            content: '断点';
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(255,95,86,.18);
+            border: 1px solid rgba(255,95,86,.45);
+            color: #ffb4af;
+            flex: 0 0 auto;
+        }
+        .exc-tracking-divider:not(tr)::after,
+        tr.exc-tracking-divider td::after {
+            content: '';
+            flex: 1 1 auto;
+            min-width: 24px;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(255,95,86,.55), rgba(255,95,86,.08));
+        }
+        tr.exc-tracking-divider td {
+            padding: 8px 6px 10px !important;
+            background: transparent !important;
+            border: 0 !important;
+            color: #ff9b95;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .exc-last-seen-mark {
             position: absolute; left: 4px; bottom: 4px; z-index: 22;
@@ -535,6 +593,10 @@
             border-color: transparent !important; color: #fff !important;
             box-shadow: 0 3px 0 #b8322b, 0 6px 14px rgba(255,95,86,.22) !important;
             font-weight: 800 !important;
+        }
+        #exc-tracking-bar .exc-bp-continue.is-loading {
+            opacity: .78;
+            pointer-events: none;
         }
         #exc-tracking-bar .exc-track-btn {
             flex: 0 0 auto;

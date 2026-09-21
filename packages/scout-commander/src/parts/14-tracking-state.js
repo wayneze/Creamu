@@ -271,7 +271,7 @@ function getConfig() {
     webdav_user: '',
     webdav_password: '',
     webdav_path: '/Creamu',
-    webdav_auto: true,
+    webdav_auto: false,
     webdav_conflict: 'ask',
     /** 三站页面奶油主题（列表/顶栏/底色）；与工作台样式独立，可关 */
     cream_site_theme: true,

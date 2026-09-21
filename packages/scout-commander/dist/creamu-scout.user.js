@@ -1630,7 +1630,7 @@ function getConfig() {
     webdav_user: '',
     webdav_password: '',
     webdav_path: '/Creamu',
-    webdav_auto: true,
+    webdav_auto: false,
     webdav_conflict: 'ask',
     /** 三站页面奶油主题（列表/顶栏/底色）；与工作台样式独立，可关 */
     cream_site_theme: true,
@@ -4881,9 +4881,20 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     });
   }
 
+  function creamuWdCleanPassword(url, pass) {
+    const raw = String(pass == null ? '' : pass).trim();
+    if (!raw) return '';
+    // 坚果云应用密码为 16 位连续字母，去内部空格/换行
+    if (/jianguoyun\.com/i.test(String(url || ''))) {
+      return raw.replace(/\s+/g, '');
+    }
+    return raw;
+  }
+
   /** Basic Auth：兼容非 ASCII 用户名/密码 */
-  function creamuWdBasicAuth(user, pass) {
-    const raw = String(user == null ? '' : user) + ':' + String(pass == null ? '' : pass);
+  function creamuWdBasicAuth(user, pass, url) {
+    const cleanPass = creamuWdCleanPassword(url, pass);
+    const raw = String(user == null ? '' : user) + ':' + cleanPass;
     let b64;
     try {
       b64 = btoa(unescape(encodeURIComponent(raw)));
@@ -4974,13 +4985,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     function settings() {
       const s = (typeof host.getSettings === 'function' && host.getSettings()) || {};
+      const url = creamuWdCompact(s.url || '');
+      const rawPass = String(s.password == null ? '' : s.password);
+      const cleanPass = creamuWdCleanPassword(url, rawPass);
       return {
         enabled: !!s.enabled,
-        url: creamuWdCompact(s.url || ''),
+        url,
         user: creamuWdCompact(s.user || ''),
-        password: String(s.password == null ? '' : s.password),
+        password: cleanPass,
         path: creamuWdNormDir(s.path),
-        auto: s.auto !== false,
+        auto: !!s.auto,
         conflict: s.conflict === 'remote' || s.conflict === 'local' ? s.conflict : 'ask',
       };
     }
@@ -4998,7 +5012,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const st = settings();
       return Object.assign(
         {
-          Authorization: creamuWdBasicAuth(st.user, st.password),
+          Authorization: creamuWdBasicAuth(st.user, st.password, st.url),
         },
         extra || {}
       );
@@ -5023,6 +5037,17 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const en = st.enabled ? '' : ' · 未启用';
       const relPath = st.path + '/' + vaultName;
       return st.user + ' · ' + relPath + ' · rev ' + m.local_revision + ' · 上次 ' + when + en + err;
+    }
+
+    function checkDavAuthStatus(res) {
+      if (res.status === 401) {
+        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码，用户名需为注册邮箱）');
+      }
+      if (res.status === 403) {
+        throw new Error(
+          '访问被拒绝 (403 Forbidden)：请检查坚果云中是否已创建该同步文件夹（如 /Creamu），或使用「/我的坚果云/Creamu」，或检查当月流量是否超限'
+        );
+      }
     }
 
     async function davRequest(method, url, body, headers, timeout) {
@@ -5083,9 +5108,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     async function downloadVault() {
       const res = await davRequest('GET', vaultUrl(), null, { Accept: 'application/json,text/plain,*/*' }, 120000);
       if (res.status === 404) return null;
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码）');
-      }
+      checkDavAuthStatus(res);
       if (res.status < 200 || res.status >= 300) throw httpError(res, '下载失败 HTTP ' + res.status);
       const text = res.responseText != null ? String(res.responseText) : '';
       if (!text.trim()) return null;
@@ -5109,9 +5132,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         },
         180000
       );
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码）');
-      }
+      checkDavAuthStatus(res);
       if (res.status < 200 || res.status >= 300) throw httpError(res, '上传失败 HTTP ' + res.status);
       return true;
     }
@@ -5130,9 +5151,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         { Accept: 'application/json,text/plain,*/*' },
         30000
       );
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码）');
-      }
+      checkDavAuthStatus(res);
       // 文件尚未存在也算鉴权与路径可达
       if (res.status === 404 || (res.status >= 200 && res.status < 300)) {
         const m = loadMeta();
@@ -5172,8 +5191,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             const m = loadMeta();
             m.last_error = (e && e.message) || String(e);
             saveMeta(m);
-            retryCount++;
-            if (retryCount <= 5) schedulePush(Math.min(60000, 2000 * 2 ** (retryCount - 1)));
+            const isAuthOrForbidden =
+              (e && (e.status === 401 || e.status === 403)) ||
+              /401|403|认证|拒绝|Forbidden/i.test((e && e.message) || '');
+            if (!isAuthOrForbidden) {
+              retryCount++;
+              if (retryCount <= 5) schedulePush(Math.min(60000, 2000 * 2 ** (retryCount - 1)));
+            } else {
+              retryCount = 0;
+            }
           });
       }, ms || 8000);
     }
@@ -5329,6 +5355,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     async function bootSync() {
       const st = settings();
       if (!st.enabled || !st.auto || !isConfigured()) return null;
+      const m = loadMeta();
+      const lastSync = Number(m.last_sync) || 0;
+      // 开页冷却保护：10分钟内开过同步且本地不脏，则跳过开页拉取，防连续开标签页浪费流量
+      if (!m.dirty && lastSync && Date.now() - lastSync < 10 * 60 * 1000) {
+        return { action: 'noop', reason: 'cooldown' };
+      }
       try {
         return await syncNow({ reason: 'boot' });
       } catch (e) {
@@ -13513,17 +13545,17 @@ function renderSettingsPage(section) {
       </div>
       <div id="scout-wd-form" class="scout-settings-sync-form" ${cfg.webdav_enabled ? '' : 'hidden'}>
         <label>服务器地址</label>
-        <input type="text" id="scout-wd-url" value="${escapeHtml(cfg.webdav_url)}" placeholder="https://dav.jianguoyun.com/dav/">
+        <input type="text" id="scout-wd-url" value="${escapeHtml(cfg.webdav_url)}" placeholder="https://dav.jianguoyun.com/dav/" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">
         <label>用户名</label>
-        <input type="text" id="scout-wd-user" value="${escapeHtml(cfg.webdav_user)}" placeholder="example@email.com">
+        <input type="text" id="scout-wd-user" value="${escapeHtml(cfg.webdav_user)}" placeholder="坚果云需填注册邮箱（如 user@example.com，勿填昵称）" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">
         <label>应用密码</label>
-        <input type="password" id="scout-wd-password" value="${escapeHtml(cfg.webdav_password)}" placeholder="应用密码">
+        <input type="password" id="scout-wd-password" value="${escapeHtml(cfg.webdav_password)}" placeholder="应用密码（非登录密码）" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">
         <label>远端路径</label>
-        <input type="text" id="scout-wd-path" value="${escapeHtml(cfg.webdav_path)}" placeholder="/Creamu">
+        <input type="text" id="scout-wd-path" value="${escapeHtml(cfg.webdav_path)}" placeholder="/Creamu" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">
         <div class="legacy-row scout-settings-spaced-row">
           <label class="legacy-toggle">
-            <span>自动同步 (约 8 秒)</span>
-            <input type="checkbox" id="scout-wd-auto" ${cfg.webdav_auto !== false ? 'checked' : ''}>
+            <span>开启自动同步（未勾选时仅手动同步）</span>
+            <input type="checkbox" id="scout-wd-auto" ${cfg.webdav_auto ? 'checked' : ''}>
           </label>
         </div>
         <label>冲突策略</label>
@@ -13731,7 +13763,10 @@ function renderSettingsPage(section) {
       const q = (sid) => container.querySelector('#' + sid);
       curCfg.webdav_url = (q('scout-wd-url')?.value || '').trim();
       curCfg.webdav_user = (q('scout-wd-user')?.value || '').trim();
-      curCfg.webdav_password = q('scout-wd-password')?.value || '';
+      const typedWdPass = (q('scout-wd-password')?.value || '').trim();
+      curCfg.webdav_password = /jianguoyun\.com/i.test(curCfg.webdav_url || '')
+        ? typedWdPass.replace(/\s+/g, '')
+        : typedWdPass;
       curCfg.webdav_path = (q('scout-wd-path')?.value || '').trim();
       curCfg.webdav_conflict = q('scout-wd-conflict')?.value || 'ask';
       saveConfig(curCfg);

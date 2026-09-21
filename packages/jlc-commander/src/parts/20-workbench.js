@@ -21,7 +21,7 @@
                 user: config.webdav_user || '',
                 password: config.webdav_password || '',
                 path: config.webdav_path || '/Creamu',
-                auto: config.webdav_auto !== false,
+                auto: !!config.webdav_auto,
                 conflict: config.webdav_conflict || 'ask'
             })
         });

@@ -65,6 +65,10 @@
       if (!(Number(merged.size_bytes) > 0) && Number(prev.size_bytes) > 0) {
         merged.size_bytes = prev.size_bytes;
       }
+      merged.tags_fetched_at = Math.max(
+        Number(rec.tags_fetched_at) || 0,
+        Number(prev && prev.tags_fetched_at) || 0
+      );
 
       mergeEditionAvailabilityState(merged, rec, prev);
     }

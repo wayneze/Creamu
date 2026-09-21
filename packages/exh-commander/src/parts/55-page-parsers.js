@@ -101,25 +101,92 @@
     root.querySelectorAll('.gt, .gtl, .gtw, .gtw, [title*=":"]').forEach((el) => {
       pushTag(el.getAttribute('title') || el.textContent);
     });
-    // 标题里 [group] (artist) 补成伪标签（取所有括号，跳过语言标记）
+    // 标题里 [group] (artist) 与形态/原作补成伪标签
     const group = extractGroupFromTitle(title);
     if (group) pushTag('group:' + group);
-    const skipParen =
-      /^(chinese|english|japanese|korean|digital|dl版|中国翻訳|中國翻譯|complete|ongoing|decensored|uncensored|\d{2,4})$/i;
-    String(title || '').replace(/\[([^\]]+)\]|\(([^)]+)\)|【([^】]+)】/g, (_, a, b, c) => {
-      const raw = compactText(a || b || c || '');
-      if (!raw || raw.length < 2 || raw.length > 48 || skipParen.test(raw)) return '';
-      // 方括号更常是组；圆括号更常是画师；都挂上以便熟人匹配
-      if (a || c) pushTag('group:' + raw);
-      if (b) pushTag('artist:' + raw);
+
+    const titleStr = String(title || '');
+    // 标题全文速检：无码 / 全彩
+    if (/uncensored|decensored|無修正|无修正|无码/i.test(titleStr)) {
+      pushTag('other:uncensored');
+    }
+    if (/full.?colou?r|全彩|フルカラー/i.test(titleStr)) {
+      pushTag('other:full color');
+    }
+
+    const parenRegex = /\[([^\]]+)\]|\(([^)]+)\)|【([^】]+)】/g;
+    let pMatch;
+    while ((pMatch = parenRegex.exec(titleStr)) !== null) {
+      const isBracket = !!(pMatch[1] || pMatch[3]);
+      const raw = compactText(pMatch[1] || pMatch[2] || pMatch[3] || '');
+      if (!raw || raw.length < 2 || raw.length > 48) continue;
+      const low = raw.toLowerCase();
+
+      // 1) 纯数字或年份跳过
+      if (/^\d{2,4}$/.test(raw)) continue;
+
+      // 2) 形态 / 码级（只提取真正有决策价值的无码、全彩、3D、CG包）
+      let matchedFormat = false;
+      if (/^(uncensored|decensored|無修正|无修正|无码|去码)$/i.test(low)) {
+        pushTag('other:uncensored');
+        matchedFormat = true;
+      } else if (/^(full.?colou?r|全彩|フルカラー)$/i.test(low)) {
+        pushTag('other:full color');
+        matchedFormat = true;
+      } else if (/^(cg set|cg集|同人cg)$/i.test(low)) {
+        pushTag('other:cg set');
+        matchedFormat = true;
+      } else if (/^3d$/i.test(low)) {
+        pushTag('other:3d');
+        matchedFormat = true;
+      }
+      if (matchedFormat) continue;
+
+      // 介质与非题材噪声：直接跳过
+      if (/^(tankoubon|单行本|単行本|digital|dl版|anthology|选集|original|オリジナル|よろず)$/i.test(low)) {
+        continue;
+      }
+
+      // 3) 汉化组 / 语言
+      if (/汉化|漢化|翻译|翻譯|字幕|个人汉化|嵌字/i.test(raw)) {
+        pushTag('translator:' + raw);
+        pushTag('language:chinese');
+        continue;
+      }
+      if (/^(chinese|中国翻訳|中國翻譯)$/i.test(low)) {
+        pushTag('language:chinese');
+        continue;
+      }
+      if (/^(english|japanese|korean|complete|ongoing)$/i.test(low)) {
+        continue;
+      }
+
+      // 4) 常见原作（Parody）判断（仅二创 IP）
+      if (
+        /^(fate|fgo|grand order|碧蓝航线|アズールレーン|azur lane|原神|genshin|偶像大师|アイドルマスター|imas|东方|東方|touhou|舰队|艦これ|kancolle|blue archive|碧蓝档案|ブルーアーカイブ|arknights|明日方舟|pokemon|宝可梦|nikke|胜利女神)/i.test(
+          low
+        )
+      ) {
+        pushTag('parody:' + raw);
+        continue;
+      }
+
+      // 5) 社团与画师（保留熟人雷达职责）
+      if (isBracket) {
+        pushTag('group:' + raw);
+      } else {
+        pushTag('artist:' + raw);
+      }
+
       // 嵌套 [Group (Artist)]
       const nested = raw.match(/\(([^)]+)\)/);
       if (nested) {
         const an = compactText(nested[1]);
-        if (an && an.length >= 2 && !skipParen.test(an)) pushTag('artist:' + an);
+        if (an && an.length >= 2 && !/^(chinese|english|digital|dl版|\d{2,4})$/i.test(an)) {
+          pushTag('artist:' + an);
+        }
       }
-      return '';
-    });
+    }
 
     // thumbnail mode sometimes has size in popup / title
     let size_text = '';
@@ -305,6 +372,7 @@
       token: gt.token,
       title_raw: title,
       tags,
+      tags_fetched_at: nowMs(),
       category,
       uploader,
       pages,
@@ -499,10 +567,25 @@
     for (const c of config.block_categories || []) {
       if (compactText(c).toLowerCase() === cat && cat) return { blocked: true, reason: 'category' };
     }
-    const tagset = (edition.tags || []).map((t) => normalizeNamespaceTag(t));
-    for (const ht of config.hate_tags || []) {
-      const h = normalizeNamespaceTag(ht);
-      if (h && tagset.some((t) => t === h || t.endsWith(':' + h) || t.includes(h))) {
+    const hateNeedles = typeof expandHateTagAliases === 'function'
+      ? expandHateTagAliases(config.hate_tags || [])
+      : (config.hate_tags || []);
+    const tagset = (edition.tags || []).map((t) => normalizeNamespaceTag(t).toLowerCase());
+    for (const ht of hateNeedles) {
+      const h = normalizeNamespaceTag(ht).toLowerCase().trim();
+      if (!h) continue;
+      // 快速防线：如果是中文屏蔽词且标题直接包含该词，无需等待标签即可快速屏蔽
+      if (typeof isCjkText === 'function' && isCjkText(h) && h.length >= 2 && title.includes(h)) {
+        return { blocked: true, reason: 'title_hate:' + h };
+      }
+      const hit = tagset.some((t) => {
+        if (t === h) return true;
+        if (t.endsWith(':' + h)) return true;
+        if (h.endsWith(':' + t)) return true;
+        if (typeof isCjkText === 'function' && isCjkText(h) && t.includes(h)) return true;
+        return false;
+      });
+      if (hit) {
         return { blocked: true, reason: 'tag:' + h };
       }
     }

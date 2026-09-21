@@ -141,17 +141,17 @@ function renderSettingsPage(section) {
       </div>
       <div id="scout-wd-form" class="scout-settings-sync-form" ${cfg.webdav_enabled ? '' : 'hidden'}>
         <label>服务器地址</label>
-        <input type="text" id="scout-wd-url" value="${escapeHtml(cfg.webdav_url)}" placeholder="https://dav.jianguoyun.com/dav/">
+        <input type="text" id="scout-wd-url" value="${escapeHtml(cfg.webdav_url)}" placeholder="https://dav.jianguoyun.com/dav/" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">
         <label>用户名</label>
-        <input type="text" id="scout-wd-user" value="${escapeHtml(cfg.webdav_user)}" placeholder="example@email.com">
+        <input type="text" id="scout-wd-user" value="${escapeHtml(cfg.webdav_user)}" placeholder="坚果云需填注册邮箱（如 user@example.com，勿填昵称）" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">
         <label>应用密码</label>
-        <input type="password" id="scout-wd-password" value="${escapeHtml(cfg.webdav_password)}" placeholder="应用密码">
+        <input type="password" id="scout-wd-password" value="${escapeHtml(cfg.webdav_password)}" placeholder="应用密码（非登录密码）" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">
         <label>远端路径</label>
-        <input type="text" id="scout-wd-path" value="${escapeHtml(cfg.webdav_path)}" placeholder="/Creamu">
+        <input type="text" id="scout-wd-path" value="${escapeHtml(cfg.webdav_path)}" placeholder="/Creamu" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">
         <div class="legacy-row scout-settings-spaced-row">
           <label class="legacy-toggle">
-            <span>自动同步 (约 8 秒)</span>
-            <input type="checkbox" id="scout-wd-auto" ${cfg.webdav_auto !== false ? 'checked' : ''}>
+            <span>开启自动同步（未勾选时仅手动同步）</span>
+            <input type="checkbox" id="scout-wd-auto" ${cfg.webdav_auto ? 'checked' : ''}>
           </label>
         </div>
         <label>冲突策略</label>
@@ -359,7 +359,10 @@ function renderSettingsPage(section) {
       const q = (sid) => container.querySelector('#' + sid);
       curCfg.webdav_url = (q('scout-wd-url')?.value || '').trim();
       curCfg.webdav_user = (q('scout-wd-user')?.value || '').trim();
-      curCfg.webdav_password = q('scout-wd-password')?.value || '';
+      const typedWdPass = (q('scout-wd-password')?.value || '').trim();
+      curCfg.webdav_password = /jianguoyun\.com/i.test(curCfg.webdav_url || '')
+        ? typedWdPass.replace(/\s+/g, '')
+        : typedWdPass;
       curCfg.webdav_path = (q('scout-wd-path')?.value || '').trim();
       curCfg.webdav_conflict = q('scout-wd-conflict')?.value || 'ask';
       saveConfig(curCfg);

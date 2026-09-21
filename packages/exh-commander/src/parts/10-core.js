@@ -1,4 +1,4 @@
-  const VERSION = '0.9.60';
+  const VERSION = '0.9.61';
   const NS = 'exh-commander';
   const DB_NAME = 'exh_commander_db';
   const DB_VERSION = 2;
@@ -18,6 +18,9 @@
     'list_hover_preview_count',
     'list_hover_preview_delay_ms',
   ];
+
+  /** 本机密钥：vault/备份可带，但空值不得覆盖本机已存值 */
+  const CONFIG_SECRET_KEYS = ['webdav_password', 'lrr_api_key'];
 
   const FOLD_PRIMARY_MODES = {
     preference: '偏好最佳（语言→码级→体积→汉化组→页数）',
@@ -88,7 +91,7 @@
     webdav_user: '',
     webdav_password: '',
     webdav_path: '/Creamu',
-    webdav_auto: true,
+    webdav_auto: false,
     webdav_conflict: 'ask',
   };
 
@@ -224,6 +227,19 @@
       delete cfg[k];
     });
     return cfg;
+  }
+
+  /** 导入/拉取：本机显示类配置不被覆盖；密钥空值保留本机 */
+  function mergeConfigFromImport(incoming, current) {
+    const src = incoming && typeof incoming === 'object' ? incoming : {};
+    const live = current && typeof current === 'object' ? current : config;
+    const next = Object.assign({}, src, pickConfigLocalOnly(live));
+    CONFIG_SECRET_KEYS.forEach((k) => {
+      const incomingVal = src[k] == null ? '' : String(src[k]);
+      const liveVal = live[k] == null ? '' : String(live[k]);
+      next[k] = incomingVal || liveVal;
+    });
+    return next;
   }
 
   function saveConfig(patch) {
@@ -446,27 +462,54 @@
 
   function gmRequest(options) {
     return new Promise((resolve, reject) => {
-      if (typeof GM_xmlhttpRequest !== 'function') {
-        reject(new Error('GM_xmlhttpRequest unavailable'));
-        return;
+      function fallbackFetch(origErr) {
+        if (typeof fetch === 'function' && options && options.url) {
+          fetch(options.url, {
+            method: options.method || 'GET',
+            headers: options.headers || {},
+            body: options.data,
+            credentials: 'include',
+          })
+            .then(async (res) => {
+              const text = await res.text();
+              resolve({
+                status: res.status,
+                statusText: res.statusText,
+                responseText: text,
+                response: text,
+              });
+            })
+            .catch(() => reject(origErr || new Error('network error')));
+        } else {
+          reject(origErr || new Error('network error'));
+        }
       }
-      GM_xmlhttpRequest({
-        method: options.method || 'GET',
-        url: options.url,
-        headers: options.headers || {},
-        data: options.data,
-        timeout: options.timeout || 20000,
-        responseType: options.responseType || 'text',
-        onload(res) {
-          resolve(res);
-        },
-        onerror(err) {
-          reject(err || new Error('network error'));
-        },
-        ontimeout() {
-          reject(new Error('timeout'));
-        },
-      });
+
+      if (typeof GM_xmlhttpRequest === 'function') {
+        try {
+          GM_xmlhttpRequest({
+            method: options.method || 'GET',
+            url: options.url,
+            headers: options.headers || {},
+            data: options.data,
+            timeout: options.timeout || 20000,
+            responseType: options.responseType || 'text',
+            onload(res) {
+              resolve(res);
+            },
+            onerror(err) {
+              fallbackFetch(err);
+            },
+            ontimeout() {
+              fallbackFetch(new Error('timeout'));
+            },
+          });
+        } catch (e) {
+          fallbackFetch(e);
+        }
+      } else {
+        fallbackFetch(new Error('GM_xmlhttpRequest unavailable'));
+      }
     });
   }
 

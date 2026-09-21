@@ -39,9 +39,20 @@
     });
   }
 
+  function creamuWdCleanPassword(url, pass) {
+    const raw = String(pass == null ? '' : pass).trim();
+    if (!raw) return '';
+    // 坚果云应用密码为 16 位连续字母，去内部空格/换行
+    if (/jianguoyun\.com/i.test(String(url || ''))) {
+      return raw.replace(/\s+/g, '');
+    }
+    return raw;
+  }
+
   /** Basic Auth：兼容非 ASCII 用户名/密码 */
-  function creamuWdBasicAuth(user, pass) {
-    const raw = String(user == null ? '' : user) + ':' + String(pass == null ? '' : pass);
+  function creamuWdBasicAuth(user, pass, url) {
+    const cleanPass = creamuWdCleanPassword(url, pass);
+    const raw = String(user == null ? '' : user) + ':' + cleanPass;
     let b64;
     try {
       b64 = btoa(unescape(encodeURIComponent(raw)));
@@ -132,13 +143,16 @@
 
     function settings() {
       const s = (typeof host.getSettings === 'function' && host.getSettings()) || {};
+      const url = creamuWdCompact(s.url || '');
+      const rawPass = String(s.password == null ? '' : s.password);
+      const cleanPass = creamuWdCleanPassword(url, rawPass);
       return {
         enabled: !!s.enabled,
-        url: creamuWdCompact(s.url || ''),
+        url,
         user: creamuWdCompact(s.user || ''),
-        password: String(s.password == null ? '' : s.password),
+        password: cleanPass,
         path: creamuWdNormDir(s.path),
-        auto: s.auto !== false,
+        auto: !!s.auto,
         conflict: s.conflict === 'remote' || s.conflict === 'local' ? s.conflict : 'ask',
       };
     }
@@ -156,7 +170,7 @@
       const st = settings();
       return Object.assign(
         {
-          Authorization: creamuWdBasicAuth(st.user, st.password),
+          Authorization: creamuWdBasicAuth(st.user, st.password, st.url),
         },
         extra || {}
       );
@@ -181,6 +195,17 @@
       const en = st.enabled ? '' : ' · 未启用';
       const relPath = st.path + '/' + vaultName;
       return st.user + ' · ' + relPath + ' · rev ' + m.local_revision + ' · 上次 ' + when + en + err;
+    }
+
+    function checkDavAuthStatus(res) {
+      if (res.status === 401) {
+        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码，用户名需为注册邮箱）');
+      }
+      if (res.status === 403) {
+        throw new Error(
+          '访问被拒绝 (403 Forbidden)：请检查坚果云中是否已创建该同步文件夹（如 /Creamu），或使用「/我的坚果云/Creamu」，或检查当月流量是否超限'
+        );
+      }
     }
 
     async function davRequest(method, url, body, headers, timeout) {
@@ -241,9 +266,7 @@
     async function downloadVault() {
       const res = await davRequest('GET', vaultUrl(), null, { Accept: 'application/json,text/plain,*/*' }, 120000);
       if (res.status === 404) return null;
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码）');
-      }
+      checkDavAuthStatus(res);
       if (res.status < 200 || res.status >= 300) throw httpError(res, '下载失败 HTTP ' + res.status);
       const text = res.responseText != null ? String(res.responseText) : '';
       if (!text.trim()) return null;
@@ -267,9 +290,7 @@
         },
         180000
       );
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码）');
-      }
+      checkDavAuthStatus(res);
       if (res.status < 200 || res.status >= 300) throw httpError(res, '上传失败 HTTP ' + res.status);
       return true;
     }
@@ -288,9 +309,7 @@
         { Accept: 'application/json,text/plain,*/*' },
         30000
       );
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码）');
-      }
+      checkDavAuthStatus(res);
       // 文件尚未存在也算鉴权与路径可达
       if (res.status === 404 || (res.status >= 200 && res.status < 300)) {
         const m = loadMeta();
@@ -330,8 +349,15 @@
             const m = loadMeta();
             m.last_error = (e && e.message) || String(e);
             saveMeta(m);
-            retryCount++;
-            if (retryCount <= 5) schedulePush(Math.min(60000, 2000 * 2 ** (retryCount - 1)));
+            const isAuthOrForbidden =
+              (e && (e.status === 401 || e.status === 403)) ||
+              /401|403|认证|拒绝|Forbidden/i.test((e && e.message) || '');
+            if (!isAuthOrForbidden) {
+              retryCount++;
+              if (retryCount <= 5) schedulePush(Math.min(60000, 2000 * 2 ** (retryCount - 1)));
+            } else {
+              retryCount = 0;
+            }
           });
       }, ms || 8000);
     }
@@ -487,6 +513,12 @@
     async function bootSync() {
       const st = settings();
       if (!st.enabled || !st.auto || !isConfigured()) return null;
+      const m = loadMeta();
+      const lastSync = Number(m.last_sync) || 0;
+      // 开页冷却保护：10分钟内开过同步且本地不脏，则跳过开页拉取，防连续开标签页浪费流量
+      if (!m.dirty && lastSync && Date.now() - lastSync < 10 * 60 * 1000) {
+        return { action: 'noop', reason: 'cooldown' };
+      }
       try {
         return await syncNow({ reason: 'boot' });
       } catch (e) {

@@ -198,28 +198,108 @@
     return out;
   }
 
-  /** 心动标签中英别名 */
+  /** 心动标签中英别名映射表 */
   const FAV_TAG_ALIASES = {
-    巨乳: ['big breasts', 'huge breasts', 'gigantic breasts', '巨乳'],
-    贫乳: ['small breasts', 'flat chest', '贫乳'],
-    丝袜: ['pantyhose', 'stockings', 'thighhighs', '丝袜', '黑丝'],
-    人妻: ['milf', 'married', 'netorare', '人妻'],
+    巨乳: ['big breasts', 'huge breasts', 'gigantic breasts', '巨乳', '爆乳'],
+    贫乳: ['small breasts', 'flat chest', '贫乳', '平胸'],
+    丝袜: ['pantyhose', 'stockings', 'thighhighs', '丝袜', '黑丝', '裤袜'],
+    人妻: ['milf', 'married', 'netorare', '人妻', '熟女'],
+    熟女: ['milf', 'mature', '人妻', '熟女'],
     母: ['mother', 'milf', 'mama', 'mom', 'incest', '母', '母親', '母亲', '妈妈', '母女'],
     母女: ['mother', 'daughter', 'incest', '母女', '母'],
-    mother: ['mother', 'milf', 'mama', '母', '母親', '母亲', '母女', 'incest'],
-    潮吹: ['squirting', 'female ejaculation', '潮吹'],
-    无码: ['uncensored', 'decensored', '无码', '無碼'],
-    有码: ['mosaic censorship', 'full censorship', '有码', '有碼'],
+    姐妹: ['sister', 'sisters', 'incest', '姐妹', '姐姐', '妹妹'],
+    乱伦: ['incest', '乱伦', '亂倫', '母', 'mother', 'sister', 'daughter'],
+    出轨: ['cheating', 'netorare', '出轨', '偷情'],
+    受精: ['impregnation', 'pregnant', '受精', '怀胎', '中出', '着床'],
+    纯爱: ['pure love', '纯爱', '純愛'],
+    催眠: ['mind control', 'hypnosis', '催眠', '洗脑'],
+    恶堕: ['mind break', 'corruption', '恶堕', '堕落'],
     百合: ['yuri', 'gl', '百合'],
     扶她: ['futanari', 'futa', '扶她'],
-    乱伦: ['incest', '乱伦', '亂倫', '母', 'mother'],
-    催眠: ['mind control', 'hypnosis', '催眠'],
-    凌辱: ['rape', 'forced', '凌辱'],
+    女仆: ['maid', '女仆', '女僕'],
+    辣妹: ['gyaru', 'gal', '辣妹'],
+    黑皮: ['dark skin', '黑皮'],
+    潮吹: ['squirting', 'female ejaculation', '潮吹'],
+    无码: ['uncensored', 'decensored', '无码', '無碼'],
     全彩: ['full color', 'full colour', '全彩'],
-    单行本: ['tankoubon', '单行本', '單行本'],
-    同人: ['doujin', '同人'],
-    cg: ['cg set', '3d', 'cg'],
+    后宫: ['harem', '后宫', '後宮'],
+    露出: ['exhibitionism', 'public use', '露出'],
+    凌辱: ['rape', 'forced', '凌辱', '强暴'],
   };
+
+  /**
+   * 将心动标签列表展开为包含全部中英同义别名的匹配集合
+   */
+  function expandFavTagAliases(favList) {
+    const set = new Set();
+    (favList || []).forEach((item) => {
+      const raw = compactText(item).toLowerCase().trim();
+      if (!raw) return;
+      set.add(raw);
+      const bare = raw.includes(':') ? raw.split(':').slice(1).join(':').trim() : raw;
+      set.add(bare);
+
+      // 双向检索别名映射
+      Object.keys(FAV_TAG_ALIASES).forEach((k) => {
+        const kl = k.toLowerCase();
+        const arr = FAV_TAG_ALIASES[k] || [];
+        const isMatch =
+          kl === raw ||
+          kl === bare ||
+          arr.some((a) => a.toLowerCase() === raw || a.toLowerCase() === bare);
+        if (isMatch) {
+          set.add(kl);
+          arr.forEach((a) => set.add(a.toLowerCase()));
+        }
+      });
+    });
+    return set;
+  }
+
+  /** 屏蔽标签中英别名映射表 */
+  const HATE_TAG_ALIASES = {
+    男同: ['yaoi', 'male on male', 'bara'],
+    耽美: ['yaoi', 'male on male', 'bara'],
+    bl: ['yaoi', 'male on male', 'bara'],
+    gay: ['yaoi', 'male on male', 'bara'],
+    屎尿: ['scat', 'coprophagia'],
+    食粪: ['coprophagia'],
+    重口: ['scat', 'coprophagia', 'guro'],
+    猎奇: ['guro', 'snuff', 'amputee', 'cannibalism'],
+    兽交: ['bestiality'],
+    异种: ['parasite', 'alien'],
+  };
+
+  /**
+   * 将屏蔽标签列表展开为包含全部中英同义别名的匹配词列表
+   */
+  function expandHateTagAliases(hateList) {
+    const needles = [];
+    (hateList || []).forEach((item) => {
+      const raw = compactText(item).toLowerCase().trim();
+      if (!raw) return;
+      if (!needles.includes(raw)) needles.push(raw);
+      const bare = raw.includes(':') ? raw.split(':').slice(1).join(':').trim() : raw;
+      if (bare && !needles.includes(bare)) needles.push(bare);
+
+      Object.keys(HATE_TAG_ALIASES).forEach((k) => {
+        const kl = k.toLowerCase();
+        const arr = HATE_TAG_ALIASES[k] || [];
+        const isMatch =
+          kl === raw ||
+          kl === bare ||
+          arr.some((a) => a.toLowerCase() === raw || a.toLowerCase() === bare);
+        if (isMatch) {
+          if (!needles.includes(kl)) needles.push(kl);
+          arr.forEach((a) => {
+            const al = a.toLowerCase();
+            if (!needles.includes(al)) needles.push(al);
+          });
+        }
+      });
+    });
+    return needles;
+  }
 
   function isCjkText(s) {
     return /[\u3040-\u30ff\u3400-\u9fff]/.test(String(s || ''));
@@ -341,106 +421,482 @@
     return false;
   }
 
+  let ehSyringeDatabaseCache = null;
+  let ehSyringeChecked = false;
+
   /**
-   * 列表标签流：码级/形态/内容优先，否则角色；不含画师组与在库状态。
-   * @returns {{ ns: string, name: string, full: string, priority: number }[]}
+   * 探测并只读连接本地 EhSyringe (E站翻译注射器) IndexedDB 数据库
+   * 零网络请求，在内存中缓存 TagMap，查询耗时 0ms。
+   */
+  function buildEhSyringeCache(data) {
+    if (!data || typeof data !== 'object') return null;
+    const map = Object.create(null);
+    if (Array.isArray(data.data)) {
+      data.data.forEach((nsBlock) => {
+        const ns = nsBlock && nsBlock.namespace ? String(nsBlock.namespace).toLowerCase() : '';
+        const tagsObj = (nsBlock && nsBlock.data) || {};
+        for (const [tagKey, tagVal] of Object.entries(tagsObj)) {
+          const cnName =
+            (tagVal && (typeof tagVal === 'string' ? tagVal : tagVal.name || tagVal.cn)) || '';
+          if (!cnName) continue;
+          const tLow = String(tagKey).toLowerCase();
+          if (ns) map[ns + ':' + tLow] = cnName;
+          if (!map[tLow]) map[tLow] = cnName;
+        }
+      });
+      return map;
+    }
+    for (const [key, val] of Object.entries(data)) {
+      if (!val) continue;
+      const cnName = typeof val === 'string' ? val : val.name || val.cn || '';
+      if (cnName) {
+        map[String(key).toLowerCase()] = cnName;
+      }
+    }
+    return map;
+  }
+
+  async function initEhSyringeBridge() {
+    if (ehSyringeChecked) return ehSyringeDatabaseCache;
+    ehSyringeChecked = true;
+    try {
+      if (typeof indexedDB === 'undefined') return null;
+      const req = indexedDB.open('EhSyringe');
+      const db = await new Promise((resolve, reject) => {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      if (!db.objectStoreNames.contains('keyval')) {
+        db.close();
+        return null;
+      }
+      const tx = db.transaction('keyval', 'readonly');
+      const store = tx.objectStore('keyval');
+      const getReq = store.get('database');
+      const data = await new Promise((resolve) => {
+        getReq.onsuccess = () => resolve(getReq.result);
+        getReq.onerror = () => resolve(null);
+      });
+      db.close();
+      if (data && typeof data === 'object') {
+        ehSyringeDatabaseCache = buildEhSyringeCache(data);
+      }
+    } catch (_) {
+      // ignore
+    }
+    return ehSyringeDatabaseCache;
+  }
+
+  /** 内置高频核心标签汉化表（覆盖高频形态、题材、角色属性与核心特征） */
+  const BUILTIN_TAG_CN = {
+    // 码级 / 形态 / 介质
+    'uncensored': '无码',
+    'decensored': '去码',
+    'mosaic': '有码',
+    'censored': '有码',
+    'full censorship': '完全遮挡',
+    'full color': '全彩',
+    'full colour': '全彩',
+    'anthology': '选集',
+    'webtoon': '条漫',
+    'cg set': 'CG包',
+    '3d': '3D',
+
+    // 核心关系 / 题材 / 身份
+    'mother': '母',
+    'milf': '熟女',
+    'incest': '乱伦',
+    'daughter': '女儿',
+    'sister': '姐妹',
+    'aunt': '阿姨',
+    'cousin': '表亲',
+    'stepmother': '继母',
+    'dilf': '大叔',
+    'father': '父亲',
+    'brother': '兄弟',
+    'teacher': '教师',
+    'student': '学生',
+    'hypnosis': '催眠',
+    'mind break': '恶堕',
+    'mind control': '洗脑',
+    'netorare': 'NTR',
+    'netori': '逆NTR',
+    'cheating': '出轨',
+    'pure love': '纯爱',
+    'femdom': '女王',
+    'maledom': '男支配',
+    'crossdressing': '女装',
+    'tomgirl': '伪娘',
+    'tomboy': '假小子',
+    'futanari': '扶她',
+    'monster girl': '魔物娘',
+    'dark skin': '黑皮',
+    'glasses': '眼镜',
+    'maid': '女仆',
+    'schoolgirl uniform': '水手服',
+    'sailor suit': '水手服',
+    'swimsuit': '泳装',
+    'bikini': '比基尼',
+    'bunny girl': '兔女郎',
+    'nurse': '护士',
+    'cheerleader': '啦啦队',
+    'miko': '巫女',
+    'nun': '修女',
+    'waitress': '女仆侍应',
+    'gyaru': '辣妹',
+    'yandere': '病娇',
+    'tsundere': '傲娇',
+    'kuudere': '三无',
+    'twintails': '双马尾',
+    'ponytail': '单马尾',
+    'catgirl': '猫娘',
+    'foxgirl': '狐娘',
+    'elf': '精灵',
+    'succubus': '魅魔',
+    'vampire': '吸血鬼',
+    'demon girl': '恶魔娘',
+    'angel': '天使',
+    'stockings': '长筒袜',
+    'pantyhose': '连裤袜',
+    'garter belt': '吊袜带',
+    'bloomers': '灯笼裤',
+    'leotard': '紧身衣',
+    'bondage': '束缚',
+    'bdsm': 'BDSM',
+    'collar': '项圈',
+    'blindfold': '蒙眼',
+    'gag': '口塞',
+    'spanking': '打屁股',
+    'rape': '强暴',
+    'blackmail': '胁迫',
+    'corruption': '堕落',
+    'drugs': '药物',
+    'aphrodisiac': '春药',
+    'exhibitionism': '露出',
+    'voyeurism': '偷窥',
+    'public use': '公用',
+    'masturbation': '自慰',
+    'yuri': '百合',
+    'yaoi': '耽美',
+    'shotacon': '正太',
+    'lolicon': '萝莉',
+    'gokkun': '精饮',
+    'creampie': '中出',
+    'bukkake': '颜射',
+    'nakadashi': '体内射精',
+    'defloration': '破处',
+    'virginity': '处女',
+    'big breasts': '巨乳',
+    'huge breasts': '爆乳',
+    'large breasts': '巨乳',
+    'small breasts': '贫乳',
+    'flat chest': '平胸',
+    'lactation': '泌乳',
+    'pregnant': '妊娠',
+    'impregnation': '受精',
+    'tall girl': '高挑',
+    'sweating': '出汗',
+    'squirting': '潮吹',
+    'tentacles': '触手',
+    'slime': '史莱姆',
+    'parasite': '寄生',
+    'sleeping': '睡眠奸',
+    'drunk': '醉酒',
+    'body swap': '身体交换',
+    'gender bender': '性转换',
+    'harem': '后宫',
+    'double penetration': '双重穿透',
+    'gangbang': '轮奸',
+    'sole female': '单女',
+    'sole male': '单男'
+  };
+
+  /**
+   * 将标签翻译为地道中文：优先查 EhSyringe 本地缓存，次查内置核心字典，未命中返回原名
+   */
+  function translateTagCn(ns, name) {
+    if (!name) return '';
+    const nameLow = String(name).toLowerCase().trim();
+    const fullKey = (ns ? ns.toLowerCase() + ':' : '') + nameLow;
+
+    // 1) 优先查 EhSyringe 缓存
+    if (ehSyringeDatabaseCache) {
+      const match =
+        ehSyringeDatabaseCache[fullKey] ||
+        ehSyringeDatabaseCache[nameLow] ||
+        ehSyringeDatabaseCache[name];
+      if (match) {
+        return typeof match === 'string' ? match : match.name || match.cn || name;
+      }
+    }
+
+    // 2) 查内置高频字典
+    if (BUILTIN_TAG_CN[nameLow]) return BUILTIN_TAG_CN[nameLow];
+    if (BUILTIN_TAG_CN[fullKey]) return BUILTIN_TAG_CN[fullKey];
+
+    // 3) 原名返回
+    return name;
+  }
+
+  /**
+   * 列表标签流：排除的命名空间集合
+   * 社团/画师归属于熟人雷达徽章与标题；角色/原作已在封面与标题呈现；语言/杂项属于元数据。
+   */
+  const STREAM_EXCLUDED_NAMESPACES = new Set([
+    'artist',
+    'group',
+    'translator',
+    'circle',
+    'character',
+    'parody',
+    'misc',
+    'language',
+  ]);
+
+  /**
+   * 默认过滤的通用低信息量噪声标签（泛动作、细微服饰配件与介质描述）
+   */
+  const STREAM_NOISE_TAGS = new Set([
+    // 介质与非题材类
+    'original', 'tankoubon', 'digital', 'anthology', 'webtoon',
+    // 泛生理与常规动作
+    'sole female', 'sole male', 'group', 'x-ray', 'anal', 'blowjob', 'handjob',
+    'fingering', 'cunnilingus', 'nakadashi', 'creampie', 'bukkake', 'gokkun',
+    'paizuri', 'deepthroat', 'fellatio', 'kissing', 'masturbation',
+    'clothed female nude male', 'double penetration',
+    // 泛身体表现与细微配件
+    'sweating', 'saliva', 'navel', 'beauty mark', 'mole', 'hair buns',
+    'very long hair', 'short hair', 'twintails', 'ponytail', 'muscular',
+    'stomach deformation', 'gloves', 'collar', 'hair ornament', 'hair ribbon',
+    'boots', 'shoes', 'socks', 'apron', 'ribbon', 'bandages', 'hairband',
+    'choker', 'tiara', 'glasses',
+    // 审查标记
+    'mosaic censorship', 'full censorship', 'mosaic',
+  ]);
+
+  /**
+   * 叙事题材、核心关系与核心互动机制（最高优先级候选）
+   */
+  const STREAM_THEME_NARRATIVE = new Set([
+    // 亲属与伦理关系
+    'mother', 'daughter', 'sister', 'aunt', 'cousin', 'stepmother', 'incest',
+    // 核心关系定性
+    'netorare', 'netori', 'cheating', 'pure love', 'yuri', 'yaoi', 'futanari',
+    // 互动机制与情境
+    'mind control', 'hypnosis', 'mind break', 'corruption', 'blackmail',
+    'femdom', 'maledom', 'rape', 'drugs', 'aphrodisiac', 'gender bender',
+    'body swap', 'harem', 'gangbang', 'public use', 'exhibitionism',
+    'voyeurism', 'tentacles', 'sleeping', 'drunk', 'bondage', 'bdsm',
+    'defloration', 'virginity', 'shota', 'lolicon',
+  ]);
+
+  /**
+   * 核心身份设定、职业与角色原型（第二优先级候选）
+   */
+  const STREAM_THEME_ARCHETYPES = new Set([
+    'milf', 'gyaru', 'maid', 'nun', 'miko', 'teacher', 'student', 'nurse',
+    'bunny girl', 'cheerleader', 'waitress', 'succubus', 'elf', 'catgirl',
+    'foxgirl', 'vampire', 'demon girl', 'angel', 'monster girl', 'yandere',
+    'tsundere', 'tomboy', 'tomgirl', 'crossdressing', 'dilf', 'swimsuit',
+    'bikini', 'leotard', 'bloomers',
+  ]);
+
+  /**
+   * 显著体态与身材特征（第三优先级候选）
+   */
+  const STREAM_THEME_PHYSICAL = new Set([
+    'big breasts', 'huge breasts', 'small breasts', 'flat chest', 'dark skin',
+    'pregnant', 'lactation', 'tall girl', 'femboy',
+  ]);
+
+  /**
+   * 语义包含与从属抑制表
+   * 当具体子项存在时，自动抑制泛指或较轻的父项，避免近义重复占用展示坑位
+   */
+  const STREAM_SEMANTIC_SUBORDINATION = [
+    {
+      general: 'incest',
+      specifics: ['mother', 'daughter', 'sister', 'aunt', 'cousin', 'stepmother'],
+    },
+    {
+      general: 'cheating',
+      specifics: ['netorare', 'netori'],
+    },
+  ];
+
+  /**
+   * 版本形态优先级字典（最多占用 1 个名额）
+   */
+  const STREAM_FORMAT_PRIORITY = {
+    uncensored: 1,
+    decensored: 1,
+    'full color': 2,
+    'full colour': 2,
+    'cg set': 3,
+    '3d': 4,
+  };
+
+  /**
+   * 列表标签流决策引擎：数据驱动的分层提取与自适应配额装配
    */
   function pickHighlightTags(tags, opts) {
     opts = opts || {};
     const max = Math.max(1, Math.min(8, Math.floor(Number(opts.max) || 4)));
-    const titleBag = compactText(opts.title || '').toLowerCase();
-    const favBare = new Set(
-      (opts.favTags || []).map((t) => {
-        const h = normalizeNamespaceTag(t);
-        return (h.includes(':') ? h.split(':').slice(1).join(':') : h).toLowerCase();
-      })
-    );
-    const primary = []; // 码级/形态/内容/心动
-    const characters = []; // 角色兜底
+    const favBare = typeof expandFavTagAliases === 'function'
+      ? expandFavTagAliases(opts.favTags)
+      : new Set(
+          (opts.favTags || []).map((t) => {
+            const h = normalizeNamespaceTag(t);
+            return (h.includes(':') ? h.split(':').slice(1).join(':') : h).toLowerCase().trim();
+          })
+        );
+
+    const formatSlot = [];
+    const favSlot = [];
+    const narrativeSlot = [];
+    const archetypeSlot = [];
+    const physicalSlot = [];
+    const fallbackSlot = [];
     const seen = new Set();
+    const rawNameSet = new Set();
 
     (tags || []).forEach((raw) => {
       const full = normalizeNamespaceTag(raw);
       if (!full || seen.has(full)) return;
       seen.add(full);
+
       let ns = '';
       let name = full;
       const colon = full.indexOf(':');
       if (colon > 0) {
-        ns = full.slice(0, colon);
+        ns = full.slice(0, colon).toLowerCase().trim();
         name = full.slice(colon + 1);
       }
       if (!name || name.length > 40) return;
-      // 画师/组/翻译：熟人徽章负责，标签流不显示
-      if (ns === 'artist' || ns === 'group' || ns === 'translator' || ns === 'circle') return;
-      // 噪声
-      if (ns === 'misc' && /upload|rewrite|sampled|digital/i.test(name)) return;
-      if (ns === 'language' && /speechless|text cleaned/i.test(name)) return;
 
-      const nameLow = name.toLowerCase();
+      // 1. 过滤不在标签流展示的命名空间
+      if (STREAM_EXCLUDED_NAMESPACES.has(ns)) return;
+
+      const nameLow = name.toLowerCase().trim();
+      rawNameSet.add(nameLow);
       const isFav = favBare.has(nameLow) || favBare.has(full.toLowerCase());
-      // 标题里已经出现的英文词，少重复（母/mother 这类短内容词仍显示）
-      const inTitle = nameLow.length >= 4 && titleBag.includes(nameLow);
 
-      let pri = 80;
-      let bucket = 'primary';
+      // 2. 过滤噪声词（心动标签除外）
+      if (STREAM_NOISE_TAGS.has(nameLow) && !isFav) return;
 
-      if (ns === 'other' && /uncensored|decensored/i.test(name)) pri = 5;
-      else if (ns === 'other' && /mosaic|full.?censorship|censored/i.test(name)) pri = 8;
-      else if (ns === 'other' && /full.?colou?r/i.test(name)) pri = 12;
-      else if (ns === 'other' && /tankoubon|anthology|webtoon|cg set|3d/i.test(name)) pri = 14;
-      else if (ns === 'female' || ns === 'male' || ns === 'mixed' || ns === 'cosplayer') {
-        // 内容向：mother / milf / incest… 列表最有信息量
-        pri = isFav ? 10 : 18;
-        if (inTitle && !isFav) pri += 8;
-      } else if (ns === 'character') {
-        bucket = 'character';
-        pri = isFav ? 20 : 40;
-      } else if (ns === 'parody') {
-        // 原作标题常已有，仅标题完全看不出时略显示
-        if (inTitle) return;
-        pri = 45;
-      } else if (ns === 'language') {
-        if (/chinese|translated/i.test(name) && /chinese|中国|中文|漢化|汉化/i.test(titleBag)) return;
-        pri = 50;
-      } else if (isFav) {
-        pri = 11;
-      } else {
-        return; // 其它杂项默认不进流，减遮挡
+      // 3. 用户心动标签：最高优先进入独立心动槽
+      if (isFav) {
+        favSlot.push({ ns, name, full, priority: 0 });
+        return;
       }
 
-      const item = { ns: ns, name: name, full: full, priority: pri };
-      if (bucket === 'character') characters.push(item);
-      else primary.push(item);
+      // 4. 版本形态槽（最多保留 1 个）
+      if (ns === 'other' || ns === 'censor') {
+        const fmtPri = STREAM_FORMAT_PRIORITY[nameLow];
+        if (fmtPri != null) {
+          formatSlot.push({ ns: 'other', name, full, priority: fmtPri });
+          return;
+        }
+      }
+
+      // 5. 语义层级分流
+      if (STREAM_THEME_NARRATIVE.has(nameLow)) {
+        narrativeSlot.push({ ns, name, full, priority: 10 });
+        return;
+      }
+      if (STREAM_THEME_ARCHETYPES.has(nameLow)) {
+        archetypeSlot.push({ ns, name, full, priority: 20 });
+        return;
+      }
+      if (STREAM_THEME_PHYSICAL.has(nameLow)) {
+        physicalSlot.push({ ns, name, full, priority: 30 });
+        return;
+      }
+
+      // 6. 兜底合法题材（如常规 female/male/other）
+      fallbackSlot.push({ ns, name, full, priority: 40 });
     });
 
-    primary.sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name));
-    characters.sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name));
+    // 声明式语义从属抑制（泛指词让位于具体词）
+    const suppressedGenerals = new Set();
+    STREAM_SEMANTIC_SUBORDINATION.forEach(({ general, specifics }) => {
+      const hasSpecific = specifics.some((s) => rawNameSet.has(s));
+      if (hasSpecific) suppressedGenerals.add(general);
+    });
 
-    // 有码级/内容等则优先它们；否则用角色 tag 填
-    const out = primary.slice(0, max);
-    if (out.length < max) {
-      for (let i = 0; i < characters.length && out.length < max; i++) {
-        out.push(characters[i]);
-      }
+    const activeNarrative = narrativeSlot.filter(
+      (item) => !suppressedGenerals.has(item.name.toLowerCase().trim())
+    );
+
+    // 排序各槽位候选
+    formatSlot.sort((a, b) => a.priority - b.priority);
+    favSlot.sort((a, b) => a.priority - b.priority);
+    activeNarrative.sort((a, b) => a.priority - b.priority);
+    archetypeSlot.sort((a, b) => a.priority - b.priority);
+    physicalSlot.sort((a, b) => a.priority - b.priority);
+    fallbackSlot.sort((a, b) => a.priority - b.priority);
+
+    // 组装最终结果（高决策权重优先占位）
+    const out = [];
+    const usedFull = new Set();
+    const pushItem = (item) => {
+      if (!item || usedFull.has(item.full)) return false;
+      usedFull.add(item.full);
+      out.push(item);
+      return true;
+    };
+
+    // 1. 版本形态：最多占用 1 个名额
+    if (formatSlot.length > 0) pushItem(formatSlot[0]);
+
+    // 2. 心动标签：最多 2 个
+    for (let i = 0; i < favSlot.length && out.length < max && i < 2; i++) {
+      pushItem(favSlot[i]);
     }
-    return out;
+
+    // 3. 核心叙事与关系题材：允许动态抢占所有剩余名额
+    for (let i = 0; i < activeNarrative.length && out.length < max; i++) {
+      pushItem(activeNarrative[i]);
+    }
+
+    // 4. 核心身份设定：填补剩余名额
+    for (let i = 0; i < archetypeSlot.length && out.length < max; i++) {
+      pushItem(archetypeSlot[i]);
+    }
+
+    // 5. 显著身材体态：填补剩余名额
+    for (let i = 0; i < physicalSlot.length && out.length < max; i++) {
+      pushItem(physicalSlot[i]);
+    }
+
+    // 6. 通用题材保底补齐
+    for (let i = 0; i < fallbackSlot.length && out.length < max; i++) {
+      pushItem(fallbackSlot[i]);
+    }
+
+    return out.slice(0, max);
   }
 
-  /** 列表展示用短标签名（偏内容/形态，不强调画师组） */
+  /**
+   * 列表展示用短标签名：地道中文 + 紧凑呈现
+   */
   function formatHighlightTagLabel(item) {
     if (!item) return '';
     const ns = item.ns || '';
     const name = item.name || '';
-    if (ns === 'other' && /uncensored|decensored/i.test(name)) return '无码';
-    if (ns === 'other' && /mosaic|full.?censorship/i.test(name)) return '有码';
-    if (ns === 'other' && /full.?colou?r/i.test(name)) return '全彩';
-    if (ns === 'other' && /tankoubon/i.test(name)) return '单行本';
-    if (ns === 'character') return '角:' + name.slice(0, 12);
-    if (ns === 'parody') return '原:' + name.slice(0, 12);
-    if (ns === 'language') return name.slice(0, 10);
-    if (ns === 'female' || ns === 'male' || ns === 'mixed') return name.slice(0, 16);
-    return name.slice(0, 14);
+    const cn = translateTagCn(ns, name);
+
+    if (ns === 'other') {
+      if (/uncensored|decensored/i.test(name)) return '无码';
+      if (/mosaic|full.?censorship/i.test(name)) return '有码';
+      if (/full.?colou?r/i.test(name)) return '全彩';
+      if (/cg set/i.test(name)) return 'CG包';
+      if (/3d/i.test(name)) return '3D';
+    }
+    if (ns === 'character') return '角:' + cn.slice(0, 10);
+    if (ns === 'parody') return '原:' + cn.slice(0, 10);
+    if (ns === 'language') return cn.slice(0, 8);
+    return cn.slice(0, 12);
   }
 
   function parseSizeToBytes(text) {
@@ -1017,9 +1473,55 @@
       thumb: partial.thumb || '',
       availability_status,
       availability_checked_at: Math.max(0, Number(partial.availability_checked_at) || 0),
+      tags_fetched_at: Math.max(0, Number(partial.tags_fetched_at) || 0),
       availability_reason: compactText(partial.availability_reason || ''),
       availability_error: compactText(partial.availability_error || ''),
       expunged: availability_status === 'expunged' ? 1 : 0,
-      updated_at: nowMs(),
+      updated_at: typeof nowMs === 'function' ? nowMs() : Date.now(),
     };
+  }
+
+  const FORMAT_TAG_NAMES = new Set(['uncensored', 'decensored', 'full color', 'full colour', 'cg set', '3d']);
+
+  function isEditionMissingRealTags(edition, partial) {
+    if (!edition || !edition.gid || !edition.token) return false;
+    const availability =
+      typeof normalizeEditionAvailabilityStatus === 'function'
+        ? normalizeEditionAvailabilityStatus(edition.availability_status, edition.expunged)
+        : edition.availability_status;
+    if (availability === 'expunged' || availability === 'unavailable') return false;
+
+    // 1. 若近期已专门拉取过 gdata 标签（7天内），即使原站本身标签极少也不再重复请求
+    const currentMs = typeof nowMs === 'function' ? nowMs() : Date.now();
+    const tagsFetchedAt = Number(edition.tags_fetched_at) || 0;
+    if (tagsFetchedAt > 0 && currentMs - tagsFetchedAt < 7 * 86400000) {
+      return false;
+    }
+
+    // 2. 检查是否有真实的官方深层内容标签
+    // 注意：parody 绝不能算深层内容标签，因为 parseListCard 会从标题括号中提取常见二创 IP（如 parody:碧蓝档案、parody:Fate/Grand Order）
+    // 列表页卡片 DOM 解析绝对不可能产生 female, male, character, mixed, cosplayer 等命名空间
+    const tags =
+      (Array.isArray(edition.tags) && edition.tags.length ? edition.tags : (partial && partial.tags)) || [];
+    const hasDeepContentTag = tags.some((t) => {
+      const s = String(t).toLowerCase().trim();
+      if (
+        s.startsWith('female:') ||
+        s.startsWith('male:') ||
+        s.startsWith('character:') ||
+        s.startsWith('mixed:') ||
+        s.startsWith('cosplayer:')
+      ) {
+        return true;
+      }
+      if (s.startsWith('other:')) {
+        const name = s.slice(6).trim();
+        return !FORMAT_TAG_NAMES.has(name);
+      }
+      return false;
+    });
+
+    if (hasDeepContentTag) return false;
+
+    return true;
   }

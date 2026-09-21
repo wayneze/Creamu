@@ -34,6 +34,9 @@
 
     try {
       await openDb();
+      if (typeof initEhSyringeBridge === 'function') {
+        void initEhSyringeBridge().catch(() => {});
+      }
       logPhase('openDb');
     } catch (e) {
       console.warn('[ExC] IndexedDB unavailable', e);

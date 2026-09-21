@@ -92,6 +92,108 @@
     return hit;
   }
 
+  function renderMetaHtml(items) {
+    return (items || [])
+      .map((x) => {
+        const tip = x.title ? ' title="' + escapeHtml(x.title) + '"' : '';
+        if (x.act) {
+          return (
+            '<button type="button" class="meta-tag ' +
+            (x.cls || '') +
+            ' exc-meta-act"' +
+            tip +
+            ' data-exc-meta="' +
+            escapeHtml(x.act) +
+            '">' +
+            escapeHtml(x.t) +
+            '</button>'
+          );
+        }
+        return (
+          '<span class="meta-tag ' +
+          (x.cls || '') +
+          '"' +
+          tip +
+          '>' +
+          escapeHtml(x.t) +
+          '</span>'
+        );
+      })
+      .join('');
+  }
+
+  function renderListItemTagStream(el, edition, partial) {
+    if (!el || el.nodeType !== 1) return;
+    let streamBox =
+      el.querySelector(':scope > .exc-tag-stream') || el.querySelector('.exc-tag-stream');
+    if (!streamBox) {
+      streamBox = document.createElement('div');
+      streamBox.className = 'exc-tag-stream';
+      el.appendChild(streamBox);
+    }
+    if (config.list_show_tag_stream === false || typeof pickHighlightTags !== 'function') {
+      streamBox.innerHTML = '';
+      streamBox.hidden = true;
+      return;
+    }
+    const edTitle =
+      (edition && (edition.title_raw || edition.title)) ||
+      (partial && (partial.title_raw || partial.title)) ||
+      '';
+    const edTags = (() => {
+      const set = new Set();
+      const add = (arr) =>
+        (arr || []).forEach((t) => {
+          const s = compactText(t);
+          if (s) set.add(s);
+        });
+      if (edition) add(edition.tags);
+      if (partial) add(partial.tags);
+      return Array.from(set);
+    })();
+
+    const streamTags = [];
+    const hi = pickHighlightTags(edTags, {
+      max: Number(config.list_tag_stream_max) || 4,
+      favTags: config.fav_tags || [],
+      title: edTitle,
+    });
+    hi.forEach((item) => {
+      const label =
+        typeof formatHighlightTagLabel === 'function'
+          ? formatHighlightTagLabel(item)
+          : item.name;
+      streamTags.push({
+        t: label,
+        cls: 'stream',
+        title: item.full || item.name,
+      });
+    });
+
+    if (edition && edition.censor_tier && edition.censor_tier !== 'unknown') {
+      const cs = shortCensor(edition.censor_tier) || edition.censor_tier;
+      if (cs && !streamTags.some((x) => x.t === cs)) {
+        streamTags.unshift({ t: cs, cls: 'stream', title: '码级' });
+      }
+    }
+
+    if (streamTags.length === 0) {
+      const cat = (edition && edition.category) || (partial && partial.category);
+      if (cat && !/^(misc|other)$/i.test(cat)) {
+        streamTags.push({ t: cat, cls: 'stream', title: '分类: ' + cat });
+      }
+    }
+
+    if (streamTags.length) {
+      streamBox.innerHTML =
+        '<div class="exc-meta-overlay">' + renderMetaHtml(streamTags.slice(0, 5)) + '</div>';
+      streamBox.hidden = false;
+    } else {
+      streamBox.innerHTML = '';
+      streamBox.hidden = true;
+    }
+  }
+
   async function enhanceListItem(el, ctx) {
     if (!el || el.dataset.excEnhanced === '1') return null;
     const listContext = ctx || {};
@@ -208,40 +310,10 @@
       return box;
     };
     const badgeBox = ensureBox('exc-badge-container');
-    const streamBox = ensureBox('exc-tag-stream');
+    ensureBox('exc-tag-stream');
 
-    const renderMetaHtml = (items) =>
-      items
-        .map((x) => {
-          const tip = x.title ? ' title="' + escapeHtml(x.title) + '"' : '';
-          if (x.act) {
-            return (
-              '<button type="button" class="meta-tag ' +
-              (x.cls || '') +
-              ' exc-meta-act"' +
-              tip +
-              ' data-exc-meta="' +
-              escapeHtml(x.act) +
-              '">' +
-              escapeHtml(x.t) +
-              '</button>'
-            );
-          }
-          return (
-            '<span class="meta-tag ' +
-            (x.cls || '') +
-            '"' +
-            tip +
-            '>' +
-            escapeHtml(x.t) +
-            '</span>'
-          );
-        })
-        .join('');
-
-    if (badgeBox || streamBox) {
+    if (badgeBox) {
       const topTags = [];
-      const streamTags = [];
       const edTitle = edition.title_raw || edition.title || partial.title_raw || partial.title || '';
       const edTags = (() => {
         const set = new Set();
@@ -329,65 +401,28 @@
         });
       }
 
-      // —— 左下：标签流（码级/内容/角色）——
-      if (config.list_show_tag_stream !== false && typeof pickHighlightTags === 'function') {
-        const hi = pickHighlightTags(edTags, {
-          max: Number(config.list_tag_stream_max) || 3,
-          favTags: config.fav_tags || [],
-          title: edTitle,
-        });
-        hi.forEach((item) => {
-          const label =
-            typeof formatHighlightTagLabel === 'function'
-              ? formatHighlightTagLabel(item)
-              : item.name;
-          streamTags.push({
-            t: label,
-            cls: 'stream',
-            title: item.full || item.name,
-          });
-        });
-      }
-      // 码级简写可跟标签流一起放左下（标题常没有）
-      if (edition.censor_tier && edition.censor_tier !== 'unknown') {
-        const cs = shortCensor(edition.censor_tier) || edition.censor_tier;
-        if (cs && !streamTags.some((x) => x.t === cs)) {
-          streamTags.unshift({ t: cs, cls: 'stream', title: '码级' });
+      const showTop = topTags.slice(0, 6);
+      const moreTop = topTags.length - showTop.length;
+      badgeBox.innerHTML =
+        '<div class="exc-meta-overlay">' +
+        renderMetaHtml(showTop) +
+        (moreTop > 0 ? '<span class="meta-tag more">+' + moreTop + '</span>' : '') +
+        '</div>';
+      badgeBox.onclick = async (ev) => {
+        const btn = ev.target && ev.target.closest && ev.target.closest('[data-exc-meta]');
+        if (!btn) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        const act = btn.getAttribute('data-exc-meta');
+        try {
+          if (act === 'bind') await openBindModal(edition);
+        } catch (err) {
+          showToast('操作失败: ' + ((err && err.message) || err));
         }
-      }
-
-      if (badgeBox) {
-        const showTop = topTags.slice(0, 6);
-        const moreTop = topTags.length - showTop.length;
-        badgeBox.innerHTML =
-          '<div class="exc-meta-overlay">' +
-          renderMetaHtml(showTop) +
-          (moreTop > 0 ? '<span class="meta-tag more">+' + moreTop + '</span>' : '') +
-          '</div>';
-        badgeBox.onclick = async (ev) => {
-          const btn = ev.target && ev.target.closest && ev.target.closest('[data-exc-meta]');
-          if (!btn) return;
-          ev.preventDefault();
-          ev.stopPropagation();
-          const act = btn.getAttribute('data-exc-meta');
-          try {
-            if (act === 'bind') await openBindModal(edition);
-          } catch (err) {
-            showToast('操作失败: ' + ((err && err.message) || err));
-          }
-        };
-      }
-      if (streamBox) {
-        if (streamTags.length) {
-          streamBox.innerHTML =
-            '<div class="exc-meta-overlay">' + renderMetaHtml(streamTags.slice(0, 4)) + '</div>';
-          streamBox.hidden = false;
-        } else {
-          streamBox.innerHTML = '';
-          streamBox.hidden = true;
-        }
-      }
+      };
     }
+
+    renderListItemTagStream(el, edition, partial);
 
     let tools = coverHost && coverHost.querySelector(':scope > .exc-tool-bar');
     if (coverHost && !tools) {

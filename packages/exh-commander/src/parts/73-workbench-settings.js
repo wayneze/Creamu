@@ -13,7 +13,11 @@
       const sync = ensureCreamuSync();
       const syncStatus = sync ? sync.statusText() : '同步模块未加载';
       const conf = config.webdav_conflict || 'ask';
-      const pwdSaved = !!(config.webdav_password || '');
+      const pwdLen = (config.webdav_password || '').length;
+      const pwdSaved = pwdLen > 0;
+      const pwdPlaceholder = pwdSaved
+        ? '已保存 (' + pwdLen + '位字符，留空不修改)'
+        : '应用授权密码（坚果云请填安全设置中生成的密码）';
       body.innerHTML =
         '<section class="jlc-wb-settings-section is-active">' +
         '<h3>一键同步</h3>' +
@@ -23,22 +27,28 @@
         '<div class="legacy-note">坚果云 / Nextcloud 等。读写 {路径}/exh.vault.json。请用应用密码。</div>' +
         '<label>地址</label><input id="exc-cfg-wd-url" type="text" value="' +
         escapeHtml(config.webdav_url || '') +
-        '" placeholder="https://dav.jianguoyun.com/dav/">' +
+        '" placeholder="https://dav.jianguoyun.com/dav/" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">' +
         '<label>用户名</label><input id="exc-cfg-wd-user" type="text" value="' +
         escapeHtml(config.webdav_user || '') +
-        '" autocomplete="username">' +
-        '<label>应用密码</label><input id="exc-cfg-wd-pass" type="password" value="" placeholder="' +
-        (pwdSaved ? '已保存（留空不修改）' : '应用密码') +
-        '" autocomplete="new-password">' +
+        '" placeholder="坚果云需填注册邮箱（如 user@example.com，勿填昵称）" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">' +
+        '<label>应用密码</label>' +
+        '<div class="jlc-wb-inline-form">' +
+        '<input id="exc-cfg-wd-pass" type="password" value="" placeholder="' +
+        escapeHtml(pwdPlaceholder) +
+        '" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">' +
+        '<button type="button" class="jlc-wb-btn ghost" id="exc-cfg-wd-pass-toggle" title="显示/隐藏明文密码">👁</button>' +
+        '</div>' +
+        '<div class="legacy-note">提示：坚果云必须用<b>注册邮箱</b>作为用户名，密码需用<b>应用授权密码</b>（16位字母）。若远端路径为 /Creamu，请确认坚果云网页版中已手动创建 Creamu 文件夹，或改用 /我的坚果云/Creamu。</div>' +
         '<label>远端路径</label><input id="exc-cfg-wd-path" type="text" value="' +
         escapeHtml(config.webdav_path || '/Creamu') +
-        '">' +
+        '" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">' +
         '<div class="legacy-row legacy-toggle"><span>启用 WebDAV</span><input type="checkbox" id="exc-cfg-wd-en" ' +
         (config.webdav_enabled ? 'checked' : '') +
         '></div>' +
-        '<div class="legacy-row legacy-toggle"><span>打开页面时自动同步 WebDAV</span><input type="checkbox" id="exc-cfg-wd-auto" ' +
-        (config.webdav_auto !== false ? 'checked' : '') +
+        '<div class="legacy-row legacy-toggle"><span>开启后台自动同步（打开页面与数据变动时）</span><input type="checkbox" id="exc-cfg-wd-auto" ' +
+        (config.webdav_auto ? 'checked' : '') +
         '></div>' +
+        '<div class="legacy-note">默认不自动同步（推荐坚果云免费版保持关闭，需要备份时在下方点击「仅同步 WebDAV」或工作台底部「同步」，避免浏览时频繁消耗上传流量）。</div>' +
         '<label>冲突策略</label><select id="exc-cfg-wd-conflict" class="jlc-wb-select">' +
         '<option value="ask"' +
         (conf === 'ask' ? ' selected' : '') +
@@ -176,7 +186,9 @@
         escapeHtml((config.fav_tags || []).join(', ')) +
         '</textarea>' +
         '<h3 class="jlc-wb-section-title">过滤 / 屏蔽</h3>' +
-        '<label>屏蔽标签</label><textarea id="exc-cfg-hate-tags" rows="2">' +
+        '<label>屏蔽标签</label>' +
+        '<div class="legacy-note">逗号分隔。支持中文与英文别名自动展开（如填「男同」「耽美」自动拦截 yaoi、male on male、bara；填「屎尿」拦截 scat、coprophagia）。无需加 female/male 前缀。</div>' +
+        '<textarea id="exc-cfg-hate-tags" rows="2" placeholder="男同, yaoi, scat, 耽美, 屎尿">' +
         escapeHtml((config.hate_tags || []).join(', ')) +
         '</textarea>' +
         '<label>标题屏蔽词</label><input id="exc-cfg-title-kw" type="text" value="' +
@@ -409,8 +421,12 @@
           patch.webdav_enabled = c('exc-cfg-wd-en');
           patch.webdav_auto = c('exc-cfg-wd-auto');
           patch.webdav_conflict = body.querySelector('#exc-cfg-wd-conflict')?.value || 'ask';
-          const typedPass = v('exc-cfg-wd-pass');
-          if (typedPass) patch.webdav_password = typedPass;
+          const typedPass = v('exc-cfg-wd-pass').trim();
+          if (typedPass) {
+            patch.webdav_password = /jianguoyun\.com/i.test(patch.webdav_url || config.webdav_url || '')
+              ? typedPass.replace(/\s+/g, '')
+              : typedPass;
+          }
         } else if (tab === 'tags') {
           if (body.querySelector('#exc-cfg-fav-tags')) {
             patch.fav_tags = splitCsvField(v('exc-cfg-fav-tags'));
@@ -509,6 +525,7 @@
           injectBaseStyles();
           applyCreamSiteTheme();
           applyGalleryThumbScale();
+          if (tab === 'sync') renderSettingsSections('sync');
         }
       };
     }

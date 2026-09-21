@@ -196,6 +196,31 @@ await test('testConnection 401 失败', async () => {
   assert.ok(/认证|应用密码/.test(err.message));
 });
 
+await test('testConnection 403 明确提示目录或流量限制', async () => {
+  const env = loadWebDav(() => ({ status: 403, responseText: 'forbidden' }));
+  const h = env.create();
+  let err;
+  try {
+    await h.sync.testConnection();
+  } catch (e) {
+    err = e;
+  }
+  assert.ok(err);
+  assert.ok(/403|拒绝|同步文件夹/.test(err.message));
+});
+
+await test('密码自动清洗（去除空白与坚果云空格）', () => {
+  const { ctx } = loadWebDav(() => ({ status: 200, responseText: '' }));
+  assert.strictEqual(
+    ctx.creamuWdCleanPassword('https://dav.jianguoyun.com/dav/', '  abcd efgh ijkl mnop  \n'),
+    'abcdefghijklmnop'
+  );
+  assert.strictEqual(
+    ctx.creamuWdCleanPassword('https://dav.example.com/dav/', '  my-pass  '),
+    'my-pass'
+  );
+});
+
 await test('云端空 → syncNow 推送并包装 vault', async () => {
   const remote = { text: null };
   const env = loadWebDav((req) => {

@@ -52,7 +52,7 @@
         user: config.webdav_user || '',
         password: config.webdav_password || '',
         path: config.webdav_path || '/Creamu',
-        auto: config.webdav_auto !== false,
+        auto: !!config.webdav_auto,
         conflict: config.webdav_conflict || 'ask',
       }),
     });
@@ -277,18 +277,36 @@
   function bindSyncSettingsHandlers(body) {
     if (!body) return;
     const readWdForm = () => {
-      const typed = body.querySelector('#exc-cfg-wd-pass')?.value || '';
+      const url = body.querySelector('#exc-cfg-wd-url')?.value?.trim() || '';
+      const typed = (body.querySelector('#exc-cfg-wd-pass')?.value || '').trim();
       const patch = {
-        webdav_url: body.querySelector('#exc-cfg-wd-url')?.value?.trim() || '',
+        webdav_url: url,
         webdav_user: body.querySelector('#exc-cfg-wd-user')?.value?.trim() || '',
         webdav_path: body.querySelector('#exc-cfg-wd-path')?.value?.trim() || '/Creamu',
         webdav_enabled: !!body.querySelector('#exc-cfg-wd-en')?.checked,
         webdav_auto: !!body.querySelector('#exc-cfg-wd-auto')?.checked,
         webdav_conflict: body.querySelector('#exc-cfg-wd-conflict')?.value || 'ask',
       };
-      if (typed) patch.webdav_password = typed;
+      if (typed) {
+        patch.webdav_password = /jianguoyun\.com/i.test(url || config.webdav_url || '')
+          ? typed.replace(/\s+/g, '')
+          : typed;
+      }
       return patch;
     };
+    const passInput = body.querySelector('#exc-cfg-wd-pass');
+    const passToggle = body.querySelector('#exc-cfg-wd-pass-toggle');
+    if (passInput && passToggle) {
+      passToggle.onclick = () => {
+        if (passInput.type === 'password') {
+          passInput.type = 'text';
+          passToggle.textContent = '🔒';
+        } else {
+          passInput.type = 'password';
+          passToggle.textContent = '👁';
+        }
+      };
+    }
     const refreshWdStatus = () => {
       const el = document.getElementById('exc-wd-status');
       const o = ensureCreamuSync();

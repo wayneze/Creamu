@@ -178,7 +178,7 @@
         webdav_user: '',
         webdav_password: '',
         webdav_path: '/Creamu',
-        webdav_auto: true,
+        webdav_auto: false,
         webdav_conflict: 'ask'
     };
 
@@ -6049,9 +6049,20 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     });
   }
 
+  function creamuWdCleanPassword(url, pass) {
+    const raw = String(pass == null ? '' : pass).trim();
+    if (!raw) return '';
+    // 坚果云应用密码为 16 位连续字母，去内部空格/换行
+    if (/jianguoyun\.com/i.test(String(url || ''))) {
+      return raw.replace(/\s+/g, '');
+    }
+    return raw;
+  }
+
   /** Basic Auth：兼容非 ASCII 用户名/密码 */
-  function creamuWdBasicAuth(user, pass) {
-    const raw = String(user == null ? '' : user) + ':' + String(pass == null ? '' : pass);
+  function creamuWdBasicAuth(user, pass, url) {
+    const cleanPass = creamuWdCleanPassword(url, pass);
+    const raw = String(user == null ? '' : user) + ':' + cleanPass;
     let b64;
     try {
       b64 = btoa(unescape(encodeURIComponent(raw)));
@@ -6142,13 +6153,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     function settings() {
       const s = (typeof host.getSettings === 'function' && host.getSettings()) || {};
+      const url = creamuWdCompact(s.url || '');
+      const rawPass = String(s.password == null ? '' : s.password);
+      const cleanPass = creamuWdCleanPassword(url, rawPass);
       return {
         enabled: !!s.enabled,
-        url: creamuWdCompact(s.url || ''),
+        url,
         user: creamuWdCompact(s.user || ''),
-        password: String(s.password == null ? '' : s.password),
+        password: cleanPass,
         path: creamuWdNormDir(s.path),
-        auto: s.auto !== false,
+        auto: !!s.auto,
         conflict: s.conflict === 'remote' || s.conflict === 'local' ? s.conflict : 'ask',
       };
     }
@@ -6166,7 +6180,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const st = settings();
       return Object.assign(
         {
-          Authorization: creamuWdBasicAuth(st.user, st.password),
+          Authorization: creamuWdBasicAuth(st.user, st.password, st.url),
         },
         extra || {}
       );
@@ -6191,6 +6205,17 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const en = st.enabled ? '' : ' · 未启用';
       const relPath = st.path + '/' + vaultName;
       return st.user + ' · ' + relPath + ' · rev ' + m.local_revision + ' · 上次 ' + when + en + err;
+    }
+
+    function checkDavAuthStatus(res) {
+      if (res.status === 401) {
+        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码，用户名需为注册邮箱）');
+      }
+      if (res.status === 403) {
+        throw new Error(
+          '访问被拒绝 (403 Forbidden)：请检查坚果云中是否已创建该同步文件夹（如 /Creamu），或使用「/我的坚果云/Creamu」，或检查当月流量是否超限'
+        );
+      }
     }
 
     async function davRequest(method, url, body, headers, timeout) {
@@ -6251,9 +6276,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     async function downloadVault() {
       const res = await davRequest('GET', vaultUrl(), null, { Accept: 'application/json,text/plain,*/*' }, 120000);
       if (res.status === 404) return null;
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码）');
-      }
+      checkDavAuthStatus(res);
       if (res.status < 200 || res.status >= 300) throw httpError(res, '下载失败 HTTP ' + res.status);
       const text = res.responseText != null ? String(res.responseText) : '';
       if (!text.trim()) return null;
@@ -6277,9 +6300,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         },
         180000
       );
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码）');
-      }
+      checkDavAuthStatus(res);
       if (res.status < 200 || res.status >= 300) throw httpError(res, '上传失败 HTTP ' + res.status);
       return true;
     }
@@ -6298,9 +6319,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         { Accept: 'application/json,text/plain,*/*' },
         30000
       );
-      if (res.status === 401 || res.status === 403) {
-        throw new Error('认证失败，请检查用户名与应用密码（坚果云需用应用密码）');
-      }
+      checkDavAuthStatus(res);
       // 文件尚未存在也算鉴权与路径可达
       if (res.status === 404 || (res.status >= 200 && res.status < 300)) {
         const m = loadMeta();
@@ -6340,8 +6359,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             const m = loadMeta();
             m.last_error = (e && e.message) || String(e);
             saveMeta(m);
-            retryCount++;
-            if (retryCount <= 5) schedulePush(Math.min(60000, 2000 * 2 ** (retryCount - 1)));
+            const isAuthOrForbidden =
+              (e && (e.status === 401 || e.status === 403)) ||
+              /401|403|认证|拒绝|Forbidden/i.test((e && e.message) || '');
+            if (!isAuthOrForbidden) {
+              retryCount++;
+              if (retryCount <= 5) schedulePush(Math.min(60000, 2000 * 2 ** (retryCount - 1)));
+            } else {
+              retryCount = 0;
+            }
           });
       }, ms || 8000);
     }
@@ -6497,6 +6523,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     async function bootSync() {
       const st = settings();
       if (!st.enabled || !st.auto || !isConfigured()) return null;
+      const m = loadMeta();
+      const lastSync = Number(m.last_sync) || 0;
+      // 开页冷却保护：10分钟内开过同步且本地不脏，则跳过开页拉取，防连续开标签页浪费流量
+      if (!m.dirty && lastSync && Date.now() - lastSync < 10 * 60 * 1000) {
+        return { action: 'noop', reason: 'cooldown' };
+      }
       try {
         return await syncNow({ reason: 'boot' });
       } catch (e) {
@@ -6625,7 +6657,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 user: config.webdav_user || '',
                 password: config.webdav_password || '',
                 path: config.webdav_path || '/Creamu',
-                auto: config.webdav_auto !== false,
+                auto: !!config.webdav_auto,
                 conflict: config.webdav_conflict || 'ask'
             })
         });
@@ -8283,7 +8315,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 : '应用密码，非登录密码';
         }
         if (wdEn) wdEn.checked = !!config.webdav_enabled;
-        if (wdAuto) wdAuto.checked = config.webdav_auto !== false;
+        if (wdAuto) wdAuto.checked = !!config.webdav_auto;
         if (wdConf) wdConf.value = config.webdav_conflict || 'ask';
         if (wdStatus) {
             const sync = ensureCreamuSync();
@@ -8373,8 +8405,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             config.webdav_url = (shell.querySelector('#jlc-wb-wd-url')?.value || '').trim();
             config.webdav_user = (shell.querySelector('#jlc-wb-wd-user')?.value || '').trim();
             config.webdav_path = (shell.querySelector('#jlc-wb-wd-path')?.value || '').trim() || '/Creamu';
-            const wdPassTyped = shell.querySelector('#jlc-wb-wd-pass')?.value || '';
-            if (wdPassTyped) config.webdav_password = wdPassTyped;
+            const wdPassTyped = (shell.querySelector('#jlc-wb-wd-pass')?.value || '').trim();
+            if (wdPassTyped) {
+                config.webdav_password = /jianguoyun\.com/i.test(config.webdav_url || '')
+                    ? wdPassTyped.replace(/\s+/g, '')
+                    : wdPassTyped;
+            }
             config.webdav_enabled = !!shell.querySelector('#jlc-wb-wd-en')?.checked;
             config.webdav_auto = !!shell.querySelector('#jlc-wb-wd-auto')?.checked;
             config.webdav_conflict = shell.querySelector('#jlc-wb-wd-conflict')?.value || 'ask';
@@ -8407,8 +8443,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             config.webdav_url = (shell.querySelector('#jlc-wb-wd-url')?.value || '').trim();
             config.webdav_user = (shell.querySelector('#jlc-wb-wd-user')?.value || '').trim();
             config.webdav_path = (shell.querySelector('#jlc-wb-wd-path')?.value || '').trim() || '/Creamu';
-            const typed = shell.querySelector('#jlc-wb-wd-pass')?.value || '';
-            if (typed) config.webdav_password = typed;
+            const typed = (shell.querySelector('#jlc-wb-wd-pass')?.value || '').trim();
+            if (typed) {
+                config.webdav_password = /jianguoyun\.com/i.test(config.webdav_url || '')
+                    ? typed.replace(/\s+/g, '')
+                    : typed;
+            }
             config.webdav_enabled = !!shell.querySelector('#jlc-wb-wd-en')?.checked;
             config.webdav_auto = !!shell.querySelector('#jlc-wb-wd-auto')?.checked;
             config.webdav_conflict = shell.querySelector('#jlc-wb-wd-conflict')?.value || 'ask';
@@ -8593,11 +8633,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '        <h3 class="jlc-wb-section-title">WebDAV 同步</h3>'
             + '        <div class="legacy-note">通用 WebDAV（坚果云 / Nextcloud / 群晖等）。读写 {路径}/jlc.vault.json。坚果云请用应用密码。</div>'
             + '        <label>地址</label><input id="jlc-wb-wd-url" type="text" placeholder="https://dav.jianguoyun.com/dav/">'
-            + '        <label>用户名</label><input id="jlc-wb-wd-user" type="text" placeholder="邮箱 / 用户名" autocomplete="username">'
-            + '        <label>应用密码</label><input id="jlc-wb-wd-pass" type="password" placeholder="应用密码，非登录密码" autocomplete="new-password">'
+            + '        <label>用户名</label><input id="jlc-wb-wd-user" type="text" placeholder="坚果云需填注册邮箱（如 user@example.com，勿填昵称）" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">'
+            + '        <label>应用密码</label><input id="jlc-wb-wd-pass" type="password" placeholder="应用授权密码（非网页登录密码）" autocomplete="off" data-lpignore="true" data-bwignore="true" data-1p-ignore="true">'
             + '        <label>远端路径</label><input id="jlc-wb-wd-path" type="text" placeholder="/Creamu">'
             + '        <div class="legacy-row legacy-toggle"><span>启用同步</span><input type="checkbox" id="jlc-wb-wd-en"></div>'
-            + '        <div class="legacy-row legacy-toggle"><span>打开时自动同步</span><input type="checkbox" id="jlc-wb-wd-auto"></div>'
+            + '        <div class="legacy-row legacy-toggle"><span>开启自动同步（未勾选时仅手动同步）</span><input type="checkbox" id="jlc-wb-wd-auto"></div>'
             + '        <label>冲突策略</label><select id="jlc-wb-wd-conflict" class="jlc-wb-select"><option value="ask">询问</option><option value="remote">云端优先</option><option value="local">本机优先</option></select>'
             + '        <div class="legacy-note" id="jlc-wb-wd-status">—</div>'
             + '        <div class="jlc-wb-form-actions">'

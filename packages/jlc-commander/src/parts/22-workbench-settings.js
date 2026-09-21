@@ -131,7 +131,7 @@
                 : '应用密码，非登录密码';
         }
         if (wdEn) wdEn.checked = !!config.webdav_enabled;
-        if (wdAuto) wdAuto.checked = config.webdav_auto !== false;
+        if (wdAuto) wdAuto.checked = !!config.webdav_auto;
         if (wdConf) wdConf.value = config.webdav_conflict || 'ask';
         if (wdStatus) {
             const sync = ensureCreamuSync();
@@ -221,8 +221,12 @@
             config.webdav_url = (shell.querySelector('#jlc-wb-wd-url')?.value || '').trim();
             config.webdav_user = (shell.querySelector('#jlc-wb-wd-user')?.value || '').trim();
             config.webdav_path = (shell.querySelector('#jlc-wb-wd-path')?.value || '').trim() || '/Creamu';
-            const wdPassTyped = shell.querySelector('#jlc-wb-wd-pass')?.value || '';
-            if (wdPassTyped) config.webdav_password = wdPassTyped;
+            const wdPassTyped = (shell.querySelector('#jlc-wb-wd-pass')?.value || '').trim();
+            if (wdPassTyped) {
+                config.webdav_password = /jianguoyun\.com/i.test(config.webdav_url || '')
+                    ? wdPassTyped.replace(/\s+/g, '')
+                    : wdPassTyped;
+            }
             config.webdav_enabled = !!shell.querySelector('#jlc-wb-wd-en')?.checked;
             config.webdav_auto = !!shell.querySelector('#jlc-wb-wd-auto')?.checked;
             config.webdav_conflict = shell.querySelector('#jlc-wb-wd-conflict')?.value || 'ask';
@@ -255,8 +259,12 @@
             config.webdav_url = (shell.querySelector('#jlc-wb-wd-url')?.value || '').trim();
             config.webdav_user = (shell.querySelector('#jlc-wb-wd-user')?.value || '').trim();
             config.webdav_path = (shell.querySelector('#jlc-wb-wd-path')?.value || '').trim() || '/Creamu';
-            const typed = shell.querySelector('#jlc-wb-wd-pass')?.value || '';
-            if (typed) config.webdav_password = typed;
+            const typed = (shell.querySelector('#jlc-wb-wd-pass')?.value || '').trim();
+            if (typed) {
+                config.webdav_password = /jianguoyun\.com/i.test(config.webdav_url || '')
+                    ? typed.replace(/\s+/g, '')
+                    : typed;
+            }
             config.webdav_enabled = !!shell.querySelector('#jlc-wb-wd-en')?.checked;
             config.webdav_auto = !!shell.querySelector('#jlc-wb-wd-auto')?.checked;
             config.webdav_conflict = shell.querySelector('#jlc-wb-wd-conflict')?.value || 'ask';

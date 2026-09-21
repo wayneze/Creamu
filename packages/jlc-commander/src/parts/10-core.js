@@ -154,7 +154,7 @@
         webdav_user: '',
         webdav_password: '',
         webdav_path: '/Creamu',
-        webdav_auto: true,
+        webdav_auto: false,
         webdav_conflict: 'ask'
     };
 

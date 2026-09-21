@@ -96,6 +96,8 @@
       } else {
         work = storageSnapshot.worksById.get(edition.work_id) || null;
       }
+      entry.edition = edition;
+      entry.work = work;
       let result = null;
       try {
         result = await enhanceListItem(entry.el, {
@@ -123,7 +125,81 @@
     if (trackingRecord && typeof applyTrackingBreakpointDecorations === 'function') {
       applyTrackingBreakpointDecorations(trackingRecord);
     }
+    if (config.list_show_tag_stream !== false && typeof fillListTagsFromGdata === 'function') {
+      void fillListTagsFromGdata(entries);
+    }
     return enhanced.length;
+  }
+
+  let listGdataQueue = Promise.resolve();
+
+  async function fillListTagsFromGdata(entries) {
+    const run = async () => {
+      if (!Array.isArray(entries) || !entries.length) return;
+      if (typeof checkEditionAvailabilityBatch !== 'function') return;
+      const candidates = entries.filter((entry) =>
+        isEditionMissingRealTags(entry && entry.edition, entry && entry.partial)
+      );
+      if (!candidates.length) return;
+
+      if (typeof initEhSyringeBridge === 'function') {
+        try {
+          await initEhSyringeBridge();
+        } catch (_) {}
+      }
+
+      // 按 25 个一组分批请求，每批完成立即局部刷新对应卡片
+      for (let offset = 0; offset < candidates.length; offset += 25) {
+        const chunk = candidates.slice(offset, offset + 25);
+        const editionsToFetch = chunk.map((c) => c.edition);
+        try {
+          const result = await checkEditionAvailabilityBatch(editionsToFetch);
+          const updated = (result && result.editions) || [];
+          const updatedMap = new Map();
+          updated.forEach((ed) => {
+            if (ed && ed.gid) updatedMap.set(String(ed.gid), ed);
+          });
+
+          chunk.forEach((entry) => {
+            const freshEdition = updatedMap.get(String(entry.edition.gid));
+            if (freshEdition && entry.el && entry.el.isConnected !== false) {
+              entry.edition = freshEdition;
+
+              // 同步检查异步补全标签后是否命中屏蔽
+              if (typeof isBlockedEdition === 'function') {
+                const block = isBlockedEdition(freshEdition, entry.work);
+                if (block.blocked) {
+                  entry.el.classList.add('is-exc-blocked');
+                  entry.el.classList.remove('is-exc-fav');
+                  if (config.hide_blocked) {
+                    entry.el.classList.add('exc-hide');
+                    return;
+                  }
+                }
+              }
+
+              if (typeof renderListItemTagStream === 'function') {
+                renderListItemTagStream(entry.el, freshEdition, entry.partial);
+              }
+              // 同步检查新标签是否命中心动或熟人
+              try {
+                const edTags = Array.isArray(freshEdition.tags) ? freshEdition.tags : [];
+                const edTitle = freshEdition.title_raw || freshEdition.title || '';
+                if (typeof matchFavTags === 'function') {
+                  const favHits = matchFavTags(config.fav_tags || [], edTags, edTitle);
+                  if (favHits.length) entry.el.classList.add('is-exc-fav');
+                }
+              } catch (_) {}
+            }
+          });
+        } catch (err) {
+          console.warn('[ExC] fillListTagsFromGdata chunk error', err);
+        }
+      }
+    };
+
+    listGdataQueue = listGdataQueue.then(run, run).catch(() => {});
+    return listGdataQueue;
   }
 
   function enhanceListPage(options) {

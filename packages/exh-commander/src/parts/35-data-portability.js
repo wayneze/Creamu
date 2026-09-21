@@ -94,9 +94,11 @@
     idbSyncSuppress = true;
     try {
       if (payload.config && typeof payload.config === 'object') {
-        // 保留本机显示类配置，不被云端/备份覆盖
-        const localKeep = typeof pickConfigLocalOnly === 'function' ? pickConfigLocalOnly(config) : {};
-        saveConfig(Object.assign({}, payload.config, localKeep));
+        const merged =
+          typeof mergeConfigFromImport === 'function'
+            ? mergeConfigFromImport(payload.config, config)
+            : payload.config;
+        saveConfig(merged);
       }
       if (payload.seen_gids && typeof payload.seen_gids === 'object' && typeof saveSeenGids === 'function') {
         // 合并：云端 + 本机（本机更新时间较新的保留）

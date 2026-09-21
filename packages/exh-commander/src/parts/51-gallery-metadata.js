@@ -122,6 +122,7 @@
         token,
         availability_status: 'unavailable',
         availability_checked_at: checkedAt,
+        tags_fetched_at: checkedAt,
         availability_reason: error,
         availability_error: '',
         expunged: 0,
@@ -150,6 +151,7 @@
       uploader: compactText(source.uploader || ''),
       availability_status: expunged ? 'expunged' : 'active',
       availability_checked_at: checkedAt,
+      tags_fetched_at: checkedAt,
       availability_reason: expunged
         ? compactText(source.expunged_reason || '站点标记为已清退')
         : '',

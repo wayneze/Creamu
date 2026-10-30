@@ -15,12 +15,15 @@
 | **Creamu · ExH** | e-hentai · exhentai | [![Install](https://img.shields.io/badge/Install-userscript-00A86B?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/exh-commander/dist/creamu-exh.user.js) | [`creamu-exh.user.js`](packages/exh-commander/dist/creamu-exh.user.js) |
 | **Creamu · JavLibrary** | JavLibrary · JavBus · JavDB · AVMOO 等常见镜像 | [![Install](https://img.shields.io/badge/Install-userscript-00A86B?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/jlc-commander/dist/creamu-jlc.user.js) | [`creamu-jlc.user.js`](packages/jlc-commander/dist/creamu-jlc.user.js) |
 | **Creamu · Scout** | xvideos · xnxx · eporner | [![Install](https://img.shields.io/badge/Install-userscript-00A86B?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/scout-commander/dist/creamu-scout.user.js) | [`creamu-scout.user.js`](packages/scout-commander/dist/creamu-scout.user.js) |
+| **Creamu · HJ** | HJ系 | [![Install](https://img.shields.io/badge/Install-userscript-00A86B?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/hj-commander/dist/creamu-hj.user.js) | [`creamu-scout.user.js`](packages/scout-commander/dist/creamu-scout.user.js) |
+
 
 也可以直接点这些链接（效果相同）：
 
 - [Install · ExH](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/exh-commander/dist/creamu-exh.user.js)
 - [Install · JavLibrary](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/jlc-commander/dist/creamu-jlc.user.js)
 - [Install · Scout](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/scout-commander/dist/creamu-scout.user.js)
+- [Install · HJ](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/hj-commander/dist/creamu-hj.user.js)
 
 > **说明**
 > - GitHub 的 blob 浏览页**不会**触发安装，必须用 `raw.githubusercontent.com/.../*.user.js`

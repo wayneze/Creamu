@@ -58,6 +58,7 @@ npm run build
 npm run build:exh
 npm run build:jlc
 npm run build:scout
+npm run build:hj
 ```
 
 测试与产物校验：

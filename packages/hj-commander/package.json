@@ -1,0 +1,13 @@
+{
+  "name": "@creamu/hj-commander",
+  "version": "0.1.46",
+  "private": true,
+  "description": "Creamu · HJ — 极简移动端体验 / 广告过滤 / 媒体解析 / 搜索与正倒序增强",
+  "author": "wayneze",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test-core.mjs",
+    "check": "node scripts/test-core.mjs && node scripts/build.mjs"
+  }
+}

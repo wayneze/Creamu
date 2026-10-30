@@ -1,0 +1,33 @@
+{
+  "parts": [
+    "00-header.meta.js",
+    "10-core.js",
+    "20-sites.js",
+    "25-theme.js",
+    "30-media-parser.js",
+    "31-search-memory.js",
+    "32-user-post-sorter.js",
+    "35-ad-sanitizer.js",
+    "50-boot.js"
+  ],
+  "injectAfter": {
+    "25-theme.js": [
+      "packages/shared/creamu-workbench-css.js",
+      "packages/shared/creamu-workbench-geometry.js",
+      "packages/shared/creamu-workbench-interactions.js",
+      "packages/shared/creamu-webdav.js"
+    ]
+  },
+  "output": "dist/creamu-hj.user.js",
+  "required": [
+    { "label": "header metadata", "text": "Creamu · HJ" },
+    { "label": "core helpers", "text": "function initCreamuHjCore" },
+    { "label": "site detection", "text": "function isHjSite" },
+    { "label": "theme manager", "text": "function applyCreamuHjTheme" },
+    { "label": "media parser", "text": "function parseHjHiddenMedia" },
+    { "label": "search state memory", "text": "function initHjSearchMemory" },
+    { "label": "post sorter", "text": "function initHjPostSorter" },
+    { "label": "ad sanitizer", "text": "function applyHjAdSanitizer" },
+    { "label": "boot", "text": "function bootCreamuHj" }
+  ]
+}

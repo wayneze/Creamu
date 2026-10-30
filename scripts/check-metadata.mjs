@@ -5,6 +5,7 @@ const packages = [
   ['exh-commander', 'creamu-exh.user.js'],
   ['jlc-commander', 'creamu-jlc.user.js'],
   ['scout-commander', 'creamu-scout.user.js'],
+  ['hj-commander', 'creamu-hj.user.js'],
 ];
 
 function readUserscriptVersion(file) {

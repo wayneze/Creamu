@@ -34,6 +34,7 @@ const files = [
   'tests/scout/detail-enhancements.mjs',
   'tests/scout/workbench-pages.mjs',
   'packages/scout-commander/scripts/test-core.mjs',
+  'packages/hj-commander/scripts/test-core.mjs',
 ];
 
 for (const file of files) {

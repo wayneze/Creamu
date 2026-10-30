@@ -7,6 +7,7 @@ const packages = [
   'exh-commander',
   'jlc-commander',
   'scout-commander',
+  'hj-commander',
 ];
 
 const root = process.cwd();

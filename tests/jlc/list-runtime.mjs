@@ -20,6 +20,11 @@ assert.deepEqual(
 assert.doesNotMatch(coreSource, /vanilla-lazyload|class LazyLoad|function\(n,t\).*LazyLoad/);
 assert.doesNotMatch(listSource, /new LazyLoad|class (?:InputTagPanel|TabPanel|DownloadPanel)/);
 assert.match(listSource, /new CoverLazyLoader/);
+assert.doesNotMatch(
+  listSource,
+  /\$\{AvItem\.(?:href|src|title|AVID|date)\}/,
+  'site text must be escaped before entering the list card template'
+);
 assert.match(downloadSource, /jszip@3\.10\.1/);
 assert.doesNotMatch(downloadSource, /FileSaver|saveAs\(/);
 

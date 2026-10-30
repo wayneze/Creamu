@@ -626,6 +626,28 @@ assert.equal(fetchedUrls.length, 1, 'the second page must actually be requested'
 assert.match(fetchedUrls[0], /next=25/);
 assert.match(fetchedUrls[0], /f_search=sample/);
 
+// 跨页扫到断点的条数是精确值，不能被旧估值压低
+scanContext.window = {};
+scanContext.showToast = () => {};
+scanContext.applyTrackingCoverFields = (record) => record;
+scanContext.saveTrackingRecord = async (record) => record;
+const recountWith = async (scanResult, rec) => {
+  scanContext.scanTrackingUnreadAcrossPages = async () => scanResult;
+  return scanContext.recountTrackingUnreadDeep(rec);
+};
+const recounted = await recountWith(
+  { found: true, kind: 'exact', count: 40, pagesScanned: 2, topGal: null },
+  { breakpoint_gid: '99', open_url: 'https://e-hentai.org/?f_search=sample', unread_estimate: 5 }
+);
+assert.equal(recounted.unread_estimate, 40);
+assert.equal(recounted.unread_estimate_capped, 0);
+const missed = await recountWith(
+  { found: false, count: 75, pagesScanned: 3, topGal: null },
+  { breakpoint_gid: '99', open_url: 'https://e-hentai.org/?f_search=sample', unread_estimate: 10 }
+);
+assert.equal(missed.unread_estimate, 75, '没找到断点时，已扫条数是下限');
+assert.equal(missed.unread_estimate_capped, 1);
+
 const liveItems = [
   {
     dataset: { excGid: '1' },

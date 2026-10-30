@@ -113,27 +113,29 @@
                     let AvItem = getAvItem(tag);
                     if (!(hiddenWords.find((v, i) => AvItem.title.includes(v)) ||
                         hiddenAvids.find((v, i) => AvItem.AVID.toUpperCase().startsWith(v.toUpperCase()+"-")|| AvItem.AVID.toUpperCase()==v.toUpperCase() ))) {
+                        // 站点文本进模板前转义；itemTag / score 本身是站点 HTML 片段
+                        const view = { href: escapeHtml(AvItem.href), src: escapeHtml(AvItem.src), title: escapeHtml(AvItem.title), AVID: escapeHtml(AvItem.AVID) };
                         const releaseDate = String(AvItem.date || '').trim();
-                        const releaseDateHtml = releaseDate ? `<span class="avid-date-badge">${releaseDate}</span>` : '';
+                        const releaseDateHtml = releaseDate ? `<span class="avid-date-badge">${escapeHtml(releaseDate)}</span>` : '';
                         const coverStateClass = isPlaceholderCover(AvItem.src, AvItem.title) ? 'minHeight-96 jlc-placeholder-cover' : 'minHeight-200';
                         html = `<div class="item-b">
                                 <div class="box-b">
                                 <div class="cover-b">
-                                    <a  href="${AvItem.href}" target="_blank"><img style="${imgStyle}" class="lazy ${coverStateClass}"  data-src="${AvItem.src}" ></a>
+                                    <a  href="${view.href}" target="_blank"><img style="${imgStyle}" class="lazy ${coverStateClass}"  data-src="${view.src}" ></a>
                                 </div>
                                 <div class="detail-b">
-                                    <a name="av-title" href="${AvItem.href}" target="_blank" title="${AvItem.title}" class="${fullTitle}"><span class="tool-span copy-span ${copyBtn}" name="copy">${copy_Svg}</span> <span>${AvItem.title}</span></a>
+                                    <a name="av-title" href="${view.href}" target="_blank" title="${view.title}" class="${fullTitle}"><span class="tool-span copy-span ${copyBtn}" name="copy">${copy_Svg}</span> <span>${view.title}</span></a>
                                     <div class="info-bottom">
                                       <div class="info-bottom-one">
-                                          <a class="avid-link-b" href="${AvItem.href}" target="_blank"><span class="avid-line-b"><span class="tool-span copy-span ${copyBtn}"  name="copy">${copy_Svg}</span><date name="avid">${AvItem.AVID}</date></span>${releaseDateHtml}</a>
+                                          <a class="avid-link-b" href="${view.href}" target="_blank"><span class="avid-line-b"><span class="tool-span copy-span ${copyBtn}"  name="copy">${copy_Svg}</span><date name="avid">${view.AVID}</date></span>${releaseDateHtml}</a>
                                       </div>
-                                      ${AvItem.score?`<a  href="${AvItem.href}" target="_blank"><div class="score">${AvItem.score}</div></a>`:``}
+                                      ${AvItem.score?`<a  href="${view.href}" target="_blank"><div class="score">${AvItem.score}</div></a>`:``}
                                       <div class="info-bottom-two">
                                         <div class="item-tag">${AvItem.itemTag}</div>
-                                        <div class="toolbar-b ${toolBar}" item-id="${AvItem.AVID}${Math.random().toString(16).slice(2)}"  >
-                                        <span name="magnet" class="tool-span  ${magnet}" title="${magnetTip}" AVID="${AvItem.AVID}" data-href="${AvItem.href}">${magnet_Svg}</span>
-                                        <span name="download" class="tool-span" title="${downloadTip}" src="${AvItem.src}" src-title="${AvItem.AVID} ${AvItem.title}">${download_Svg}</span>
-                                        <span name="picture" class="tool-span" title="${pictureTip}" AVID="${AvItem.AVID}" >${picture_Svg}</span>
+                                        <div class="toolbar-b ${toolBar}" item-id="${view.AVID}${Math.random().toString(16).slice(2)}"  >
+                                        <span name="magnet" class="tool-span  ${magnet}" title="${magnetTip}" AVID="${view.AVID}" data-href="${view.href}">${magnet_Svg}</span>
+                                        <span name="download" class="tool-span" title="${downloadTip}" src="${view.src}" src-title="${view.AVID} ${view.title}">${download_Svg}</span>
+                                        <span name="picture" class="tool-span" title="${pictureTip}" AVID="${view.AVID}" >${picture_Svg}</span>
                                        </div>
                                      </div>
                                    </div>

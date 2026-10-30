@@ -154,7 +154,7 @@
 
     const streamTags = [];
     const hi = pickHighlightTags(edTags, {
-      max: Number(config.list_tag_stream_max) || 4,
+      max: config.list_tag_stream_max,
       favTags: config.fav_tags || [],
       title: edTitle,
     });

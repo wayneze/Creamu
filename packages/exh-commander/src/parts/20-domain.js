@@ -14,7 +14,7 @@
   };
 
   const LANG_PATTERNS = [
-    { id: 'zh', re: /chinese|中国語|漢化|汉化|中文|中国翻訳|中國翻譯|zh[-_]?cn|zh[-_]?tw|ce\b/i },
+    { id: 'zh', re: /chinese|中国語|漢化|汉化|中文|中国翻訳|中國翻譯|zh[-_]?cn|zh[-_]?tw|\bce\b/i },
     { id: 'ja', re: /japanese|日本語|日語|日语|\bja\b/i },
     { id: 'en', re: /english|英語|英语|\ben\b/i },
     { id: 'ko', re: /korean|한국어|韓語|韩语|\bko\b/i },
@@ -62,18 +62,21 @@
   }
 
   function detectLanguageFromText(text, tags) {
-    const bag = [String(text || ''), ...(tags || []).map(String)].join(' | ');
-    for (const item of LANG_PATTERNS) {
-      if (item.re.test(bag)) return item.id;
-    }
-    // language:chinese style tags
-    const langTag = (tags || []).map(normalizeNamespaceTag).find((t) => t.startsWith('language:'));
-    if (langTag) {
-      const v = langTag.slice('language:'.length);
+    // 站点 language: 标签比标题措辞可靠，先认它（translated / rewrite 不是语言）
+    const langValues = (tags || [])
+      .map(normalizeNamespaceTag)
+      .filter((t) => t.startsWith('language:'))
+      .map((t) => t.slice('language:'.length).trim())
+      .filter((v) => v && v !== 'translated' && v !== 'rewrite' && v !== 'speechless' && v !== 'text cleaned');
+    for (const v of langValues) {
       for (const item of LANG_PATTERNS) {
         if (item.re.test(v)) return item.id;
       }
-      if (v) return v.slice(0, 12);
+    }
+    if (langValues.length) return langValues[0].slice(0, 12);
+    const bag = [String(text || ''), ...(tags || []).map(String)].join(' | ');
+    for (const item of LANG_PATTERNS) {
+      if (item.re.test(bag)) return item.id;
     }
     return 'other';
   }
@@ -424,10 +427,7 @@
   let ehSyringeDatabaseCache = null;
   let ehSyringeChecked = false;
 
-  /**
-   * 探测并只读连接本地 EhSyringe (E站翻译注射器) IndexedDB 数据库
-   * 零网络请求，在内存中缓存 TagMap，查询耗时 0ms。
-   */
+  /** EhSyringe 数据库的 database 记录 → { 'ns:tag': 中文名 } */
   function buildEhSyringeCache(data) {
     if (!data || typeof data !== 'object') return null;
     const map = Object.create(null);
@@ -456,6 +456,7 @@
     return map;
   }
 
+  /** 只读打开本机 EhSyringe（E站翻译注射器）的 IndexedDB，读一次缓存在内存 */
   async function initEhSyringeBridge() {
     if (ehSyringeChecked) return ehSyringeDatabaseCache;
     ehSyringeChecked = true;
@@ -487,7 +488,7 @@
     return ehSyringeDatabaseCache;
   }
 
-  /** 内置高频核心标签汉化表（覆盖高频形态、题材、角色属性与核心特征） */
+  /** 内置常见标签汉化表（没装 EhSyringe 时用） */
   const BUILTIN_TAG_CN = {
     // 码级 / 形态 / 介质
     'uncensored': '无码',
@@ -612,7 +613,7 @@
   };
 
   /**
-   * 将标签翻译为地道中文：优先查 EhSyringe 本地缓存，次查内置核心字典，未命中返回原名
+   * 标签译名：先查 EhSyringe，再查内置表，都没有返回原名
    */
   function translateTagCn(ns, name) {
     if (!name) return '';
@@ -737,7 +738,7 @@
   };
 
   /**
-   * 列表标签流决策引擎：数据驱动的分层提取与自适应配额装配
+   * 列表标签流：按 形态 → 心动 → 题材 → 身份 → 体态 → 其它 的顺序填满名额
    */
   function pickHighlightTags(tags, opts) {
     opts = opts || {};
@@ -836,7 +837,7 @@
     physicalSlot.sort((a, b) => a.priority - b.priority);
     fallbackSlot.sort((a, b) => a.priority - b.priority);
 
-    // 组装最终结果（高决策权重优先占位）
+    // 按槽位优先级依次填
     const out = [];
     const usedFull = new Set();
     const pushItem = (item) => {
@@ -878,7 +879,7 @@
   }
 
   /**
-   * 列表展示用短标签名：地道中文 + 紧凑呈现
+   * 列表展示用的短标签名
    */
   function formatHighlightTagLabel(item) {
     if (!item) return '';

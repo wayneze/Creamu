@@ -9,6 +9,15 @@ function triggerWebDavDirty() {
   }
 }
 
+/** 拉取云端配置时，本机的 WebDAV 连接与开关不跟随云端 */
+function mergeScoutConfigFromRemote(remote, local) {
+  const next = Object.assign({}, local, remote);
+  Object.keys(local).forEach((key) => {
+    if (key.startsWith('webdav_')) next[key] = local[key];
+  });
+  return next;
+}
+
 function initScoutWebDav() {
   if (typeof createCreamuWebDavSync !== 'function') {
     console.warn('[Creamu Scout] WebDAV module not found in shared script.');
@@ -52,8 +61,8 @@ function initScoutWebDav() {
       if (Array.isArray(payload.types)) {
         saveLexiconTypes(payload.types);
       }
-      if (payload.config) {
-        saveConfig(payload.config);
+      if (payload.config && typeof payload.config === 'object') {
+        saveConfig(mergeScoutConfigFromRemote(payload.config, getConfig()));
       }
       if (Array.isArray(payload.publishers)) {
         savePublishers(payload.publishers);

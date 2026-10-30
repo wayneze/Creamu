@@ -1,4 +1,4 @@
-  const VERSION = '0.9.61';
+  const VERSION = '0.9.62';
   const NS = 'exh-commander';
   const DB_NAME = 'exh_commander_db';
   const DB_VERSION = 2;
@@ -71,7 +71,7 @@
     list_open_in_new_tab: false,
     /** 列表封面左上角展示重点标签（artist/group/parody/female…） */
     list_show_tag_stream: true,
-    list_tag_stream_max: 3,
+    list_tag_stream_max: 4,
     open_best_in_new_tab: true,
     theme_accent: '#ff4400',
     cream_site_theme: false,
@@ -167,9 +167,6 @@
       'custom_groups',
       'fav_tags',
       'hate_tags',
-      'list_open_in_new_tab',
-      'list_show_tag_stream',
-      'list_tag_stream_max',
       'block_uploaders',
       'block_languages',
       'block_categories',
@@ -178,7 +175,19 @@
     ].forEach((k) => {
       if (!Array.isArray(config[k])) config[k] = [];
     });
+    normalizeListDisplayConfig(config);
     return config;
+  }
+
+  /** 旧版 loadConfig 把这几项当数组重置成 []；本机存档和 vault 里都可能残留 */
+  function normalizeListDisplayConfig(cfg) {
+    cfg.list_open_in_new_tab = cfg.list_open_in_new_tab === true;
+    cfg.list_show_tag_stream = cfg.list_show_tag_stream !== false;
+    const max = Math.floor(Number(cfg.list_tag_stream_max));
+    cfg.list_tag_stream_max = Number.isFinite(max) && max >= 1
+      ? Math.min(8, max)
+      : DEFAULT_CONFIG.list_tag_stream_max;
+    return cfg;
   }
 
   /** 详情缩略倍率：1.0～2.0，步进 0.05 */
@@ -246,6 +255,7 @@
     if (patch && typeof patch === 'object') {
       Object.assign(config, patch);
     }
+    normalizeListDisplayConfig(config);
     config.version = VERSION;
     if (typeof GM_setValue === 'function') {
       GM_setValue(GM_CFG_KEY, JSON.stringify(config));

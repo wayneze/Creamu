@@ -14,7 +14,8 @@
         orphans.push(r);
         continue;
       }
-      const key = site + '\0' + fs;
+      // 同搜索词、不同分类过滤是两条追更，不能合并
+      const key = site + '\0' + fs + '\0' + trackingRecordCatsKey(r);
       const prev = byKey.get(key);
       if (!prev) {
         byKey.set(key, r);
@@ -79,6 +80,20 @@
     });
   }
 
+  /** f_cats 只存在 open_url 里；0 与缺省等价 */
+  function trackingUrlCatsKey(url) {
+    try {
+      const cats = compactText(new URL(url || '', location.origin).searchParams.get('f_cats') || '');
+      return cats && cats !== '0' ? cats : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function trackingRecordCatsKey(record) {
+    return trackingUrlCatsKey((record && (record.open_url || record.page_url)) || '');
+  }
+
   function trackingFSearchKey(s) {
     if (typeof normalizeTrackingFSearch === 'function') return normalizeTrackingFSearch(s);
     return compactText(s)
@@ -114,13 +129,16 @@
     const site = context.site || '';
     const fs = trackingFSearchKey(context.f_search || '');
     const labelKey = trackingFSearchKey(context.label || '');
+    const contextCats = compactText(context.f_cats || '');
+    const catsKey = contextCats && contextCats !== '0' ? contextCats : '';
     const hits = all.filter((r) => {
       if (r.archived) return false;
       if (site && r.site && r.site !== site) return false;
       if (sig && r.query_signature === sig) return true;
+      if (trackingRecordCatsKey(r) !== catsKey) return false;
       const rfs = trackingFSearchKey(r.f_search || '');
-      if (fs && rfs && fs === rfs) return true;
-      // 旧签名把 f_search 嵌在中间段
+      if (rfs) return !!fs && fs === rfs;
+      // 只有没存 f_search 的旧记录才按旧签名分段 / 标题兜底
       if (fs && r.query_signature && String(r.query_signature).toLowerCase().indexOf(fs) >= 0) return true;
       const rl = trackingFSearchKey(r.label || r.custom_label || '');
       if (labelKey && rl && labelKey === rl && fs) return true;

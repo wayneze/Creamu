@@ -391,6 +391,56 @@ await test('同 rev 且 dirty → 推送并升 revision', async () => {
   assert.deepStrictEqual(up.payload, { a: 2 });
 });
 
+await test('两台设备从同一 rev 各自修改：后同步的一方必须走冲突处理', async () => {
+  let stored = '';
+  const handler = (req) => {
+    if (req.method === 'GET') {
+      return stored ? { status: 200, responseText: stored } : { status: 404, responseText: '' };
+    }
+    if (req.method === 'PUT') {
+      stored = req.data;
+      return { status: 201, responseText: '' };
+    }
+    return { status: 201, responseText: '' };
+  };
+  const envA = loadWebDav(handler);
+  const envB = loadWebDav(handler);
+  const a = envA.create({ payload: { items: [] } });
+  const b = envB.create({ payload: { items: [] } });
+  await a.sync.syncNow();
+  await b.sync.syncNow();
+
+  a.setPayload({ items: ['from-A'] });
+  a.sync.markLocalDirty();
+  b.setPayload({ items: ['from-B'] });
+  b.sync.markLocalDirty();
+  assert.strictEqual((await a.sync.syncNow()).action, 'push');
+
+  const prompts = [];
+  envB.ctx.confirm = (msg) => {
+    prompts.push(msg);
+    return true;
+  };
+  const r = await b.sync.syncNow();
+  assert.strictEqual(prompts.length, 1, '必须询问，不能静默覆盖云端');
+  assert.strictEqual(r.action, 'pull');
+  assert.deepStrictEqual(JSON.parse(stored).payload, { items: ['from-A'] });
+
+  // 选「推送本机」时，上传的 revision 必须高于云端
+  b.setPayload({ items: ['from-B'] });
+  b.sync.markLocalDirty();
+  a.setPayload({ items: ['from-A', 'A2'] });
+  a.sync.markLocalDirty();
+  await a.sync.syncNow();
+  const before = JSON.parse(stored).revision;
+  envB.ctx.confirm = () => false;
+  assert.strictEqual((await b.sync.syncNow()).action, 'push');
+  const after = JSON.parse(stored);
+  assert.ok(after.revision > before);
+  assert.deepStrictEqual(after.payload, { items: ['from-B'] });
+  assert.strictEqual((await b.sync.syncNow()).action, 'noop');
+});
+
 await test('自动同步遇到 busy 后重试', async () => {
   let getCount = 0;
   const env = loadWebDav(async (req) => {

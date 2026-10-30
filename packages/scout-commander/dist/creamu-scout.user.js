@@ -2,7 +2,7 @@
 // @name         Creamu · Scout
 // @name:zh-CN   Creamu · Scout
 // @namespace    https://github.com/wayneze/Creamu
-// @version      0.1.5
+// @version      0.1.6
 // @description  Creamu：欧美发现工作台；组合模板；词库采集；屏蔽；搜索追更断点；导入导出
 // @author       wayneze
 // @match        *://*.xvideos.com/*
@@ -26,7 +26,7 @@
   'use strict';
 // 10-core.js
 
-const SCOUT_VERSION = '0.1.5';
+const SCOUT_VERSION = '0.1.6';
 
 function compactText(str) {
   return String(str == null ? '' : str).replace(/\s+/g, ' ').trim();
@@ -3613,6 +3613,15 @@ function triggerWebDavDirty() {
   }
 }
 
+/** 拉取云端配置时，本机的 WebDAV 连接与开关不跟随云端 */
+function mergeScoutConfigFromRemote(remote, local) {
+  const next = Object.assign({}, local, remote);
+  Object.keys(local).forEach((key) => {
+    if (key.startsWith('webdav_')) next[key] = local[key];
+  });
+  return next;
+}
+
 function initScoutWebDav() {
   if (typeof createCreamuWebDavSync !== 'function') {
     console.warn('[Creamu Scout] WebDAV module not found in shared script.');
@@ -3656,8 +3665,8 @@ function initScoutWebDav() {
       if (Array.isArray(payload.types)) {
         saveLexiconTypes(payload.types);
       }
-      if (payload.config) {
-        saveConfig(payload.config);
+      if (payload.config && typeof payload.config === 'object') {
+        saveConfig(mergeScoutConfigFromRemote(payload.config, getConfig()));
       }
       if (Array.isArray(payload.publishers)) {
         savePublishers(payload.publishers);
@@ -4969,8 +4978,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const raw = gmGet(metaKey, null);
       let m = typeof raw === 'string' ? creamuWdSafeJson(raw, null) : raw;
       if (!m || typeof m !== 'object') m = {};
-      if (!m.device_id) m.device_id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+      if (!m.device_id) {
+        m.device_id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        // 立即落盘：冲突判断要靠 vault.device_id 认出「上次是本机推的」
+        gmSet(metaKey, JSON.stringify(m));
+      }
       m.local_revision = Number(m.local_revision) || 0;
+      // 上次成功同步时云端的 revision；-1 = 旧版 meta 未记录
+      const remoteRev = m.remote_revision == null || m.remote_revision === '' ? NaN : Number(m.remote_revision);
+      m.remote_revision = Number.isFinite(remoteRev) ? remoteRev : -1;
       m.dirty = !!m.dirty;
       m.last_sync = Number(m.last_sync) || 0;
       m.last_error = m.last_error || '';
@@ -5225,6 +5241,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       await host.importPayload(vault.payload);
       const m = loadMeta();
       m.local_revision = Number(vault.revision) || m.local_revision;
+      m.remote_revision = Number(vault.revision) || 0;
       m.dirty = false;
       m.last_sync = Date.now();
       m.last_action = 'pull';
@@ -5232,8 +5249,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       saveMeta(m);
     }
 
-    async function pushVault() {
+    /** @param {number} [aboveRevision] 云端当前 revision；上传的 revision 必须比它大 */
+    async function pushVault(aboveRevision) {
       const m = loadMeta();
+      const floor = Math.max(0, Number(aboveRevision) || 0, Number(m.remote_revision) || 0);
+      if ((Number(m.local_revision) || 0) <= floor) {
+        m.local_revision = floor + 1;
+        saveMeta(m);
+      }
       const rev = Math.max(1, Number(m.local_revision) || 1);
       const vault = await buildVault(rev);
       await uploadVault(vault);
@@ -5241,6 +5264,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const changedDuringPush = Number(latest.local_revision) > rev;
       latest.dirty = changedDuringPush;
       latest.local_revision = Math.max(rev, Number(latest.local_revision) || 0);
+      latest.remote_revision = rev;
       latest.last_sync = Date.now();
       latest.last_action = changedDuringPush ? 'push-pending' : 'push';
       latest.last_error = '';
@@ -5259,11 +5283,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       busy = true;
       try {
         if (opts.force === 'push') {
+          let current = null;
+          try {
+            current = await downloadVault();
+          } catch (_) {
+            /* 强推不在乎云端内容；鉴权问题由 PUT 报 */
+          }
           const m0 = loadMeta();
-          m0.local_revision = Math.max(1, Number(m0.local_revision) || 0) + (m0.dirty ? 0 : 1);
           m0.dirty = true;
           saveMeta(m0);
-          await pushVault();
+          await pushVault(current ? Number(current.revision) || 0 : 0);
           notify('已推送到 WebDAV');
           return { action: 'push' };
         }
@@ -5291,30 +5320,30 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
         const remoteRev = Number(remote.revision) || 0;
 
-        if (remoteRev > localRev) {
-          if (m.dirty && stConflictAsk()) {
-            const ok =
-              typeof confirm === 'function'
-                ? confirm(
-                    '云端 revision ' +
-                      remoteRev +
-                      ' 新于本地 ' +
-                      localRev +
-                      '，且本地有未同步修改。\n确定用云端覆盖本机？\n（取消则改为推送本机）'
-                  )
-                : true;
-            if (!ok) {
-              m.local_revision = remoteRev + 1;
-              saveMeta(m);
-              await pushVault();
-              notify('已用本机覆盖云端');
-              return { action: 'push' };
-            }
-          } else if (m.dirty && settings().conflict === 'local') {
-            m.local_revision = remoteRev + 1;
-            saveMeta(m);
-            await pushVault();
-            notify('冲突策略：已推送本机');
+        if (m.dirty) {
+          // 只看 revision 大小分不清「云端被别的设备推过」：两端都从 rev N 改，都会到 N+1
+          const remoteChanged =
+            m.remote_revision >= 0
+              ? remoteRev !== m.remote_revision
+              : remoteRev > localRev || (!!remote.device_id && remote.device_id !== m.device_id);
+          if (!remoteChanged) {
+            await pushVault(remoteRev);
+            notify('已推送到云端 rev ' + loadMeta().local_revision);
+            return { action: 'push' };
+          }
+          const conflict = settings().conflict;
+          const keepLocal =
+            conflict === 'local' ||
+            (conflict === 'ask' &&
+              typeof confirm === 'function' &&
+              !confirm(
+                '云端 rev ' +
+                  remoteRev +
+                  ' 已被其他设备更新，本机也有未同步修改。\n确定用云端覆盖本机？\n（取消则改为推送本机）'
+              ));
+          if (keepLocal) {
+            await pushVault(remoteRev);
+            notify(conflict === 'local' ? '冲突策略：已推送本机' : '已用本机覆盖云端');
             return { action: 'push' };
           }
           await applyRemote(remote);
@@ -5322,12 +5351,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           return { action: 'pull' };
         }
 
-        if (remoteRev < localRev || m.dirty) {
-          if (remoteRev === localRev && m.dirty) {
-            m.local_revision = localRev + 1;
-            saveMeta(m);
-          }
-          await pushVault();
+        if (remoteRev > localRev) {
+          await applyRemote(remote);
+          notify('已从云端更新到 rev ' + remoteRev);
+          return { action: 'pull' };
+        }
+
+        if (remoteRev < localRev) {
+          await pushVault(remoteRev);
           notify('已推送到云端 rev ' + loadMeta().local_revision);
           return { action: 'push' };
         }
@@ -5348,9 +5379,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       }
     }
 
-    function stConflictAsk() {
-      return settings().conflict === 'ask';
-    }
 
     async function bootSync() {
       const st = settings();

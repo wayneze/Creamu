@@ -81,6 +81,14 @@ test('buildTitleCore 去括号与语言噪声', () => {
 test('detectLanguageFromText / detectCensorTier', () => {
   assert.strictEqual(d.detectLanguageFromText('foo Chinese bar', []), 'zh');
   assert.strictEqual(d.detectLanguageFromText('title', ['language:japanese']), 'ja');
+  // 词尾 ce 不是 CE 家族社：Romance / Face / Nice 不能判成中文
+  assert.strictEqual(d.detectLanguageFromText('[Artist] Secret Romance [English]', []), 'en');
+  assert.strictEqual(d.detectLanguageFromText('Face to Face [Japanese]', []), 'ja');
+  assert.strictEqual(d.detectLanguageFromText('[CE家族社] foo', []), 'zh');
+  assert.strictEqual(
+    d.detectLanguageFromText('Nice Place', ['language:translated', 'language:english']),
+    'en'
+  );
   assert.strictEqual(d.detectCensorTier('foo', ['other:uncensored']), 'uncensored');
   assert.strictEqual(d.detectCensorTier('有码本', []), 'heavy');
   assert.strictEqual(d.detectCensorTier('plain', []), 'unknown');
@@ -453,6 +461,52 @@ test('isBlockedEdition 精准拦截男同与重口，且零误伤异性向标签
     tags: ['female:scat'],
   };
   assert.strictEqual(d.isBlockedEdition(scatCard).blocked, true, '裸词 scat 通配 female:scat');
+});
+
+function loadCoreWithSavedConfig(saved) {
+  const writes = [];
+  const ctx = createContext({
+    console,
+    Math,
+    Number,
+    String,
+    Array,
+    Object,
+    JSON,
+    Date,
+    GM_getValue: (key, def) => (key === 'exh_commander_config_v1' ? JSON.stringify(saved) : def),
+    GM_setValue: (key, value) => writes.push([key, value]),
+  });
+  runInContext(fs.readFileSync(path.join(partsDir, '10-core.js'), 'utf8'), ctx, { filename: '10-core.js' });
+  return { ctx, writes };
+}
+
+test('loadConfig 保留列表显示开关与标签数', () => {
+  const { ctx } = loadCoreWithSavedConfig({
+    list_open_in_new_tab: true,
+    list_show_tag_stream: false,
+    list_tag_stream_max: 7,
+  });
+  const cfg = ctx.loadConfig();
+  assert.strictEqual(cfg.list_open_in_new_tab, true);
+  assert.strictEqual(cfg.list_show_tag_stream, false);
+  assert.strictEqual(cfg.list_tag_stream_max, 7);
+});
+
+test('旧版残留的 [] 恢复成默认值，导入的 [] 也会被纠正', () => {
+  const { ctx, writes } = loadCoreWithSavedConfig({
+    list_open_in_new_tab: [],
+    list_show_tag_stream: [],
+    list_tag_stream_max: [],
+  });
+  const cfg = ctx.loadConfig();
+  assert.strictEqual(cfg.list_open_in_new_tab, false);
+  assert.strictEqual(cfg.list_show_tag_stream, true);
+  assert.strictEqual(cfg.list_tag_stream_max, 4);
+  ctx.saveConfig({ list_open_in_new_tab: [], list_tag_stream_max: 99 });
+  const persisted = JSON.parse(writes.at(-1)[1]);
+  assert.strictEqual(persisted.list_open_in_new_tab, false);
+  assert.strictEqual(persisted.list_tag_stream_max, 8);
 });
 
 if (!process.exitCode) {

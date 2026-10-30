@@ -159,4 +159,47 @@ assert.equal(
   true
 );
 
+// 同搜索词、不同分类过滤是两条独立追更
+const deleted = [];
+storage.idbDelete = async (_store, id) => deleted.push(id);
+storage.idbPut = async () => {};
+storage.saveTrackingRecord = async (record) => record;
+const plainTrack = {
+  id: 'trk-plain',
+  site: 'ehentai',
+  query_signature: 'ehentai|search||||foo||',
+  f_search: 'foo',
+  open_url: 'https://e-hentai.org/?f_search=foo',
+  updated_at: 1,
+};
+const catsTrack = {
+  id: 'trk-cats',
+  site: 'ehentai',
+  query_signature: 'ehentai|search||||foo|1021|',
+  f_search: 'foo',
+  open_url: 'https://e-hentai.org/?f_search=foo&f_cats=1021',
+  updated_at: 2,
+};
+const listed = await storage.listTrackingSearches([plainTrack, catsTrack]);
+assert.deepEqual(Array.from(listed, (r) => r.id).sort(), ['trk-cats', 'trk-plain']);
+assert.deepEqual(deleted, []);
+
+const artistTrack = {
+  id: 'trk-artist',
+  site: 'ehentai',
+  query_signature: 'ehentai|artist||||artist:"foo$"||',
+  f_search: 'artist:"foo$"',
+  open_url: 'https://e-hentai.org/?f_search=artist%3A%22foo%24%22',
+};
+const catsHit = await storage.findTrackingForContext(
+  { site: 'ehentai', query_signature: 'ehentai|search||||foo|1021|', f_search: 'foo', f_cats: '1021' },
+  [plainTrack, artistTrack]
+);
+assert.equal(catsHit, null, '不同分类过滤不能命中无过滤的追更');
+const plainHit = await storage.findTrackingForContext(
+  { site: 'ehentai', query_signature: 'ehentai|search||||foo|0|', f_search: 'foo', f_cats: '0' },
+  [artistTrack, plainTrack]
+);
+assert.equal(plainHit && plainHit.id, 'trk-plain', 'f_search 子串不能命中 artist:foo');
+
 console.log('ExH list storage index tests OK');

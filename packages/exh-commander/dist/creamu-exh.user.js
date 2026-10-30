@@ -2,7 +2,7 @@
 // @name         Creamu · ExH
 // @name:zh-CN   Creamu · ExH
 // @namespace    https://github.com/wayneze/Creamu
-// @version      0.9.61
+// @version      0.9.62
 // @description  Creamu：e/exhentai 奶油工作台；WebDAV 同步；LRR 只读对照
 // @author       wayneze
 // @match        *://e-hentai.org/*
@@ -22,7 +22,7 @@
 
 (function () {
   'use strict';
-  const VERSION = '0.9.61';
+  const VERSION = '0.9.62';
   const NS = 'exh-commander';
   const DB_NAME = 'exh_commander_db';
   const DB_VERSION = 2;
@@ -95,7 +95,7 @@
     list_open_in_new_tab: false,
     /** 列表封面左上角展示重点标签（artist/group/parody/female…） */
     list_show_tag_stream: true,
-    list_tag_stream_max: 3,
+    list_tag_stream_max: 4,
     open_best_in_new_tab: true,
     theme_accent: '#ff4400',
     cream_site_theme: false,
@@ -191,9 +191,6 @@
       'custom_groups',
       'fav_tags',
       'hate_tags',
-      'list_open_in_new_tab',
-      'list_show_tag_stream',
-      'list_tag_stream_max',
       'block_uploaders',
       'block_languages',
       'block_categories',
@@ -202,7 +199,19 @@
     ].forEach((k) => {
       if (!Array.isArray(config[k])) config[k] = [];
     });
+    normalizeListDisplayConfig(config);
     return config;
+  }
+
+  /** 旧版 loadConfig 把这几项当数组重置成 []；本机存档和 vault 里都可能残留 */
+  function normalizeListDisplayConfig(cfg) {
+    cfg.list_open_in_new_tab = cfg.list_open_in_new_tab === true;
+    cfg.list_show_tag_stream = cfg.list_show_tag_stream !== false;
+    const max = Math.floor(Number(cfg.list_tag_stream_max));
+    cfg.list_tag_stream_max = Number.isFinite(max) && max >= 1
+      ? Math.min(8, max)
+      : DEFAULT_CONFIG.list_tag_stream_max;
+    return cfg;
   }
 
   /** 详情缩略倍率：1.0～2.0，步进 0.05 */
@@ -270,6 +279,7 @@
     if (patch && typeof patch === 'object') {
       Object.assign(config, patch);
     }
+    normalizeListDisplayConfig(config);
     config.version = VERSION;
     if (typeof GM_setValue === 'function') {
       GM_setValue(GM_CFG_KEY, JSON.stringify(config));
@@ -3384,8 +3394,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const raw = gmGet(metaKey, null);
       let m = typeof raw === 'string' ? creamuWdSafeJson(raw, null) : raw;
       if (!m || typeof m !== 'object') m = {};
-      if (!m.device_id) m.device_id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+      if (!m.device_id) {
+        m.device_id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        // 立即落盘：冲突判断要靠 vault.device_id 认出「上次是本机推的」
+        gmSet(metaKey, JSON.stringify(m));
+      }
       m.local_revision = Number(m.local_revision) || 0;
+      // 上次成功同步时云端的 revision；-1 = 旧版 meta 未记录
+      const remoteRev = m.remote_revision == null || m.remote_revision === '' ? NaN : Number(m.remote_revision);
+      m.remote_revision = Number.isFinite(remoteRev) ? remoteRev : -1;
       m.dirty = !!m.dirty;
       m.last_sync = Number(m.last_sync) || 0;
       m.last_error = m.last_error || '';
@@ -3640,6 +3657,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       await host.importPayload(vault.payload);
       const m = loadMeta();
       m.local_revision = Number(vault.revision) || m.local_revision;
+      m.remote_revision = Number(vault.revision) || 0;
       m.dirty = false;
       m.last_sync = Date.now();
       m.last_action = 'pull';
@@ -3647,8 +3665,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       saveMeta(m);
     }
 
-    async function pushVault() {
+    /** @param {number} [aboveRevision] 云端当前 revision；上传的 revision 必须比它大 */
+    async function pushVault(aboveRevision) {
       const m = loadMeta();
+      const floor = Math.max(0, Number(aboveRevision) || 0, Number(m.remote_revision) || 0);
+      if ((Number(m.local_revision) || 0) <= floor) {
+        m.local_revision = floor + 1;
+        saveMeta(m);
+      }
       const rev = Math.max(1, Number(m.local_revision) || 1);
       const vault = await buildVault(rev);
       await uploadVault(vault);
@@ -3656,6 +3680,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const changedDuringPush = Number(latest.local_revision) > rev;
       latest.dirty = changedDuringPush;
       latest.local_revision = Math.max(rev, Number(latest.local_revision) || 0);
+      latest.remote_revision = rev;
       latest.last_sync = Date.now();
       latest.last_action = changedDuringPush ? 'push-pending' : 'push';
       latest.last_error = '';
@@ -3674,11 +3699,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       busy = true;
       try {
         if (opts.force === 'push') {
+          let current = null;
+          try {
+            current = await downloadVault();
+          } catch (_) {
+            /* 强推不在乎云端内容；鉴权问题由 PUT 报 */
+          }
           const m0 = loadMeta();
-          m0.local_revision = Math.max(1, Number(m0.local_revision) || 0) + (m0.dirty ? 0 : 1);
           m0.dirty = true;
           saveMeta(m0);
-          await pushVault();
+          await pushVault(current ? Number(current.revision) || 0 : 0);
           notify('已推送到 WebDAV');
           return { action: 'push' };
         }
@@ -3706,30 +3736,30 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
         const remoteRev = Number(remote.revision) || 0;
 
-        if (remoteRev > localRev) {
-          if (m.dirty && stConflictAsk()) {
-            const ok =
-              typeof confirm === 'function'
-                ? confirm(
-                    '云端 revision ' +
-                      remoteRev +
-                      ' 新于本地 ' +
-                      localRev +
-                      '，且本地有未同步修改。\n确定用云端覆盖本机？\n（取消则改为推送本机）'
-                  )
-                : true;
-            if (!ok) {
-              m.local_revision = remoteRev + 1;
-              saveMeta(m);
-              await pushVault();
-              notify('已用本机覆盖云端');
-              return { action: 'push' };
-            }
-          } else if (m.dirty && settings().conflict === 'local') {
-            m.local_revision = remoteRev + 1;
-            saveMeta(m);
-            await pushVault();
-            notify('冲突策略：已推送本机');
+        if (m.dirty) {
+          // 只看 revision 大小分不清「云端被别的设备推过」：两端都从 rev N 改，都会到 N+1
+          const remoteChanged =
+            m.remote_revision >= 0
+              ? remoteRev !== m.remote_revision
+              : remoteRev > localRev || (!!remote.device_id && remote.device_id !== m.device_id);
+          if (!remoteChanged) {
+            await pushVault(remoteRev);
+            notify('已推送到云端 rev ' + loadMeta().local_revision);
+            return { action: 'push' };
+          }
+          const conflict = settings().conflict;
+          const keepLocal =
+            conflict === 'local' ||
+            (conflict === 'ask' &&
+              typeof confirm === 'function' &&
+              !confirm(
+                '云端 rev ' +
+                  remoteRev +
+                  ' 已被其他设备更新，本机也有未同步修改。\n确定用云端覆盖本机？\n（取消则改为推送本机）'
+              ));
+          if (keepLocal) {
+            await pushVault(remoteRev);
+            notify(conflict === 'local' ? '冲突策略：已推送本机' : '已用本机覆盖云端');
             return { action: 'push' };
           }
           await applyRemote(remote);
@@ -3737,12 +3767,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           return { action: 'pull' };
         }
 
-        if (remoteRev < localRev || m.dirty) {
-          if (remoteRev === localRev && m.dirty) {
-            m.local_revision = localRev + 1;
-            saveMeta(m);
-          }
-          await pushVault();
+        if (remoteRev > localRev) {
+          await applyRemote(remote);
+          notify('已从云端更新到 rev ' + remoteRev);
+          return { action: 'pull' };
+        }
+
+        if (remoteRev < localRev) {
+          await pushVault(remoteRev);
           notify('已推送到云端 rev ' + loadMeta().local_revision);
           return { action: 'push' };
         }
@@ -3763,9 +3795,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       }
     }
 
-    function stConflictAsk() {
-      return settings().conflict === 'ask';
-    }
 
     async function bootSync() {
       const st = settings();
@@ -3816,7 +3845,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   };
 
   const LANG_PATTERNS = [
-    { id: 'zh', re: /chinese|中国語|漢化|汉化|中文|中国翻訳|中國翻譯|zh[-_]?cn|zh[-_]?tw|ce\b/i },
+    { id: 'zh', re: /chinese|中国語|漢化|汉化|中文|中国翻訳|中國翻譯|zh[-_]?cn|zh[-_]?tw|\bce\b/i },
     { id: 'ja', re: /japanese|日本語|日語|日语|\bja\b/i },
     { id: 'en', re: /english|英語|英语|\ben\b/i },
     { id: 'ko', re: /korean|한국어|韓語|韩语|\bko\b/i },
@@ -3864,18 +3893,21 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   function detectLanguageFromText(text, tags) {
-    const bag = [String(text || ''), ...(tags || []).map(String)].join(' | ');
-    for (const item of LANG_PATTERNS) {
-      if (item.re.test(bag)) return item.id;
-    }
-    // language:chinese style tags
-    const langTag = (tags || []).map(normalizeNamespaceTag).find((t) => t.startsWith('language:'));
-    if (langTag) {
-      const v = langTag.slice('language:'.length);
+    // 站点 language: 标签比标题措辞可靠，先认它（translated / rewrite 不是语言）
+    const langValues = (tags || [])
+      .map(normalizeNamespaceTag)
+      .filter((t) => t.startsWith('language:'))
+      .map((t) => t.slice('language:'.length).trim())
+      .filter((v) => v && v !== 'translated' && v !== 'rewrite' && v !== 'speechless' && v !== 'text cleaned');
+    for (const v of langValues) {
       for (const item of LANG_PATTERNS) {
         if (item.re.test(v)) return item.id;
       }
-      if (v) return v.slice(0, 12);
+    }
+    if (langValues.length) return langValues[0].slice(0, 12);
+    const bag = [String(text || ''), ...(tags || []).map(String)].join(' | ');
+    for (const item of LANG_PATTERNS) {
+      if (item.re.test(bag)) return item.id;
     }
     return 'other';
   }
@@ -4226,10 +4258,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   let ehSyringeDatabaseCache = null;
   let ehSyringeChecked = false;
 
-  /**
-   * 探测并只读连接本地 EhSyringe (E站翻译注射器) IndexedDB 数据库
-   * 零网络请求，在内存中缓存 TagMap，查询耗时 0ms。
-   */
+  /** EhSyringe 数据库的 database 记录 → { 'ns:tag': 中文名 } */
   function buildEhSyringeCache(data) {
     if (!data || typeof data !== 'object') return null;
     const map = Object.create(null);
@@ -4258,6 +4287,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return map;
   }
 
+  /** 只读打开本机 EhSyringe（E站翻译注射器）的 IndexedDB，读一次缓存在内存 */
   async function initEhSyringeBridge() {
     if (ehSyringeChecked) return ehSyringeDatabaseCache;
     ehSyringeChecked = true;
@@ -4289,7 +4319,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return ehSyringeDatabaseCache;
   }
 
-  /** 内置高频核心标签汉化表（覆盖高频形态、题材、角色属性与核心特征） */
+  /** 内置常见标签汉化表（没装 EhSyringe 时用） */
   const BUILTIN_TAG_CN = {
     // 码级 / 形态 / 介质
     'uncensored': '无码',
@@ -4414,7 +4444,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   };
 
   /**
-   * 将标签翻译为地道中文：优先查 EhSyringe 本地缓存，次查内置核心字典，未命中返回原名
+   * 标签译名：先查 EhSyringe，再查内置表，都没有返回原名
    */
   function translateTagCn(ns, name) {
     if (!name) return '';
@@ -4539,7 +4569,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   };
 
   /**
-   * 列表标签流决策引擎：数据驱动的分层提取与自适应配额装配
+   * 列表标签流：按 形态 → 心动 → 题材 → 身份 → 体态 → 其它 的顺序填满名额
    */
   function pickHighlightTags(tags, opts) {
     opts = opts || {};
@@ -4638,7 +4668,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     physicalSlot.sort((a, b) => a.priority - b.priority);
     fallbackSlot.sort((a, b) => a.priority - b.priority);
 
-    // 组装最终结果（高决策权重优先占位）
+    // 按槽位优先级依次填
     const out = [];
     const usedFull = new Set();
     const pushItem = (item) => {
@@ -4680,7 +4710,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 
   /**
-   * 列表展示用短标签名：地道中文 + 紧凑呈现
+   * 列表展示用的短标签名
    */
   function formatHighlightTagLabel(item) {
     if (!item) return '';
@@ -6755,7 +6785,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         orphans.push(r);
         continue;
       }
-      const key = site + '\0' + fs;
+      // 同搜索词、不同分类过滤是两条追更，不能合并
+      const key = site + '\0' + fs + '\0' + trackingRecordCatsKey(r);
       const prev = byKey.get(key);
       if (!prev) {
         byKey.set(key, r);
@@ -6820,6 +6851,20 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     });
   }
 
+  /** f_cats 只存在 open_url 里；0 与缺省等价 */
+  function trackingUrlCatsKey(url) {
+    try {
+      const cats = compactText(new URL(url || '', location.origin).searchParams.get('f_cats') || '');
+      return cats && cats !== '0' ? cats : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function trackingRecordCatsKey(record) {
+    return trackingUrlCatsKey((record && (record.open_url || record.page_url)) || '');
+  }
+
   function trackingFSearchKey(s) {
     if (typeof normalizeTrackingFSearch === 'function') return normalizeTrackingFSearch(s);
     return compactText(s)
@@ -6855,13 +6900,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const site = context.site || '';
     const fs = trackingFSearchKey(context.f_search || '');
     const labelKey = trackingFSearchKey(context.label || '');
+    const contextCats = compactText(context.f_cats || '');
+    const catsKey = contextCats && contextCats !== '0' ? contextCats : '';
     const hits = all.filter((r) => {
       if (r.archived) return false;
       if (site && r.site && r.site !== site) return false;
       if (sig && r.query_signature === sig) return true;
+      if (trackingRecordCatsKey(r) !== catsKey) return false;
       const rfs = trackingFSearchKey(r.f_search || '');
-      if (fs && rfs && fs === rfs) return true;
-      // 旧签名把 f_search 嵌在中间段
+      if (rfs) return !!fs && fs === rfs;
+      // 只有没存 f_search 的旧记录才按旧签名分段 / 标题兜底
       if (fs && r.query_signature && String(r.query_signature).toLowerCase().indexOf(fs) >= 0) return true;
       const rl = trackingFSearchKey(r.label || r.custom_label || '');
       if (labelKey && rl && labelKey === rl && fs) return true;
@@ -9536,9 +9584,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     rec.breakpoint_missing = 0;
     rec.breakpoint_anchor_kind = '';
     if (scan.found) {
-      // 精确值：跟断点后应比旧未读小（或相等）；异常偏高时取较小者
-      let n = Math.max(0, Number(scan.count) || 0);
-      if (prevEst > 0 && n > prevEst) n = prevEst;
+      // 从首页数到断点的条数就是精确未读；断点往旧处设或期间有新上传时本来就会变大
+      const n = Math.max(0, Number(scan.count) || 0);
       rec.unread_estimate = n;
       rec.unread_estimate_capped = 0;
       rec.unread_estimate_source = 'deep_scan';
@@ -9554,9 +9601,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       rec.has_update = 1;
       rec.breakpoint_missing = 1;
       const floor = Math.max(0, Number(scan.count) || 0);
-      // 未扫到断点：用已扫条数作下限；若有旧值则取 min（跟断后不应更大）
+      // 未扫到断点：已扫条数全在断点之前，是未读下限
       if (floor > 0) {
-        rec.unread_estimate = prevEst > 0 ? Math.min(prevEst, floor) : floor;
+        rec.unread_estimate = Math.max(prevEst, floor);
         rec.unread_estimate_capped = 1;
         rec.unread_estimate_source = 'deep_scan';
       } else if (prevEst > 0 && compactText(rec.unread_estimate_source || '') === 'bp_advanced') {
@@ -11268,7 +11315,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       // 1) 纯数字或年份跳过
       if (/^\d{2,4}$/.test(raw)) continue;
 
-      // 2) 形态 / 码级（只提取真正有决策价值的无码、全彩、3D、CG包）
+      // 2) 形态 / 码级：只取无码、全彩、3D、CG包
       let matchedFormat = false;
       if (/^(uncensored|decensored|無修正|无修正|无码|去码)$/i.test(low)) {
         pushTag('other:uncensored');
@@ -12933,7 +12980,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     const streamTags = [];
     const hi = pickHighlightTags(edTags, {
-      max: Number(config.list_tag_stream_max) || 4,
+      max: config.list_tag_stream_max,
       favTags: config.fav_tags || [],
       title: edTitle,
     });
@@ -17101,7 +17148,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         (config.list_show_tag_stream !== false ? 'checked' : '') +
         '></div>' +
         '<label>标签流最多条数</label><input id="exc-cfg-tag-stream-max" type="number" min="1" max="8" step="1" value="' +
-        escapeHtml(String(Math.max(1, Math.min(8, Number(config.list_tag_stream_max) || 4)))) +
+        escapeHtml(String(config.list_tag_stream_max)) +
         '">' +
         '<div class="legacy-note jlc-wb-intro-note">标签流只补标题/熟人看不出的信息：无码·全彩·内容(mother…)·角色。画师/组仅熟人徽章；在库用绿框+徽章，不进标签流。</div>' +
         '<label>折叠时主显示版本</label>' +

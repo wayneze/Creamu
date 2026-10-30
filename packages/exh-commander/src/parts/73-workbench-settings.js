@@ -132,7 +132,7 @@
         (config.list_show_tag_stream !== false ? 'checked' : '') +
         '></div>' +
         '<label>标签流最多条数</label><input id="exc-cfg-tag-stream-max" type="number" min="1" max="8" step="1" value="' +
-        escapeHtml(String(Math.max(1, Math.min(8, Number(config.list_tag_stream_max) || 4)))) +
+        escapeHtml(String(config.list_tag_stream_max)) +
         '">' +
         '<div class="legacy-note jlc-wb-intro-note">标签流只补标题/熟人看不出的信息：无码·全彩·内容(mother…)·角色。画师/组仅熟人徽章；在库用绿框+徽章，不进标签流。</div>' +
         '<label>折叠时主显示版本</label>' +

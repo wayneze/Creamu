@@ -125,7 +125,7 @@
       // 1) 纯数字或年份跳过
       if (/^\d{2,4}$/.test(raw)) continue;
 
-      // 2) 形态 / 码级（只提取真正有决策价值的无码、全彩、3D、CG包）
+      // 2) 形态 / 码级：只取无码、全彩、3D、CG包
       let matchedFormat = false;
       if (/^(uncensored|decensored|無修正|无修正|无码|去码)$/i.test(low)) {
         pushTag('other:uncensored');

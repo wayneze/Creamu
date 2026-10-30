@@ -477,9 +477,8 @@
     rec.breakpoint_missing = 0;
     rec.breakpoint_anchor_kind = '';
     if (scan.found) {
-      // 精确值：跟断点后应比旧未读小（或相等）；异常偏高时取较小者
-      let n = Math.max(0, Number(scan.count) || 0);
-      if (prevEst > 0 && n > prevEst) n = prevEst;
+      // 从首页数到断点的条数就是精确未读；断点往旧处设或期间有新上传时本来就会变大
+      const n = Math.max(0, Number(scan.count) || 0);
       rec.unread_estimate = n;
       rec.unread_estimate_capped = 0;
       rec.unread_estimate_source = 'deep_scan';
@@ -495,9 +494,9 @@
       rec.has_update = 1;
       rec.breakpoint_missing = 1;
       const floor = Math.max(0, Number(scan.count) || 0);
-      // 未扫到断点：用已扫条数作下限；若有旧值则取 min（跟断后不应更大）
+      // 未扫到断点：已扫条数全在断点之前，是未读下限
       if (floor > 0) {
-        rec.unread_estimate = prevEst > 0 ? Math.min(prevEst, floor) : floor;
+        rec.unread_estimate = Math.max(prevEst, floor);
         rec.unread_estimate_capped = 1;
         rec.unread_estimate_source = 'deep_scan';
       } else if (prevEst > 0 && compactText(rec.unread_estimate_source || '') === 'bp_advanced') {

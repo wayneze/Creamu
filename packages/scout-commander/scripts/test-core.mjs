@@ -488,6 +488,18 @@ test('work collection sanitizes imported tags', () => {
   assert.ok(ctx.removeWork(result.work.id));
 });
 
+test('remote config keeps local WebDAV connection settings', () => {
+  const ctx = loadCore();
+  const merged = ctx.mergeScoutConfigFromRemote(
+    { webdav_url: 'https://other.example/', webdav_password: '', webdav_auto: true, cream_site_theme: false },
+    { webdav_url: 'https://dav.example/', webdav_password: 'local-pass', webdav_auto: false, cream_site_theme: true }
+  );
+  assert.equal(merged.webdav_url, 'https://dav.example/');
+  assert.equal(merged.webdav_password, 'local-pass');
+  assert.equal(merged.webdav_auto, false);
+  assert.equal(merged.cream_site_theme, false, 'non-connection preferences still sync');
+});
+
 test('replace import preserves local usage metrics', () => {
   const ctx = loadCore();
   const local = ctx.addLexiconTerm({ text: 'portrait', zh: '旧值', type: '内容类' });

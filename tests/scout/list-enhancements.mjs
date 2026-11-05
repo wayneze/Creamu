@@ -180,7 +180,7 @@ console.log('  OK  list cards share one clicked-video index');
 
 const blockSource = extract(
   enhancementSource,
-  /function applyListBlocks[\s\S]*?(?=\n\/\*\*\n \* 列表影片链接)/,
+  /function applyListBlocks[\s\S]*?(?=\r?\n\/\*\*\r?\n \* 列表影片链接)/,
   'list block enhancement'
 );
 const blockItemCount = 40;

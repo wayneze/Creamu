@@ -294,7 +294,6 @@
             delete item.dataset.jlcBaseDone;
             delete item.dataset.jlcMetaState;
             delete item.dataset.jlcMetaRetry;
-            delete item._jlcDecorModel;
         });
         queueCommanderItems(items, true);
         if (items.length && options.scheduleRescan !== false) scheduleCommanderRescan(8);
@@ -402,7 +401,7 @@
         if (!badgeBox) {
             badgeBox = document.createElement('div');
             badgeBox.className = 'jlc-badge-container';
-            item.appendChild(badgeBox);
+            item.querySelector('.cover-b').appendChild(badgeBox);
         }
         return badgeBox;
     }
@@ -416,58 +415,57 @@
 
     function ensureCommanderToolbar(item, current) {
         const toolbar = item.querySelector('.toolbar-b');
-        if (!toolbar) return;
+        const menu = toolbar?.querySelector('.jlc-card-menu');
+        if (!menu) return;
+        toolbar.querySelector('summary').textContent = current.status === 'like'
+            ? '已心动 · 更多' : current.status === 'hate' ? '已屏蔽 · 更多' : '更多';
 
-        let likeBtn = toolbar.querySelector('.jlc-tool-btn.j-l');
-        let hateBtn = toolbar.querySelector('.jlc-tool-btn.j-h');
+        for (const [status, label, className] of [['hate', '屏蔽', 'j-h'], ['like', '心动', 'j-l']]) {
+            let button = menu.querySelector('.' + className);
+            if (!button) {
+                button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'jlc-tool-btn ' + className;
+                button.onclick = async (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const next = { ...current, status: current.status === status ? 'none' : status };
+                    const statusButtons = [...menu.querySelectorAll('.jlc-tool-btn')];
+                    statusButtons.forEach(control => { control.disabled = true; });
+                    try {
+                        if (!await setVal('videos', next)) {
+                            showAlert('保存标记失败，请重试。');
+                            return;
+                        }
+                        Object.assign(current, next);
+                        updateItemStateClasses(item, current, item.classList.contains('emby-item'));
+                        ensureCommanderToolbar(item, current);
+                    } finally {
+                        statusButtons.forEach(control => { control.disabled = false; });
+                    }
+                };
+                menu.prepend(button);
+            }
+            const active = current.status === status;
+            button.classList.toggle('active-' + status, active);
+            button.setAttribute('aria-pressed', String(active));
+            button.textContent = active ? '取消' + label : label;
+            button.title = button.textContent;
+        }
         let bookmarkBtn = toolbar.querySelector('.jlc-tool-btn.j-bm');
-        if (!likeBtn) {
-            likeBtn = document.createElement('span');
-            likeBtn.className = 'jlc-tool-btn j-l';
-            likeBtn.title = '心动 / 取消心动';
-            likeBtn.textContent = '👍';
-            likeBtn.onclick = async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                current.status = current.status === 'like' ? 'none' : 'like';
-                await setVal('videos', current);
-                updateItemStateClasses(item, current, item.classList.contains('emby-item'));
-                ensureCommanderToolbar(item, current);
-                renderCommanderBadges(item, item._jlcDecorModel || { matchedRadar: '', orderedTags: [] });
-            };
-            toolbar.appendChild(likeBtn);
-        }
-        if (!hateBtn) {
-            hateBtn = document.createElement('span');
-            hateBtn.className = 'jlc-tool-btn j-h';
-            hateBtn.title = '屏蔽 / 取消屏蔽';
-            hateBtn.textContent = '👎';
-            hateBtn.onclick = async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                current.status = current.status === 'hate' ? 'none' : 'hate';
-                await setVal('videos', current);
-                updateItemStateClasses(item, current, item.classList.contains('emby-item'));
-                ensureCommanderToolbar(item, current);
-            };
-            toolbar.appendChild(hateBtn);
-        }
         if (!bookmarkBtn) {
-            bookmarkBtn = document.createElement('span');
+            bookmarkBtn = document.createElement('button');
+            bookmarkBtn.type = 'button';
             bookmarkBtn.className = 'jlc-tool-btn j-bm';
             bookmarkBtn.title = '把这部设为追更断点';
-            bookmarkBtn.textContent = '🔖';
             bookmarkBtn.onclick = async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 await setTrackingBreakpointByItem(item);
             };
-            toolbar.appendChild(bookmarkBtn);
+            toolbar.prepend(bookmarkBtn);
         }
-        const activeBookmark = normalizeCode(trackingPageState.record?.last_seen_avid || '') === normalizeCode(item.dataset.jlcAvid || '');
-        likeBtn.classList.toggle('active-like', current.status === 'like');
-        hateBtn.classList.toggle('active-hate', current.status === 'hate');
-        bookmarkBtn.classList.toggle('active-bookmark', !!activeBookmark);
+        refreshTrackingToolbarButtons([item]);
     }
 
     function markItemVisited(item, current) {
@@ -519,7 +517,12 @@
         const seen = new Set();
         const hotTags = [];
         const coldTags = [];
-        const titleHotKeywords = (config.fav_tags || []).filter(tag => tagMatches(safeTitle, tag));
+        const favoriteTags = uniqueTextList(config.fav_tags || []);
+        const genres = asTextList(meta?.genres);
+        const matchedPreferenceTags = favoriteTags.filter(tag => (
+            tagMatches(safeTitle, tag) || genres.some(genre => tagMatches(genre, tag))
+        ));
+        const titleHotKeywords = favoriteTags.filter(tag => tagMatches(safeTitle, tag));
         let matchedRadar = Array.from(knownPersons).find(name => name && safeTitle.includes(name)) || '';
 
         if (meta) {
@@ -529,8 +532,8 @@
             });
 
             let hotMetaCount = 0;
-            asTextList(meta.genres).forEach(genre => {
-                const isHot = (config.fav_tags || []).some(tag => tagMatches(genre, tag));
+            genres.forEach(genre => {
+                const isHot = favoriteTags.some(tag => tagMatches(genre, tag));
                 if (isHot) {
                     hotMetaCount += 1;
                     pushDecorTag(hotTags, seen, genre, true);
@@ -547,17 +550,201 @@
         }
 
         return {
+            source: { title: safeTitle, meta },
             matchedRadar,
+            matchedPreferenceTags,
+            preferenceMatchCount: matchedPreferenceTags.length + (matchedRadar ? 1 : 0),
             orderedTags: hotTags.concat(coldTags)
         };
     }
 
+    function setFavoriteTags(tags) {
+        const next = loadConfig();
+        const favorites = uniqueTextList(asTextList(tags));
+        if (JSON.stringify(next.fav_tags) !== JSON.stringify(favorites)) {
+            next.fav_tags = favorites;
+            try {
+                GM_setValue('jlc_config_stable', next);
+            } catch (_) {
+                showAlert('心动标签保存失败，请重试。');
+                return false;
+            }
+            config = next;
+            try { ensureCreamuSync()?.markLocalDirty(); } catch (_) {}
+            document.querySelectorAll('.jlc-badge-container').forEach(box => {
+                const source = box._jlcDecorModel?.source;
+                if (!source) return;
+                const model = buildCommanderDecorationModel(source.title, source.meta);
+                const item = box.closest('.item-b');
+                if (item) renderCommanderBadges(item, model);
+                else fillCommanderBadgeContainer(box, model);
+            });
+        }
+        const input = document.getElementById('jlc-wb-i-fav');
+        if (input) input.value = favorites.join(', ');
+        return true;
+    }
+
+    function setMetaTagHidden(text, hidden) {
+        const key = normalizeTagText(text);
+        if (!key) return false;
+        const next = loadConfig();
+        const tags = uniqueTextList(next.hidden_meta_tags);
+        next.hidden_meta_tags = hidden
+            ? uniqueTextList([...tags, text])
+            : tags.filter(tag => normalizeTagText(tag) !== key);
+        try {
+            GM_setValue('jlc_config_stable', next);
+        } catch (_) {
+            showAlert('标签显示设置保存失败，请重试。');
+            return false;
+        }
+        config = next;
+        try { ensureCreamuSync()?.markLocalDirty(); } catch (_) {}
+        document.querySelectorAll('.jlc-badge-container').forEach(box => {
+            if (box._jlcDecorModel) fillCommanderBadgeContainer(box, box._jlcDecorModel);
+        });
+        renderWorkbenchHiddenMetaTags();
+        return true;
+    }
+
+    function openMetaTagMenu(trigger, text) {
+        let menu = document.getElementById('jlc-meta-tag-menu');
+        if (!menu) {
+            menu = document.createElement('div');
+            menu.id = 'jlc-meta-tag-menu';
+            menu.setAttribute('popover', 'auto');
+            menu.setAttribute('role', 'dialog');
+            const favorite = document.createElement('button');
+            favorite.type = 'button';
+            favorite.dataset.action = 'favorite';
+            const hide = document.createElement('button');
+            hide.type = 'button';
+            hide.dataset.action = 'hide';
+            hide.textContent = '在所有影片中隐藏此标签';
+            menu.append(favorite, hide);
+            document.body.append(menu);
+        }
+        if (menu.matches(':popover-open')) menu.hidePopover();
+        menu.setAttribute('aria-label', '标签操作：' + text);
+        const favorite = menu.querySelector('[data-action="favorite"]');
+        const alreadyFavorite = uniqueTextList(config.fav_tags).some(tag => normalizeTagText(tag) === normalizeTagText(text));
+        favorite.textContent = alreadyFavorite ? '已添加到心动标签' : '添加到心动标签';
+        favorite.disabled = alreadyFavorite;
+        favorite.onclick = () => {
+            if (setFavoriteTags([...loadConfig().fav_tags, text])) {
+                menu.hidePopover();
+                showAlert('已将「' + text + '」添加到心动标签。');
+            }
+        };
+        const hide = menu.querySelector('[data-action="hide"]');
+        hide.onclick = () => {
+            if (setMetaTagHidden(text, true)) {
+                menu.hidePopover();
+                showAlert('已隐藏「' + text + '」，可在设置 → 显示中恢复。');
+            }
+        };
+        menu.showPopover();
+        const anchor = trigger.getBoundingClientRect();
+        const rect = menu.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(anchor.left, innerWidth - rect.width - 8)) + 'px';
+        menu.style.top = Math.max(8, anchor.bottom + rect.height + 4 <= innerHeight - 8
+            ? anchor.bottom + 4 : anchor.top - rect.height - 4) + 'px';
+        (alreadyFavorite ? hide : favorite).focus();
+    }
+
+    function createMetaTagControl(tag) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = `meta-tag ${tag.hot ? 'hot' : ''}`.trim();
+        chip.textContent = tag.text;
+        chip.title = tag.text + '\n单击复制；右键或长按可添加心动标签、隐藏标签';
+        chip.setAttribute('aria-label', '复制标签：' + tag.text);
+        chip.setAttribute('aria-description', '右键、长按或 Shift+F10 打开标签菜单');
+        chip.setAttribute('aria-haspopup', 'dialog');
+
+        let holdTimer = 0;
+        let touchStart = null;
+        let suppressClick = false;
+        const cancelHold = () => {
+            window.clearTimeout(holdTimer);
+            holdTimer = 0;
+            touchStart = null;
+        };
+        chip.addEventListener('pointerdown', event => {
+            event.stopPropagation();
+            cancelHold();
+            suppressClick = false;
+            if (event.pointerType !== 'touch' || !event.isPrimary) return;
+            touchStart = { x: event.clientX, y: event.clientY };
+            holdTimer = window.setTimeout(() => {
+                cancelHold();
+                if (!chip.isConnected) return;
+                suppressClick = true;
+                openMetaTagMenu(chip, tag.text);
+            }, 500);
+        });
+        chip.addEventListener('pointermove', event => {
+            if (touchStart && Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y) > 10) {
+                cancelHold();
+                suppressClick = true;
+            }
+        });
+        chip.addEventListener('pointerup', event => {
+            cancelHold();
+            if (suppressClick) event.preventDefault();
+        });
+        chip.addEventListener('pointercancel', () => {
+            cancelHold();
+            suppressClick = true;
+        });
+        chip.addEventListener('lostpointercapture', cancelHold);
+        chip.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            cancelHold();
+            // A native touch contextmenu may follow the long-press timer.
+            if (!suppressClick) openMetaTagMenu(chip, tag.text);
+            suppressClick = true;
+        });
+        chip.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!suppressClick || event.detail === 0) copyPlainText(tag.text);
+        });
+        chip.addEventListener('auxclick', event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+        chip.addEventListener('keydown', event => {
+            event.stopPropagation();
+            if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                event.preventDefault();
+                cancelHold();
+                openMetaTagMenu(chip, tag.text);
+            }
+        });
+        return chip;
+    }
+
     function fillCommanderBadgeContainer(badgeBox, model) {
         if (!badgeBox) return;
+        badgeBox._jlcDecorModel = model;
         const safeModel = model || { matchedRadar: '', orderedTags: [] };
-        const orderedTags = Array.isArray(safeModel.orderedTags) ? safeModel.orderedTags : [];
+        const hiddenTags = new Set(uniqueTextList(config.hidden_meta_tags).map(normalizeTagText));
+        const orderedTags = (Array.isArray(safeModel.orderedTags) ? safeModel.orderedTags : [])
+            .filter(tag => !hiddenTags.has(normalizeTagText(tag.text)));
         badgeBox.innerHTML = '';
 
+        if (safeModel.preferenceMatchCount >= 2) {
+            const badge = document.createElement('span');
+            badge.className = 'jlc-badge b-preference';
+            badge.textContent = `偏好命中 ${safeModel.preferenceMatchCount} 项`;
+            const reasons = [...safeModel.matchedPreferenceTags];
+            if (safeModel.matchedRadar) reasons.push('熟人：' + safeModel.matchedRadar);
+            badge.title = reasons.join(' / ');
+            badgeBox.appendChild(badge);
+        }
         if (safeModel.matchedRadar) {
             const badge = document.createElement('span');
             badge.className = 'jlc-badge b-person';
@@ -570,11 +757,7 @@
             overlay.className = 'meta-overlay-box';
             const visibleTags = orderedTags.slice(0, DECORATE_VISIBLE_LIMIT);
             visibleTags.forEach(tag => {
-                const span = document.createElement('span');
-                span.className = `meta-tag ${tag.hot ? 'hot' : ''}`.trim();
-                span.innerText = tag.text;
-                span.title = tag.text;
-                overlay.appendChild(span);
+                overlay.appendChild(createMetaTagControl(tag));
             });
             if (orderedTags.length > visibleTags.length) {
                 const more = document.createElement('span');
@@ -588,7 +771,8 @@
     }
 
     function renderCommanderBadges(item, model) {
-        item._jlcDecorModel = model;
+        // Automatic preference matches are presentation only; manual marks stay in videos.
+        item.classList.toggle('preference-match-item', model.preferenceMatchCount >= 2);
         const badgeBox = getOrCreateBadgeContainer(item);
         fillCommanderBadgeContainer(badgeBox, model);
     }

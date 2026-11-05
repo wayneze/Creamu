@@ -3,8 +3,59 @@
 <head>
   <meta charset="utf-8" />
   <title>video list fixture</title>
+  <style>
+    /* Representative legacy site layout: floating title, dark nested menus. */
+    body { margin: 0; min-width: 1000px; font: 12px Arial, sans-serif; }
+    #topsearch { float: right; width: 600px; }
+    #leftmenu { float: left; width: 180px; background: #444; }
+    #leftmenu .menul1 { background: #333; color: white; padding: 8px; }
+    #leftmenu .menul2 { background: #666; padding: 5px; }
+    #leftmenu ul { padding: 0 0 0 24px; }
+    #leftmenu li { background: #555; }
+    #leftmenu a, #topmenu a { color: white; }
+    #topmenu { position: absolute; top: 0; right: 0; background: #333; }
+    #topmenu li { float: left; width: 90px; background: #444; }
+    #topmenu .menu { float: right; width: 360px; font-size: 24px; }
+    #rightcolumn { margin-left: 200px; border: 1px solid #ccc; }
+    .boxtitle { float: left; height: 24px; padding: 0 8px; background: #555; color: white; }
+    #rightcolumn .boxtitle { font: bold 28px Arial; border: 1px solid #ccc; }
+    .displaymode { width: 100%; }
+    .displaymode .right { text-align: right; }
+  </style>
 </head>
 <body>
+  <div id="toplogo">JavLibrary</div>
+  <aside id="leftmenu">
+    <table style="height:260px"><tbody><tr><td>原站侧栏占位</td></tr></tbody></table>
+    <div class="menul1">影片</div>
+    <div class="menul2"><ul>
+      <li><a href="/cn/vl_mostwanted.php">热门影片</a></li>
+      <li><a href="/cn/vl_newrelease.php">新发行</a></li>
+      <li><a href="/cn/vl_bestrated.php">高评分</a></li>
+      <li><a href="/cn/vl_newentries.php">新加入</a></li>
+    </ul></div>
+    <div class="menul1">浏览</div>
+    <div class="menul2"><ul><li><a href="/cn/star_list.php">演员</a></li><li><a href="/cn/genre_list.php">分类</a></li></ul></div>
+  </aside>
+  <div id="topmenu">
+    <div id="topsearch"><form action="/cn/vl_searchbyid.php" method="get">
+      <input name="keyword" aria-label="原站搜索" placeholder="例：TT-013">
+      <input type="submit" value="识别码搜寻">
+    </form><a href="/cn/search.php">进阶搜寻</a></div>
+    <div class="menu" data-fixture-account>
+      [<a href="/cn/myaccount.php">我的账号</a>]
+      | <a href="/cn/pm_inbox.php">收件夹 <strong>2</strong></a>
+      | <a href="/cn/logout.php">登出</a>
+    </div>
+  </div>
+  <main id="rightcolumn">
+  <div class="boxtitle">热门影片</div>
+  <table class="displaymode"><tbody><tr>
+    <td class="left">显示:
+      <select aria-label="影片显示方式"><option value="1">有评论的影片（依发行日）</option><option value="2" selected>所有的影片（依发行日）</option></select>
+    </td>
+    <td class="right"><a href="/cn/vl_maker.php?list&amp;mode=2&amp;m=sample">文字模式</a></td>
+  </tr></tbody></table>
   <div class="videothumblist">
     <div class="videos">
       <div class="video">
@@ -16,5 +67,6 @@
       </div>
     </div>
   </div>
+  </main>
 </body>
 </html>

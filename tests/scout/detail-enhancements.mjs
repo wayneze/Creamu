@@ -26,15 +26,14 @@ console.log('Scout detail enhancement tests');
 
 assert.doesNotMatch(source, /\bstyle\s*=|\.style\./);
 [
-  '.scout-tag-add-action {',
-  '.scout-tag-block-action {',
+  '#scout-work-fav-bar > button {',
   '.scout-pub-addon {',
   '.scout-pub-addon .scout-pub-action {',
   '.scout-pub-addon .scout-pub-love-action.is-loved {',
 ].forEach((selector) => {
   assert.ok(themeSource.includes(selector), 'missing detail component selector: ' + selector);
 });
-assert.ok(source.includes("addBtn.className = 'scout-tag-action scout-tag-add-action'"));
+assert.ok(source.includes('id="scout-tags-manage"'));
 assert.ok(source.includes("loveBtn.className = 'scout-pub-action scout-pub-love-action'"));
 console.log('  OK  detail components keep presentation in the page theme');
 
@@ -138,6 +137,7 @@ const pageContext = vm.createContext({
   },
   document: {
     querySelectorAll: () => [currentAnchor],
+    getElementById: () => null,
   },
   setTimeout(callback) {
     callback();
@@ -145,6 +145,8 @@ const pageContext = vm.createContext({
   },
   detectSite: () => 'xvideos',
   detectPageKind: () => 'video',
+  getScoutDetailTagBoxes: () => [],
+  getScoutPageTagSelector: () => '.is-keyword',
   enhancePageLexiconHitFlow() {
     pageCounts.flowCalls += 1;
   },
@@ -181,18 +183,18 @@ assert.deepEqual(pageCounts, {
   matcherBuilds: 1,
   blockMatcherBuilds: 1,
   flowCalls: 2,
-  metaScrapes: 1,
+  metaScrapes: 0,
 });
 
 currentTerms = [{ ...currentTerms[0], type: '更新' }];
 pageContext.enhancePageTags();
 assert.equal(pageCounts.matcherBuilds, 2, 'term metadata changes should refresh detail tags');
-assert.equal(pageCounts.metaScrapes, 2);
+assert.equal(pageCounts.metaScrapes, 0);
 
 currentAnchor = makeAnchor();
 pageContext.enhancePageTags();
 assert.equal(pageCounts.matcherBuilds, 3, 'replaced tag nodes should refresh detail tags');
-assert.equal(pageCounts.metaScrapes, 3);
+assert.equal(pageCounts.metaScrapes, 0);
 console.log('  OK  stable detail tags skip duplicate matcher and DOM work');
 
 const detailSignatureMatch = source.match(/let __scoutNextDetailNodeId[\s\S]*$/);

@@ -60,7 +60,6 @@
                 [data-theme=light] .pop-up-tag[name$='${AVINFO_SUFFIX}'] {background-color: rgb(255 255 255 / 90%);}
                 [data-theme=dark] .scroll-request span{background:white;}
                 [data-theme=dark] #grid-b .box-b a:link {color : inherit;}
-                [data-theme=dark] #grid-b  .box-b{background-color:#222;}
                 [data-theme=dark] .alert-zdy {color: black;background-color: rgb(255 255 255 / 90%);}
                 #myModal #modal-div article.message {margin-bottom: 0}`);
             },
@@ -115,7 +114,6 @@
                 return {AVID,href,src,title,date: '',itemTag:''};
             },
             init_Style: function(){
-                applyJavlibraryMenuTopStyle();
                 GM_addStyle(`#grid-b div{box-sizing: border-box;}`);
             },
         }

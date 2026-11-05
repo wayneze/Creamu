@@ -1,28 +1,37 @@
 
+  async function loadPageTrackingState() {
+    const context = parseExhPageContext(location.href);
+    const records = await listTrackingSearches();
+    const record = context && context.trackable
+      ? await findTrackingForContext(context, records)
+      : null;
+    return { context, record, records, resolved: true };
+  }
+
   function bindTrackingStoreLiveRefresh() {
     if (window.__excTrackingStoreLiveBound) return;
     window.__excTrackingStoreLiveBound = true;
     let timer = null;
-    const kick = (includeList) => {
+    const kick = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        if (typeof window.__excRefreshWorkbench === 'function') window.__excRefreshWorkbench();
-        if (includeList && typeof refreshListVolatileState === 'function') {
-          refreshListVolatileState().catch(() => {});
-        }
+        void loadPageTrackingState().then(async (state) => {
+          if (typeof window.__excRefreshWorkbench === 'function') window.__excRefreshWorkbench(state);
+          await refreshListVolatileState(state);
+        }).catch((error) => console.warn('[ExC] tracking live refresh', error));
       }, 80);
     };
     if (typeof GM_addValueChangeListener === 'function') {
       GM_addValueChangeListener(GM_TRACKING_REV_KEY, (_name, _old, _next, remote) => {
-        if (remote) kick(true);
+        if (remote) kick();
       });
     }
-    window.addEventListener('pageshow', () => kick(false));
+    window.addEventListener('pageshow', kick);
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') kick(false);
+      if (document.visibilityState === 'visible') kick();
     });
-    window.addEventListener('focus', () => kick(false));
+    window.addEventListener('focus', kick);
   }
 
   function createWorkbench() {
@@ -32,22 +41,19 @@
     ensureWorkbenchShell();
     // 仅当会话显式 open 时恢复；默认不弹
     if (wbSession.open === true) toggleWorkbench(true);
-    window.__excRefreshWorkbench = () => {
+    window.__excRefreshWorkbench = (trackingState) => {
       const wb = document.getElementById('jlc-wb');
       if (wb && wb.classList.contains('is-open')) renderWorkbench();
-      updateFabBadge();
+      updateFabBadge(trackingState);
     };
     window.__excRefreshPage = () => {
       refreshCurrentPageUi().catch(() => {});
     };
     bindTrackingStoreLiveRefresh();
-    const ctx = parseExhPageContext(location.href);
     const trackingState = (async () => {
-      const records = await listTrackingSearches();
-      const rec = ctx && ctx.trackable
-        ? await findTrackingForContext(ctx, records)
-        : null;
-      if (!rec) return { context: ctx, record: null, records, resolved: true };
+      const state = await loadPageTrackingState();
+      const { context: ctx, record: rec } = state;
+      if (!rec) return state;
 
       // 仅在列表真·首页回写 top；next=/深页不污染「最新」
       const pageState =
@@ -82,7 +88,7 @@
         if (ctx.top_cover) applyTrackingCoverFields(rec, ctx.top_cover);
       }
       void saveTrackingRecord(rec).catch(() => {});
-      return { context: ctx, record: rec, records, resolved: true };
+      return state;
     })();
     void updateFabBadge(trackingState);
     return trackingState;

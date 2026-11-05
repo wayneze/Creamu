@@ -30,4 +30,29 @@ assert.deepStrictEqual(Array.from(queue, item => item.id), [
   'normal-2',
 ]);
 
+const preferenceContext = vm.createContext({
+  config: { fav_tags: ['夜景', '剧情', ' 夜景 '] },
+  knownPersons: new Set(['演员甲', '演员乙']),
+});
+const modelSource = decorationSource.match(/function pushDecorTag[\s\S]*?(?=\n\s*function fillCommanderBadgeContainer)/);
+assert.ok(modelSource, 'decoration model not found');
+vm.runInContext(fs.readFileSync('packages/jlc-commander/src/parts/11-domain-utils.js', 'utf8'), preferenceContext);
+vm.runInContext(modelSource[0], preferenceContext);
+for (const [title, meta, count, tags] of [
+  ['普通影片', null, 0, []],
+  ['演员甲 演员乙', { actors: ['演员甲', '演员乙'] }, 1, []],
+  ['夜景', { genres: ['夜景', '夜景合集'] }, 1, ['夜景']],
+  ['夜景 演员甲', null, 2, ['夜景']],
+  ['夜景', { genres: ['剧情'] }, 2, ['夜景', '剧情']],
+  ['夜景 剧情', { genres: ['剧情', '夜景'], actors: ['演员甲', '演员乙'] }, 3, ['夜景', '剧情']],
+]) {
+  const model = preferenceContext.buildCommanderDecorationModel(title, meta);
+  assert.strictEqual(model.preferenceMatchCount, count, title + ': independent preference count');
+  assert.deepStrictEqual(Array.from(model.matchedPreferenceTags), tags);
+}
+preferenceContext.config.fav_tags = ['ＡLPHA', 'alpha', '親', '亲'];
+assert.strictEqual(preferenceContext.buildCommanderDecorationModel('Alpha 亲', null).preferenceMatchCount, 2, 'equivalent configured labels count once');
+preferenceContext.config.fav_tags = [];
+assert.strictEqual(preferenceContext.buildCommanderDecorationModel('夜景 剧情 演员甲', null).preferenceMatchCount, 1, 'clearing preferences removes tag matches');
+
 console.log('JLC core tests OK');

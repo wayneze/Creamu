@@ -15,3 +15,7 @@ function run(command, args) {
 run('npm', ['run', 'build']);
 run(process.execPath, ['scripts/check-dist.mjs']);
 run(process.execPath, ['tests/e2e/workbench.mjs']);
+run(process.execPath, ['tests/e2e/jlc-layout.mjs']);
+run(process.execPath, ['tests/e2e/exh-layout.mjs']);
+run(process.execPath, ['tests/e2e/fc2.mjs']);
+run(process.execPath, ['tests/e2e/hj.mjs']);

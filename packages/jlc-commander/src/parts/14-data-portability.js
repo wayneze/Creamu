@@ -5,6 +5,7 @@
         }
         const next = Object.assign({}, DEFAULT_CONFIG, rawConfig);
         if (Array.isArray(rawConfig.fav_tags)) next.fav_tags = rawConfig.fav_tags.slice();
+        next.hidden_meta_tags = Array.isArray(rawConfig.hidden_meta_tags) ? rawConfig.hidden_meta_tags.slice() : [];
         if (Array.isArray(rawConfig.custom_persons)) next.custom_persons = rawConfig.custom_persons.slice();
         if (Array.isArray(rawConfig.hate_tags)) next.hate_tags = rawConfig.hate_tags.slice();
         // 原样保留其余未知字段，避免以后扩展丢失
@@ -208,7 +209,7 @@
     /** 列表/界面偏好（含屏蔽词），与 jlc_config_stable 分存，需单独进备份与 WebDAV */
     const STATUS_PREF_SIMPLE_KEYS = [
         'autoPage', 'copyBtn', 'toolBar', 'avInfo', 'halfImg', 'fullTitle',
-        'menutoTop', 'hiddenWord', 'hiddenAvid',
+        'hiddenWord', 'hiddenAvid',
         'columnNumFull', 'columnNumHalf'
     ];
     /** 本机专用，不进备份 / WebDAV（按显示器/DPI 各自调） */

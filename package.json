@@ -10,11 +10,12 @@
   "author": "wayneze",
   "type": "module",
   "scripts": {
-    "build": "npm run build -w @creamu/exh-commander && npm run build -w @creamu/jlc-commander && npm run build -w @creamu/scout-commander && npm run build -w @creamu/hj-commander",
+    "build": "npm run build --workspaces",
     "build:exh": "npm run build -w @creamu/exh-commander",
     "build:jlc": "npm run build -w @creamu/jlc-commander",
     "build:scout": "npm run build -w @creamu/scout-commander",
     "build:hj": "npm run build -w @creamu/hj-commander",
+    "build:fc2": "npm run build -w @creamu/fc2-commander",
     "check:repo": "node scripts/check-repository.mjs",
     "check:metadata": "node scripts/check-metadata.mjs",
     "check:dist": "node scripts/check-dist.mjs",
@@ -30,6 +31,7 @@
     "packages/exh-commander",
     "packages/jlc-commander",
     "packages/scout-commander",
-    "packages/hj-commander"
+    "packages/hj-commander",
+    "packages/fc2-commander"
   ]
 }

@@ -15,13 +15,14 @@ function openTrackAtBreakpoint(track, site, query) {
     typeof applyListPageToUrl === 'function'
       ? applyListPageToUrl(baseUrl, siteNorm, page)
       : baseUrl;
-  openScoutUrl(target, { newTab: true });
+  const destination = track?.recipe ? getScoutRecipeNavigationUrl(track.recipe, siteNorm, target) : target;
+  if (destination) openScoutUrl(destination, { newTab: !isScoutNarrowViewport() });
 }
 
 function openScoutRecipeFromTracking(group) {
   if (!group || !group.recipe || typeof saveScoutSearchDraft !== 'function') return false;
   saveScoutSearchDraft(group.recipe);
-  window.__scoutRunSearchOnOpen = true;
+  resetScoutSearchUiSession();
   const button = document.querySelector('#jlc-wb .jlc-wb-nav button[data-tab="combo"]');
   if (button) button.click();
   return !!button;
@@ -43,7 +44,7 @@ function renderTracksPage() {
   let listHtml = '';
   if (!tracks.length) {
     listHtml =
-      '<div class="jlc-wb-empty">还没有收藏的搜索追更。在搜索页时，可在“组合搜索”中一键收藏！</div>';
+      '<div class="jlc-wb-empty">还没有收藏的搜索。在列表上方或控制台搜索页点击“收藏搜索”，下次从断点继续。</div>';
   } else {
     groups.forEach((g) => {
       const curTrack =
@@ -125,7 +126,7 @@ function renderTracksPage() {
               </div>
             </div>
             <div class="jlc-wb-item-side">
-              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="${g.recipe ? '重新运行组合结果' : '优先当前站断点'}">${g.recipe ? '结果' : '续看'}</button>
+              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="优先当前站断点">续看</button>
               <button type="button" class="jlc-wb-btn ghost scout-track-expand-btn">站点</button>
               <button type="button" class="jlc-wb-more-btn scout-track-more-btn">•••</button>
             </div>
@@ -133,6 +134,7 @@ function renderTracksPage() {
           <div class="scout-track-group-sites">${rowsHtml}</div>
           <div class="jlc-wb-item-edit scout-track-edit">
             <div class="scout-track-edit-actions">
+              ${g.recipe ? '<button type="button" class="jlc-wb-btn ghost scout-track-recipe-btn">编辑搜索条件</button>' : ''}
               ${curTrack ? '<button type="button" class="jlc-wb-btn danger scout-track-del-current-btn">取消当前站</button>' : ''}
               <button type="button" class="jlc-wb-btn danger scout-track-delete-btn">删除整组</button>
               <button type="button" class="jlc-wb-btn ghost scout-track-cancel-btn">取消</button>
@@ -157,7 +159,6 @@ function renderTracksPage() {
     if (!group) return;
 
     itemEl.querySelector('.scout-track-open-btn')?.addEventListener('click', () => {
-      if (group.recipe && openScoutRecipeFromTracking(group)) return;
       // 优先当前站：有订则续断点，无订则当前站搜第 1 页；无法识别站则用组内最新一条
       let site = currentSite;
       let track = site
@@ -165,6 +166,7 @@ function renderTracksPage() {
           ? findTrackInGroup(group, site)
           : null
         : null;
+      if (group.recipe && !track) { track = group.tracks[0]; site = track?.site; }
       if (!site) {
         track = group.tracks
           .slice()
@@ -184,6 +186,7 @@ function renderTracksPage() {
         ?.classList.toggle('is-open');
     });
 
+    itemEl.querySelector('.scout-track-recipe-btn')?.addEventListener('click', () => openScoutRecipeFromTracking(group));
     const moreBtn = itemEl.querySelector('.scout-track-more-btn');
     const editArea = itemEl.querySelector('.scout-track-edit');
     moreBtn?.addEventListener('click', (e) => {

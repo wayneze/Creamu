@@ -69,7 +69,7 @@ function getCreamuWorkbenchCss(options = {}) {
             height: min(78vh, 800px); max-height: none; min-width: 360px; min-height: 280px;
             display: none; flex-direction: column; z-index: 999998; overflow: hidden;
             box-sizing: border-box;
-            background: var(--creamu-wb-bg); color: var(--creamu-wb-text); border-radius: 22px; border: 1px solid var(--creamu-wb-border);
+            background: var(--creamu-wb-bg); color: var(--creamu-wb-text); border-radius: var(--creamu-wb-panel-radius, 22px); border: 1px solid var(--creamu-wb-border);
             box-shadow: 0 18px 50px rgba(90,60,30,.22); font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
             font-size: 14.5px;
         }
@@ -85,21 +85,21 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-header .jlc-wb-header-actions,
         #jlc-wb .jlc-wb-header .jlc-wb-header-actions * { cursor: pointer; }
         #jlc-wb .jlc-wb-title { font-weight: 800; font-size: 18px; color: var(--creamu-wb-title); letter-spacing: .2px; }
-        #jlc-wb .jlc-wb-subtitle { font-size: 12px; color: #a08468; margin-top: 3px; }
+        #jlc-wb .jlc-wb-subtitle { font-size: 12px; color: var(--creamu-wb-secondary-ink, #a08468); margin-top: 3px; }
         #jlc-wb .jlc-wb-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
         #jlc-wb .jlc-wb-icon-btn, #jlc-wb .jlc-wb-chip, #jlc-wb .jlc-wb-btn {
             appearance: none; border: 1px solid var(--creamu-wb-border-strong); background: var(--creamu-wb-surface-soft); color: var(--creamu-wb-text-strong);
-            border-radius: 999px; cursor: pointer; font-size: 13px; line-height: 1.25; font-weight: 650;
+            border-radius: var(--creamu-wb-control-radius, 999px); cursor: pointer; font-size: 13px; line-height: 1.25; font-weight: 650;
         }
         #jlc-wb .jlc-wb-icon-btn {
             width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
-            background: var(--creamu-wb-surface-raised); font-size: 15px; box-shadow: 0 2px 0 var(--creamu-wb-control-shadow);
+            background: var(--creamu-wb-surface-raised); font-size: 15px; box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-control-shadow));
         }
-        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: var(--creamu-wb-surface-raised); box-shadow: 0 2px 0 var(--creamu-wb-control-shadow); }
-        #jlc-wb .jlc-wb-chip.is-on { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark); }
-        #jlc-wb .jlc-wb-btn { padding: 9px 13px; border-radius: 12px; box-shadow: 0 2px 0 #e0cdae; }
-        #jlc-wb .jlc-wb-btn.primary { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark); }
+        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: var(--creamu-wb-surface-raised); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-control-shadow)); }
+        #jlc-wb .jlc-wb-chip.is-on { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-accent-dark)); }
+        #jlc-wb .jlc-wb-btn { padding: 9px 13px; border-radius: 12px; box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 #e0cdae); }
+        #jlc-wb .jlc-wb-btn.primary { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-accent-dark)); }
         #jlc-wb .jlc-wb-btn.ghost { background: var(--creamu-wb-surface-soft); }
         #jlc-wb .jlc-wb-btn.danger { background: #f3d5d0; border-color: #e8b8b0; color: #8a3a32; box-shadow: none; }
         #jlc-wb .jlc-wb-btn:hover, #jlc-wb .jlc-wb-icon-btn:hover, #jlc-wb .jlc-wb-chip:hover {
@@ -117,7 +117,7 @@ function getCreamuWorkbenchCss(options = {}) {
             font-size: 14px; font-weight: 700; transition: .18s; border-radius: 12px;
         }
         #jlc-wb .jlc-wb-nav button.active {
-            color: var(--creamu-wb-on-accent); background: var(--creamu-wb-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark);
+            color: var(--creamu-wb-on-accent); background: var(--creamu-wb-accent); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-accent-dark));
         }
 
         #jlc-wb .jlc-wb-body {
@@ -172,7 +172,7 @@ function getCreamuWorkbenchCss(options = {}) {
 
         #jlc-wb .jlc-wb-search {
             flex: 1 1 180px; min-width: 0; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--creamu-wb-border);
-            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14.5px; box-shadow: 0 2px 0 #eadcc6;
+            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14.5px; box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 #eadcc6);
         }
         #jlc-wb .jlc-wb-search:focus { outline: none; border-color: var(--creamu-wb-accent); background: var(--creamu-wb-surface-raised); }
         #jlc-wb select.jlc-wb-select,
@@ -188,7 +188,7 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb select.jlc-wb-select {
             padding: 9px 11px; border-radius: 12px; border: 1px solid var(--creamu-wb-border); background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 13.5px;
-            box-shadow: 0 2px 0 #eadcc6;
+            box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 #eadcc6);
         }
 
         #jlc-wb .jlc-wb-group {
@@ -196,7 +196,7 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-group-toggle {
             width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            background: transparent; color: #7a5a3c; border: 0; padding: 10px 6px 10px;
+            background: transparent; color: var(--creamu-wb-secondary-ink, #7a5a3c); border: 0; padding: 10px 6px 10px;
             cursor: pointer; font-size: 13.5px; font-weight: 750;
             border-radius: 0; margin: 0 0 2px; line-height: 1.35;
             min-height: 36px;
@@ -212,19 +212,19 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-group.collapsed .jlc-wb-group-body { display: none; }
 
         #jlc-wb .jlc-wb-item {
-            position: relative; border-radius: 18px; padding: 12px 12px 12px 12px;
-            background: var(--creamu-wb-surface); border: 1px solid #efe0cc; overflow: visible;
+            position: relative; border-radius: var(--creamu-wb-card-radius, 18px); padding: 12px;
+            background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-card-border, #efe0cc); overflow: visible;
             cursor: pointer; transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, transform .12s ease;
-            box-shadow: 0 3px 0 #ead7bb;
+            box-shadow: var(--creamu-wb-card-elevation, 0 3px 0 #ead7bb);
         }
         #jlc-wb .jlc-wb-item:hover {
-            border-color: #e0c9a8; background: var(--creamu-wb-surface-raised);
-            box-shadow: 0 6px 16px rgba(120,80,30,.12); z-index: 3;
+            border-color: var(--creamu-wb-card-hover-border, #e0c9a8); background: var(--creamu-wb-surface-raised);
+            box-shadow: var(--creamu-wb-card-hover-elevation, 0 6px 16px rgba(120,80,30,.12)); z-index: 3;
         }
         #jlc-wb .jlc-wb-item::before { display: none; }
         #jlc-wb .jlc-wb-item.is-focus {
-            border-color: var(--creamu-wb-accent); box-shadow: 0 0 0 2px var(--creamu-wb-accent-ring), 0 4px 0 #e0c9a8;
-            background: #fff8ee;
+            border-color: var(--creamu-wb-accent); box-shadow: var(--creamu-wb-focus-elevation, 0 0 0 2px var(--creamu-wb-accent-ring), 0 4px 0 #e0c9a8);
+            background: var(--creamu-wb-focus-surface, #fff8ee);
         }
         #jlc-wb .jlc-wb-item.is-current { border-color: #8eb6e8; }
         /* 菜单打开时抬高整卡，避免被下方 Open 按钮盖住 */
@@ -296,7 +296,7 @@ function getCreamuWorkbenchCss(options = {}) {
             min-width: 0;
         }
         #jlc-wb .jlc-wb-item-meta-line.is-avid {
-            color: #7a6048; font-weight: 650;
+            color: var(--creamu-wb-secondary-ink, #7a6048); font-weight: 650;
         }
         #jlc-wb .jlc-wb-item-pills {
             display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
@@ -309,12 +309,12 @@ function getCreamuWorkbenchCss(options = {}) {
             appearance: none; border: 0; cursor: pointer;
             min-width: 64px; padding: 8px 14px; border-radius: 999px;
             background: linear-gradient(var(--creamu-wb-accent-light), var(--creamu-wb-accent)); color: var(--creamu-wb-on-accent); font-weight: 800; font-size: 13px;
-            box-shadow: 0 3px 0 var(--creamu-wb-accent-dark); transition: transform .12s ease, filter .12s ease;
+            box-shadow: var(--creamu-wb-control-elevation, 0 3px 0 var(--creamu-wb-accent-dark)); transition: transform .12s ease, filter .12s ease;
         }
         #jlc-wb .jlc-wb-open-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
-        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--creamu-wb-accent-dark); }
+        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: var(--creamu-wb-control-elevation, 0 1px 0 var(--creamu-wb-accent-dark)); }
         #jlc-wb .jlc-wb-more-btn {
-            appearance: none; border: 0; background: transparent; color: #b09070;
+            appearance: none; border: 0; background: transparent; color: var(--creamu-wb-secondary-ink, #b09070);
             width: 28px; height: 22px; border-radius: 8px; cursor: pointer; font-size: 16px; line-height: 1;
             font-weight: 800; letter-spacing: 1px;
         }
@@ -336,14 +336,14 @@ function getCreamuWorkbenchCss(options = {}) {
             padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--creamu-wb-text-strong);
             font-size: 13px; font-weight: 650;
         }
-        #jlc-wb .jlc-wb-item-menu button:hover { background: #f3e9d8; }
+        #jlc-wb .jlc-wb-item-menu button:hover { background: var(--creamu-wb-inset-surface, #f3e9d8); }
         #jlc-wb .jlc-wb-item-menu button.is-danger { color: var(--creamu-wb-danger); }
 
         #jlc-wb .jlc-status-pill, #jlc-wb .jlc-site-pill {
             display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;
             font-size: 11.5px; font-weight: 700; border: 1px solid transparent;
         }
-        #jlc-wb .jlc-site-pill { background: #f3e9d8; color: var(--creamu-wb-text-subtle); border-color: #eadcc6; }
+        #jlc-wb .jlc-site-pill { background: var(--creamu-wb-inset-surface, #f3e9d8); color: var(--creamu-wb-text-subtle); border-color: var(--creamu-wb-divider); }
         #jlc-wb .jlc-site-pill.is-current { background: #e7f1ff; color: #175cd3; border-color: #c2dbff; }
         /* 上次：默认琥珀；按打开时效加深/减弱 */
         #jlc-wb .jlc-site-pill.is-last { background: #fff4db; color: #9a6700; border-color: #f0d7a0; }
@@ -361,10 +361,10 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-item-meta-line .jlc-wb-pagehint,
         #jlc-wb .jlc-wb-pagehint {
-            color: #a89078; font-weight: 550;
+            color: var(--creamu-wb-secondary-ink, #a89078); font-weight: 550;
         }
         #jlc-wb .jlc-wb-item-meta-line.is-sub {
-            color: #a89078; font-weight: 550;
+            color: var(--creamu-wb-secondary-ink, #a89078); font-weight: 550;
         }
         #jlc-wb .jlc-status-pill.tone-gray { background: var(--creamu-wb-surface-muted); color: var(--creamu-wb-text-subtle); }
         #jlc-wb .jlc-status-pill.tone-green { background: #e2f5e4; color: #2f6b3a; }
@@ -377,8 +377,8 @@ function getCreamuWorkbenchCss(options = {}) {
         }
 
         #jlc-wb .jlc-wb-view-block {
-            background: var(--creamu-wb-surface); border: 1px solid #efe0cc; border-radius: 16px; padding: 14px; margin-bottom: 14px;
-            box-shadow: 0 3px 0 #ead7bb;
+            background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-card-border, #efe0cc); border-radius: var(--creamu-wb-card-radius, 16px); padding: 14px; margin-bottom: 14px;
+            box-shadow: var(--creamu-wb-card-elevation, 0 3px 0 #ead7bb);
         }
         #jlc-wb .jlc-wb-view-title {
             font-size: 12px; color: var(--creamu-wb-accent); font-weight: 750; letter-spacing: .5px; margin: 0 0 12px;
@@ -434,7 +434,7 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-settings.is-open { display: block; }
         #jlc-wb .jlc-wb-settings-panel {
             position: absolute; top: 0; right: 0; width: min(100%, 430px); height: 100%;
-            display: flex; flex-direction: column; background: var(--creamu-wb-bg); border-left: 1px solid #e4d4bc;
+            display: flex; flex-direction: column; background: var(--creamu-wb-bg); border-left: 1px solid var(--creamu-wb-border);
         }
         #jlc-wb .jlc-wb-settings-head {
             flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center;
@@ -442,11 +442,11 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-settings-nav {
             flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px;
-            border-bottom: 1px solid var(--creamu-wb-divider); background: #f3e9d8;
+            border-bottom: 1px solid var(--creamu-wb-divider); background: var(--creamu-wb-inset-surface, #f3e9d8);
         }
         #jlc-wb .jlc-wb-settings-nav button {
             appearance: none; border: 1px solid var(--creamu-wb-border-strong); background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text-subtle);
-            border-radius: 999px; padding: 8px 12px; cursor: pointer; font-size: 13.5px; font-weight: 700;
+            border-radius: var(--creamu-wb-control-radius, 999px); padding: 8px 12px; cursor: pointer; font-size: 13.5px; font-weight: 700;
         }
         #jlc-wb .jlc-wb-settings-nav button.active {
             background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent);
@@ -509,7 +509,7 @@ function getCreamuWorkbenchCss(options = {}) {
             border-color: var(--creamu-wb-accent); outline: none; background: var(--creamu-wb-surface-raised);
         }
         #jlc-wb .stat-box {
-            display: flex; justify-content: space-around; background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
+            display: flex; justify-content: space-around; background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-card-border, #efe0cc);
             border-radius: 14px; padding: 14px; margin-bottom: 14px;
         }
         #jlc-wb .stat-item { text-align: center; }
@@ -517,10 +517,10 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .stat-item span { font-size: 11px; color: var(--creamu-wb-text-muted); }
         #jlc-wb .person-item {
             background: var(--creamu-wb-surface); padding: 12px 14px; border-radius: 12px; margin-bottom: 8px;
-            display: flex; justify-content: space-between; align-items: center; border: 1px solid #efe0cc; font-size: 14px;
+            display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--creamu-wb-card-border, #efe0cc); font-size: 14px;
             color: var(--creamu-wb-text);
         }
-        #jlc-wb .person-item:hover { border-color: #e0c9a8; background: var(--creamu-wb-surface-raised); }
+        #jlc-wb .person-item:hover { border-color: var(--creamu-wb-card-hover-border, #e0c9a8); background: var(--creamu-wb-surface-raised); }
         #jlc-wb .person-item span.remove { color: var(--creamu-wb-accent); cursor: pointer; font-size: 18px; padding: 0 8px; }
 
         #jlc-wb .jlc-wb-resize-w {

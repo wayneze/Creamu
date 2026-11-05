@@ -69,6 +69,7 @@ function createHarness({ enabled = true, kind = 'search' } = {}) {
       }
     },
     detectPageKind: () => state.kind,
+    getVideoElements: () => [],
     isBlockSiteAutoPreview: () => state.enabled,
     stopListPreview() {},
     setTimeout,

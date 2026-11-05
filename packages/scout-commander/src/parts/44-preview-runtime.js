@@ -1,10 +1,9 @@
 // @@creamu-part:preview-runtime
 
 // ----------------------------------------
-// 列表预览：点缩略图播预览，再点一次进详情（xvideos/xnxx 的 data-pvv；eporner 不做预览）
+// Preview is an explicit action. Cover links always retain navigation semantics.
 let __scoutPreviewVideo = null;
 let __scoutPreviewHost = null;
-let __scoutPreviewTimer = null;
 
 function isScoutMobileListViewport() {
   try {
@@ -15,10 +14,6 @@ function isScoutMobileListViewport() {
 }
 
 function stopListPreview() {
-  if (__scoutPreviewTimer) {
-    clearInterval(__scoutPreviewTimer);
-    __scoutPreviewTimer = null;
-  }
   if (__scoutPreviewVideo) {
     try {
       const layer = __scoutPreviewVideo.closest('.scout-list-preview-layer');
@@ -31,7 +26,9 @@ function stopListPreview() {
     __scoutPreviewVideo = null;
   }
   if (__scoutPreviewHost) {
-    __scoutPreviewHost.classList.remove('scout-preview-playing', 'scout-preview-positioned');
+    const button = __scoutPreviewHost.querySelector('.scout-preview-button');
+    if (button) { button.textContent = '预览'; button.setAttribute('aria-pressed', 'false'); }
+    __scoutPreviewHost.classList.remove('scout-preview-playing');
     __scoutPreviewHost.querySelectorAll('img[data-scout-orig-src]').forEach((img) => {
       if (img.dataset.scoutOrigSrc) img.src = img.dataset.scoutOrigSrc;
     });
@@ -91,22 +88,27 @@ function mountPreviewVideo(host, url) {
   __scoutPreviewVideo = v;
 
   let failed = false;
+  let failureTimer;
   const fail = () => {
     if (failed) return;
     failed = true;
+    clearTimeout(failureTimer);
+    if (__scoutPreviewVideo !== v) return;
     try {
       wrap.remove();
     } catch (_) { /* ignore */ }
     if (__scoutPreviewVideo === v) __scoutPreviewVideo = null;
     stopListPreview();
+    showToast('预览暂不可用，可以点封面进入详情');
   };
   v.addEventListener('error', fail);
   v.src = url;
   const p = v.play();
   if (p && typeof p.catch === 'function') p.catch(fail);
-  setTimeout(() => {
-    if (v && v.readyState < 2 && !failed) fail();
-  }, 1800);
+  failureTimer = setTimeout(() => {
+    if (__scoutPreviewVideo === v && v.readyState < 2 && !failed) fail();
+  }, 6000);
+  v.addEventListener('loadeddata', () => clearTimeout(failureTimer), { once: true });
   return v;
 }
 
@@ -138,97 +140,70 @@ function playListPreviewOnHost(host, img) {
     host.classList.add('scout-preview-positioned');
   }
 
+  const button = host.querySelector('.scout-preview-button');
+  if (button) { button.textContent = '停止预览'; button.setAttribute('aria-pressed', 'true'); }
   mountPreviewVideo(host, pvv);
   return true;
 }
 
+function syncListPreviewButtons() {
+  if (detectPageKind() === 'video') return;
+  for (const card of getVideoElements()) {
+    const img = card.querySelector('.thumb img, .thumb-inside img, img');
+    if (!img || isEpornerListContext(card) || !getListPreviewUrl(img)) continue;
+    const host = img.closest('.thumb, .thumb-inside') || img.parentElement;
+    if (!host || host.querySelector('.scout-preview-button')) continue;
+    host.classList.add('scout-preview-positioned');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'scout-preview-button';
+    button.dataset.scoutUi = '1';
+    button.textContent = '预览';
+    button.setAttribute('aria-pressed', 'false');
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (__scoutPreviewHost === host) stopListPreview();
+      else playListPreviewOnHost(host, img);
+    });
+    host.appendChild(button);
+  }
+}
+
 function enableListPreviewPlayback() {
   if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+  syncListPreviewButtons();
   if (window.__creamuScoutListPreviewRuntime) return;
-  let lastScrollY = window.scrollY || 0;
-
-  // 点缩略图区域：先预览；再点同卡缩略图 → 放行进详情
-  const onClick = (e) => {
-    if (!isScoutMobileListViewport()) return;
-    if (e.target.closest('#jlc-wb, #jlc-wb-fab, #scout-search-track-bar')) return;
-
-    // 标题/元信息区：不拦截
-    if (e.target.closest('.thumb-under, .mbtit, p.title, .title, .mbunder, .mbstats, .uploader')) {
-      return;
-    }
-
-    // eporner 列表无预览能力：完全不拦截
-    if (isEpornerListContext(e.target)) return;
-
-    // xvideos / xnxx 卡
-    const card = e.target.closest('.thumb-block, .mozaique [id^="video_"]');
-    const img =
-      (e.target.tagName === 'IMG' ? e.target : null) ||
-      (card && card.querySelector('.thumb img, .thumb-inside img, img'));
-    if (!img) return;
-
-    // 必须点在图区域
-    const inThumb = e.target.closest('.thumb, .thumb-inside, a[href*="/video"]');
-    if (!inThumb && e.target !== img) return;
-
-    const a =
-      img.closest('a[href*="/video"]') ||
-      (card && card.querySelector('a[href*="/video"]'));
-    if (!a) return;
-
-    const host = img.closest('.thumb, .thumb-inside') || a || img.parentElement;
-    if (!host) return;
-
-    // 第二次点同一预览中的图 → 不拦截，进详情
-    if (__scoutPreviewHost === host && host.classList.contains('scout-preview-playing')) {
-      stopListPreview();
-      return;
-    }
-
-    const ok = playListPreviewOnHost(host, img);
-    if (ok) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  };
-  document.addEventListener('click', onClick, true);
-
-  // 明显滚动才停预览（避免点按微抖立刻关掉）
   const onScroll = () => {
-    const y = window.scrollY || 0;
-    if (Math.abs(y - lastScrollY) < 48) return;
-    lastScrollY = y;
-    if (__scoutPreviewHost || __scoutPreviewVideo) stopListPreview();
+    if (!__scoutPreviewHost) return;
+    const rect = __scoutPreviewHost.getBoundingClientRect();
+    if (rect.bottom <= 0 || rect.top >= window.innerHeight) stopListPreview();
   };
+  const onVisibilityChange = () => { if (document.hidden) stopListPreview(); };
+  const onKeydown = (event) => { if (event.key === 'Escape') stopListPreview(); };
   window.addEventListener('scroll', onScroll, { passive: true, capture: true });
-
-  const onVisibilityChange = () => {
-    if (document.hidden) stopListPreview();
-  };
   document.addEventListener('visibilitychange', onVisibilityChange);
-  window.__creamuScoutListPreviewRuntime = { onClick, onScroll, onVisibilityChange };
+  document.addEventListener('keydown', onKeydown);
+  window.__creamuScoutListPreviewRuntime = { onScroll, onVisibilityChange, onKeydown };
 }
 
 function disableListPreviewPlayback() {
   const runtime = window.__creamuScoutListPreviewRuntime;
   if (!runtime) return;
-  document.removeEventListener('click', runtime.onClick, true);
   window.removeEventListener('scroll', runtime.onScroll, true);
   document.removeEventListener('visibilitychange', runtime.onVisibilityChange);
+  document.removeEventListener('keydown', runtime.onKeydown);
+  document.querySelectorAll('.scout-preview-button').forEach(button => button.remove());
   window.__creamuScoutListPreviewRuntime = null;
   stopListPreview();
 }
 
 function applyListPreviewPlaybackMode() {
-  const isList =
-    typeof detectPageKind !== 'function' || detectPageKind() !== 'video';
-  if (isList) enableListPreviewPlayback();
+  if (typeof detectPageKind !== 'function' || detectPageKind() !== 'video') enableListPreviewPlayback();
   else disableListPreviewPlayback();
 }
 
-function setupListPreviewPlayback() {
-  applyListPreviewPlaybackMode();
-}
+function setupListPreviewPlayback() { applyListPreviewPlaybackMode(); }
 
 // 站点列表自动预览拦截（block_site_auto_preview）
 

@@ -18,6 +18,9 @@ Desktop.ini
 *secret*
 
 # local overrides
+.local/
+.notes/
+private/
 *.bak.*
 **/*-local.*
 *.local.*

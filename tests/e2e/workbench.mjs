@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { chromium } from 'playwright';
 import {
   PATHS,
@@ -39,7 +41,8 @@ const SCOUT_THEME_CASES = [
     className: 'creamu-site-xvideos',
     accent: 'rgb(229, 72, 64)',
     dark: 'rgb(158, 42, 36)',
-    nativeInput: 'rgb(34, 24, 26)',
+    nativeInput: 'rgb(231, 230, 223)',
+    text: 'rgb(53, 60, 54)', scheme: 'light', panel: 'rgb(239, 238, 233)',
   },
   {
     host: 'www.xnxx.com',
@@ -47,6 +50,7 @@ const SCOUT_THEME_CASES = [
     accent: 'rgb(46, 112, 229)',
     dark: 'rgb(26, 63, 150)',
     nativeInput: 'rgb(24, 30, 42)',
+    text: 'rgb(232, 234, 239)', scheme: 'dark', panel: 'rgb(22, 28, 40)',
   },
   {
     host: 'www.eporner.com',
@@ -54,8 +58,27 @@ const SCOUT_THEME_CASES = [
     accent: 'rgb(46, 168, 84)',
     dark: 'rgb(24, 107, 52)',
     nativeInput: 'rgb(22, 30, 24)',
+    text: 'rgb(232, 234, 239)', scheme: 'dark', panel: 'rgb(20, 28, 22)',
   },
 ];
+
+function scoutBrowseFixture(site) {
+  const ep = site === 'eporner';
+  const cover = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#596b61"/><circle cx="460" cy="110" r="50" fill="#c1b189"/><path d="M0 330 230 110 410 330 520 220 640 360H0" fill="#243e34"/><text x="28" y="322" fill="#eee9db" font-family="sans-serif" font-size="24">DOCUMENTARY / SAMPLE</text></svg>');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Scout browse fixture</title><style>
+    *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}
+    header{position:sticky;top:0;z-index:1000000;padding:22px 20px;border-bottom:1px solid #8884}header strong{font-size:24px}
+    #content{padding:12px}.mozaique,#vidresults{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+    .thumb-block,.mb{min-width:0}.thumb,.mbimg{position:relative}.thumb img,.mbimg img{width:100%;display:block}
+    .thumb-under{padding:10px}.title,.mbtit{margin:0 0 8px}.title a,.mbtit a{font-size:15px;text-decoration:none}
+    .uploader{font-size:12px}a{color:inherit}.pagination{margin:20px}.pagination a{padding:12px}
+    @media(max-width:820px){header{padding:12px}.mozaique,#vidresults{grid-template-columns:1fr}}
+    </style></head><body><header><strong>${site.toUpperCase()}</strong>　Documentary</header><main id="content"><div ${ep ? 'id="vidresults"' : 'class="mozaique"'}>${Array.from({length:12},(_,i)=>{
+      const id = 'alpha'+String(i+1).padStart(3,'0');
+      const href = site === 'xvideos' ? '/video.'+id+'/documentary' : site === 'xnxx' ? '/video-'+id+'/documentary' : '/video-'+id+'/documentary/';
+      return `<article id="video_${id}" data-id="${id}" class="${ep ? 'mb' : 'thumb-block'}"><div class="${ep ? 'mbimg' : 'thumb'}"><a class="cover-link" href="${href}"><img src="${cover}" alt="Documentary sample"></a></div><div class="thumb-under"><p class="${ep ? 'mbtit' : 'title'}"><a href="${href}" title="Documentary ${i+1}">Documentary ${i+1} · City walk</a></p><div class="uploader"><a href="/profiles/studio"><span class="name">Studio North</span></a></div></div></article>`;
+    }).join('')}</div><div class="pagination"><a href="?k=documentary&p=1">2</a></div></main></body></html>`;
+}
 const SCOUT_WORKBENCH_FIXTURE_DATA = {
   scout_combo_tokens: ['documentary', 'city walk'],
   creamu_scout_config: {
@@ -641,7 +664,7 @@ async function assertScoutWorkbenchStyles(page, expected) {
       const statValue = read('.stat-item b');
       return {
         bodyClasses: [...document.body.classList],
-        accent: activeNav.backgroundColor,
+        accent: activeNav.borderBottomColor,
         dark: read('[data-dark-token]').backgroundColor,
         idleNav: [idleNav.backgroundColor, idleNav.color],
         activeNav: [activeNav.backgroundColor, activeNav.color],
@@ -662,25 +685,28 @@ async function assertScoutWorkbenchStyles(page, expected) {
     }
   });
 
-  const { bodyClasses, ...computedStyles } = style;
-  assert.ok(bodyClasses.includes(expected.className), 'expected Scout site class');
-  assert.deepEqual(computedStyles, {
-    accent: expected.accent,
-    dark: expected.dark,
-    idleNav: ['rgb(239, 228, 210)', 'rgb(138, 111, 85)'],
-    activeNav: [expected.accent, 'rgb(255, 255, 255)'],
-    primary: [expected.accent, 'rgb(255, 255, 255)'],
-    ghost: ['rgb(255, 250, 242)', 'rgb(90, 64, 48)'],
-    danger: ['rgb(243, 213, 208)', 'rgb(138, 58, 50)'],
-    input: ['rgb(255, 250, 243)', 'rgb(74, 55, 40)', 'light'],
-    nativeInput: [expected.nativeInput, 'rgb(232, 234, 239)', 'dark'],
-    stat: ['rgb(255, 253, 248)', '14px', expected.accent],
-  });
+  assert.ok(style.bodyClasses.includes(expected.className), 'expected Scout site class');
+  assert.equal(style.accent, expected.accent, 'active tab has a visible site-colored underline');
+  assert.notEqual(style.activeNav[1], style.idleNav[1], 'active tab is distinguishable');
+  assert.deepEqual(style.primary, [expected.accent, 'rgb(255, 255, 255)']);
+  assert.deepEqual(style.input, [expected.panel, expected.text, expected.scheme]);
+  assert.deepEqual(style.nativeInput, [expected.nativeInput, expected.text, expected.scheme]);
+  assert.equal(style.ghost[1], expected.text, 'secondary actions use readable site text');
+  assert.equal(style.stat[0], expected.panel, 'statistics share the panel surface');
 }
 
 async function openScoutTab(page, tab) {
+  if (['lexicon', 'publishers', 'blocks'].includes(tab) && !await page.locator('.scout-secondary-nav').isVisible()) {
+    await page.locator('#scout-wb-more-btn').click();
+  }
   await page.locator(`#jlc-wb .jlc-wb-nav button[data-tab="${tab}"]`).click();
   await page.locator(`[data-jlc-wb-page="${tab}"]:not([hidden])`).waitFor();
+}
+
+async function captureScoutUi(page, name) {
+  if (!process.env.CREAMU_SCREENSHOT_DIR) return;
+  fs.mkdirSync(process.env.CREAMU_SCREENSHOT_DIR, { recursive: true });
+  await page.screenshot({ path: path.join(process.env.CREAMU_SCREENSHOT_DIR, name + '.png') });
 }
 
 async function openScoutSettingsTab(page, tab) {
@@ -694,6 +720,7 @@ async function openScoutSettingsTab(page, tab) {
 }
 
 async function assertScoutPageLayout(page, tab) {
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const metrics = await page.evaluate((tabName) => {
     const panel = document.getElementById('jlc-wb');
     const target = document.querySelector(`[data-jlc-wb-page="${tabName}"]:not([hidden])`);
@@ -707,7 +734,9 @@ async function assertScoutPageLayout(page, tab) {
         return { left: rect.left, right: rect.right };
       });
     return {
-      inlineStyles: target.querySelectorAll('[style]').length,
+      // Playwright screenshots temporarily hide input carets and may leave style="".
+      inlineStyles: Array.from(target.querySelectorAll('[style]')).filter(el => el.style.length).length,
+      inlineDetails: Array.from(target.querySelectorAll('[style]')).filter(el => el.style.length).map(el => [el.tagName, el.className, el.getAttribute('style')]),
       horizontalOverflow: target.scrollWidth - target.clientWidth,
       insidePanel:
         targetRect.left >= panelRect.left - 1 &&
@@ -717,7 +746,7 @@ async function assertScoutPageLayout(page, tab) {
       ),
     };
   }, tab);
-  assert.equal(metrics.inlineStyles, 0, tab + ' should not render static inline styles');
+  assert.equal(metrics.inlineStyles, 0, tab + ' should not render static inline styles: ' + JSON.stringify(metrics.inlineDetails));
   assert.ok(metrics.horizontalOverflow <= 1, tab + ' should not overflow horizontally');
   assert.ok(metrics.insidePanel, tab + ' should stay inside the workbench');
   assert.ok(metrics.controlsInsidePanel, tab + ' controls should stay inside the workbench');
@@ -921,12 +950,14 @@ try {
     async (page) => {
       await openAndCheckTitle(page, /Scout/i);
       await assertScoutWorkbenchStyles(page, SCOUT_THEME_CASES[0]);
+      assert.equal(await page.locator('#jlc-wb').evaluate(el => el.classList.contains('is-docked')), true);
+      await page.locator('#scout-wb-layout-btn').click();
       await exerciseWorkbenchGeometry(page, {
         fab: 'scoutDragBound',
         panel: 'scoutPanelResizeBound',
         header: 'scoutHeaderDragBound',
       });
-      await page.locator('#jlc-wb .jlc-wb-nav button[data-tab="lexicon"]').click();
+      await openScoutTab(page, 'lexicon');
       await page.locator('#jlc-wb .jlc-wb-nav button.active[data-tab="lexicon"]').waitFor();
 
       await page.locator('#scout-wb-settings-btn').click();
@@ -1008,7 +1039,7 @@ try {
 
       await page.evaluate(() => window.__testResetWorkbenchGmReads());
       await page.locator('#scout-search-track-toggle').click();
-      await page.locator('#scout-search-track-toggle', { hasText: '取消' }).waitFor();
+      await page.locator('#scout-search-track-toggle', { hasText: '已追更' }).waitFor();
       const hiddenAction = await page.evaluate(() => ({
         comboChildren: document.querySelector('[data-jlc-wb-page="combo"]')?.childElementCount || 0,
         comboTokenReads: window.__testWorkbenchGmReads.scout_combo_tokens || 0,
@@ -1021,8 +1052,8 @@ try {
         window.__testComboPageRoot = document.querySelector('[data-jlc-wb-page="combo"]')?.firstElementChild;
         return { ...window.__testWorkbenchGmReads };
       });
-      assert.equal(firstOpen.scout_combo_tokens, 1);
-      assert.equal(firstOpen.creamu_scout_search_draft, 1);
+      assert.equal(firstOpen.scout_combo_tokens, 2, 'context initialization and initial render each read the legacy draft');
+      assert.ok(firstOpen.creamu_scout_search_draft <= 3, 'first open seeds the current context and renders once');
       assert.equal(firstOpen.creamu_scout_lexicon_terms, 1);
       assert.equal(firstOpen.creamu_scout_lexicon_types, 1);
 
@@ -1061,7 +1092,7 @@ try {
           === window.__testComboPageRoot,
         reads: Object.values(window.__testWorkbenchGmReads).reduce((total, count) => total + count, 0),
       }));
-      assert.deepEqual(stableCombo, { preserved: true, reads: 0 });
+      assert.deepEqual(stableCombo, { preserved: true, reads: 1 }, 'stable navigation only reads the layout preference');
 
       await page.evaluate(() => window.__testResetWorkbenchGmReads());
       await openScoutTab(page, 'lexicon');
@@ -1070,7 +1101,7 @@ try {
           === window.__testLexiconPageRoot,
         reads: Object.values(window.__testWorkbenchGmReads).reduce((total, count) => total + count, 0),
       }));
-      assert.deepEqual(stableLexicon, { preserved: true, reads: 0 });
+      assert.deepEqual(stableLexicon, { preserved: true, reads: 1 }, 'stable navigation only reads the layout preference');
 
       await page.locator('[data-id="term-night"] .jlc-wb-more-btn').click();
       await page.locator('[data-id="term-night"] .scout-edit-zh').fill('Updated Night');
@@ -1237,6 +1268,8 @@ try {
       assert.equal(await page.locator('.scout-search-condition', { hasText: 'city walk' }).count(), 0);
 
       await page.locator('[data-search-target="preference"]').click();
+      await page.locator('#scout-search-advanced > summary').click();
+      await page.locator('#scout-search-show-priority').check();
       await page.locator('[data-search-priority="2"]').click();
       await page.locator('#scout-combo-free-input').fill('portrait');
       await page.locator('#scout-combo-add-btn').click();
@@ -1427,7 +1460,7 @@ try {
     async (page) => {
       await openAndCheckTitle(page, /Scout/i);
       await openScoutTab(page, 'combo');
-      await page.locator('#scout-combo-search-btn').click();
+      await page.locator('#scout-combo-compare-btn').click();
       await page.waitForFunction(() => (
         document.querySelectorAll('.scout-search-assessment-site').length === 3 &&
         document.getElementById('scout-search-result-status')?.textContent.startsWith('完成')
@@ -1509,7 +1542,8 @@ try {
       );
       assert.equal((await page.evaluate(() => window.__scoutSearchStats)).detail, 12);
 
-      await page.locator('#scout-search-track-bar').evaluate((element) => element.click());
+      await page.locator('#scout-wb-close-btn').click();
+      await page.locator('#scout-search-track-toggle').click();
       const temporaryModeTrack = await page.evaluate(() => (
         GM_getValue('creamu_scout_tracks', [])[0]
       ));
@@ -1525,6 +1559,7 @@ try {
         await page.locator('.pagination a').getAttribute('href') || '',
         /#creamu-exact=/
       );
+      await page.locator('#jlc-wb-fab').click();
       await assertScoutPageLayout(page, 'combo');
 
       await page.locator('#scout-save-current-search-btn').click();
@@ -1564,6 +1599,14 @@ try {
     async (page) => {
       await assertScoutListFlowStyles(page, { mobile: true });
       await openAndCheckTitle(page, /Scout/i);
+      const mobileControls = await page.locator('#jlc-wb .jlc-wb-header-actions button:visible, .scout-search-role-switch button:visible, .scout-combo-dock-actions button:visible').evaluateAll(nodes =>
+        nodes.map(el => ({ id: el.id, icon: el.classList.contains('jlc-wb-icon-btn'), width: el.getBoundingClientRect().width, height: el.getBoundingClientRect().height }))
+      );
+      assert.ok(mobileControls.length >= 8);
+      for (const control of mobileControls) {
+        assert.ok(control.height >= 30 && control.height <= 40, 'mobile controls stay compact: ' + JSON.stringify(control));
+        if (control.icon) assert.equal(control.width, control.height, 'header icons stay square');
+      }
       for (const tab of ['combo', 'lexicon', 'works', 'publishers', 'tracks', 'blocks']) {
         await openScoutTab(page, tab);
         await assertScoutPageLayout(page, tab);
@@ -1585,6 +1628,11 @@ try {
       beforeScript: (page) => page.evaluate(() => {
         history.replaceState({}, '', '/video.alpha001/sample-documentary');
         const nativeGetValue = window.GM_getValue;
+        const nativeRequest = window.GM_xmlhttpRequest;
+        window.__scoutOpenedUrls = [];
+        window.__scoutRequests = [];
+        window.GM_openInTab = url => window.__scoutOpenedUrls.push(url);
+        window.GM_xmlhttpRequest = options => { window.__scoutRequests.push(options.url); return nativeRequest(options); };
         const nativeSetInterval = window.setInterval.bind(window);
         window.__testDetailGmReads = 0;
         window.__testEightSecondIntervals = [];
@@ -1608,42 +1656,32 @@ try {
       });
       await page.locator('#scout-work-fav-btn').waitFor();
       await page.locator('.scout-pub-addon').waitFor();
-      assert.equal(await page.locator('.scout-tag-addon').count(), 4);
+      assert.equal(await page.locator('.video-tags-list a button, .scout-tag-addon').count(), 0);
+      await page.locator('#scout-tags-manage').waitFor();
       await assertNoInlinePresentation(
         page,
-        '#scout-work-fav-bar, .scout-tag-addon, .scout-pub-addon',
+        '#scout-work-fav-bar, #scout-tags-manage, .scout-pub-addon',
         'detail enhancements'
       );
 
-      const componentStyles = await page.evaluate(() => {
-        const add = getComputedStyle(document.querySelector('.scout-tag-add-action'));
-        const block = getComputedStyle(document.querySelector('.scout-tag-block-action'));
-        const publisher = getComputedStyle(document.querySelector('.scout-pub-addon'));
-        const action = getComputedStyle(document.querySelector('.scout-pub-action'));
-        return {
-          tagColors: [add.color, block.color],
-          publisher: [publisher.display, publisher.gap, publisher.marginLeft, publisher.fontSize],
-          action: [action.height, action.paddingTop, action.paddingRight, action.borderRadius, action.fontSize],
-        };
-      });
-      assert.deepEqual(componentStyles, {
-        tagColors: ['rgb(143, 212, 160)', 'rgb(240, 144, 136)'],
-        publisher: ['flex', '4px', '8px', '12px'],
-        action: ['24px', '2px', '8px', '6px', '11.5px'],
-      });
+      assert.equal(await page.locator('.video-tags-list a.is-keyword').first().getAttribute('href'), '/tags/documentary');
+      assert.ok(await page.locator('#scout-tags-manage').evaluate(el => {
+        const height = el.getBoundingClientRect().height;
+        return height >= 32 && height <= 36;
+      }), 'detail actions stay compact');
 
       const lifecycleResult = await page.evaluate(() => {
         const callback = window.__testEightSecondIntervals?.[0];
         const favoriteButton = document.getElementById('scout-work-fav-btn');
         const publisherAddon = document.querySelector('.scout-pub-addon');
-        const tagAddon = document.querySelector('.scout-tag-addon');
+        const tagAddon = document.querySelector('#scout-tags-manage');
         window.__testDetailGmReads = 0;
         callback?.();
         const stableReads = window.__testDetailGmReads;
         const stableNodesPreserved =
           document.getElementById('scout-work-fav-btn') === favoriteButton &&
           document.querySelector('.scout-pub-addon') === publisherAddon &&
-          document.querySelector('.scout-tag-addon') === tagAddon;
+          document.querySelector('#scout-tags-manage') === tagAddon;
 
         const firstTag = document.querySelector('.video-tags-list a.is-keyword');
         firstTag?.setAttribute('href', '/tags/documentary-updated');
@@ -1669,12 +1707,58 @@ try {
       await page.locator('#scout-work-fav-btn').click();
       await page.locator('#scout-work-fav-btn.is-saved').waitFor();
       assert.equal(await page.locator('#scout-work-fav-btn').getAttribute('aria-pressed'), 'true');
-      await page.locator('[data-scout-tag="night"] .scout-tag-add-action').click();
+      await page.locator('#scout-tags-manage').click();
       await page.locator('#scout-collect-dialog').waitFor();
       await page.locator('#scout-collect-cancel').click();
       await page.locator('.scout-pub-love-action').click();
       await page.locator('.scout-pub-love-action.is-loved').waitFor();
       assert.match(await page.locator('.scout-pub-love-action').textContent() || '', /已关注/);
+
+      await page.locator('#scout-tags-manage').click();
+      await page.locator('#scout-tag-choice').selectOption({ label: 'night' });
+      await page.locator('#scout-tag-love').click();
+      assert.equal(await page.evaluate(() => GM_getValue('creamu_scout_lexicon_terms', []).find(t => t.text === 'night')?.loved), true);
+      await page.locator('#scout-tags-manage').click();
+      await page.locator('#scout-tag-choice').selectOption({ label: 'night' });
+      await page.locator('[data-tag-search="preference"]').click();
+      await waitWorkbenchOpen(page);
+      assert.equal(await page.locator('.scout-search-condition', { hasText: 'night' }).locator('select').first().inputValue(), 'preference');
+      await page.locator('[data-context-action="tags"]').click();
+      assert.equal(await page.locator('#scout-search-word-picker').evaluate(el => el.open), true);
+      await page.locator('#scout-combo-free-input').fill('portrait');
+      const requestsBefore = await page.evaluate(() => window.__scoutRequests.length);
+      await page.locator('#scout-combo-search-btn').click();
+      assert.equal(await page.locator('#scout-combo-free-input').inputValue(), '', 'submitted text is not restored during render');
+      assert.equal(await page.evaluate(() => window.__scoutRequests.length), requestsBefore, 'direct search does not start three-site assessment');
+      const destination = new URL(await page.evaluate(() => window.__scoutOpenedUrls.at(-1)));
+      const filter = JSON.parse(decodeURIComponent(destination.hash.slice('#creamu-exact='.length)));
+      assert.equal(destination.hostname, 'www.xvideos.com');
+      assert.match(destination.searchParams.get('k'), /portrait/);
+      assert.doesNotMatch(destination.searchParams.get('k'), /night/);
+      assert.equal(filter.mode, 'browse');
+      assert.equal(filter.conditions.find(c => c.text === 'night').role, 'preference');
+      await page.locator('#scout-save-current-search-btn').click();
+      await page.locator('#scout-search-label').fill('Continue documentary');
+      await page.locator('#scout-search-save-confirm').click();
+      await page.evaluate(() => {
+        const tracks = GM_getValue('creamu_scout_tracks', []);
+        tracks.find(t => t.site === 'xvideos').last_seen_page = 5;
+        GM_setValue('creamu_scout_tracks', tracks);
+      });
+      await openScoutTab(page, 'tracks');
+      await page.locator('.scout-track-open-btn').click();
+      const resume = new URL(await page.evaluate(() => window.__scoutOpenedUrls.at(-1)));
+      assert.equal(resume.searchParams.get('p'), '4');
+      assert.equal(JSON.parse(decodeURIComponent(resume.hash.slice('#creamu-exact='.length))).mode, 'browse');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.locator('#scout-wb-close-btn').click();
+      await page.locator('#scout-tags-manage').click();
+      await assertVisibleElementsInsideViewport(page, '#scout-collect-dialog', 'mobile tag actions');
+      assert.ok(await page.locator('#scout-collect-dialog button').evaluateAll(nodes =>
+        nodes.every(el => { const height = el.getBoundingClientRect().height; return height >= 30 && height <= 36; })
+      ), 'mobile tag actions do not inflate every button');
+      await captureScoutUi(page, 'scout-mobile-tag-actions');
+      await page.locator('#scout-collect-cancel').click();
     }
   );
 
@@ -1699,6 +1783,8 @@ try {
       await page.locator('#scout-desc-toggle').waitFor();
       await page.locator('.video-tags-list.scout-tags-collapsed').waitFor();
       await page.locator('.video-description.scout-desc-collapsed').waitFor();
+      assert.equal(await page.locator('.main-uploader').isVisible(), true, 'collapsing tags preserves the uploader');
+      assert.equal(await page.locator('[data-scout-tag="landscape"]').isVisible(), false);
       await assertNoInlinePresentation(
         page,
         '.video-tags-list, .video-description, #scout-tags-toggle, #scout-desc-toggle, .scout-pub-addon',
@@ -1709,9 +1795,13 @@ try {
         '#scout-work-fav-btn, #scout-tags-toggle, #scout-desc-toggle, .scout-pub-action',
         'mobile detail controls'
       );
+      assert.ok(await page.locator('#scout-work-fav-bar button, .scout-pub-action, #scout-tags-toggle, #scout-desc-toggle').evaluateAll(nodes =>
+        nodes.every(el => { const rect = el.getBoundingClientRect(); return rect.height >= 30 && rect.height <= 36 && rect.width < innerWidth * .75; })
+      ), 'secondary detail actions remain compact on mobile');
 
       await page.locator('#scout-tags-toggle').click();
       await page.locator('.video-tags-list.scout-tags-expanded').waitFor();
+      assert.equal(await page.locator('[data-scout-tag="landscape"]').isVisible(), true);
       assert.equal(await page.locator('#scout-tags-toggle').getAttribute('aria-expanded'), 'true');
       await page.locator('#scout-desc-toggle').click();
       await page.locator('.video-description.scout-desc-expanded').waitFor();
@@ -1724,8 +1814,101 @@ try {
     }
   );
 
+  for (const site of ['xvideos', 'xnxx', 'eporner']) {
+    await runCase(
+      'Scout detail context: preserves the current work and draft across tabs on ' + site,
+      {
+        host: 'www.' + site + '.com',
+        fixtureFile: 'xvideos-detail.html',
+        scriptPath: PATHS.scoutDist,
+        gmValues: SCOUT_DETAIL_FIXTURE_DATA,
+        beforeScript: page => page.evaluate(site => {
+          history.replaceState({}, '', site === 'xvideos' ? '/video.alpha001/sample' : '/video-alpha001/sample');
+          if (site === 'xnxx') {
+            document.querySelector('#content').id = 'video-content-metadata';
+            const title = document.querySelector('.page-title');
+            const replacement = document.createElement('div');
+            replacement.className = 'video-title';
+            replacement.innerHTML = '<strong>Sample Documentary</strong>';
+            title.replaceWith(replacement);
+          }
+          if (site === 'eporner') {
+            const title = document.querySelector('.page-title');
+            const heading = document.createElement('h1');
+            heading.className = 'page-title';
+            heading.style.cssFloat = 'left';
+            heading.textContent = title.textContent;
+            title.replaceWith(heading);
+            const tags = document.querySelector('.video-tags-list');
+            tags.id = 'video-info-tags';
+            tags.querySelectorAll('a.is-keyword').forEach(a => {
+              a.href = a.getAttribute('href').replace('/tags/', '/tag/');
+              a.parentElement.className = 'vit-category';
+            });
+            tags.querySelector('.main-uploader').classList.add('vit-uploader');
+            document.body.insertAdjacentHTML('afterbegin', '<nav><a href="/cat/unrelated">Unrelated navigation category</a></nav>');
+          }
+        }, site),
+      },
+      async page => {
+        await page.locator('#scout-detail-console').click();
+        const current = page.locator('#scout-workbench-context');
+        await current.waitFor();
+        await page.locator('#scout-combo-free-input').fill('unfinished draft');
+        const initialTitle = await current.locator('strong').textContent();
+        await page.evaluate(() => { window.__currentWorkNode = document.getElementById('scout-workbench-context').firstElementChild; });
+        for (const tab of ['tracks', 'works', 'combo']) {
+          await openScoutTab(page, tab);
+          assert.equal(await current.locator('strong').textContent(), initialTitle);
+          assert.equal(await page.evaluate(() => document.getElementById('scout-workbench-context').firstElementChild === window.__currentWorkNode), true);
+        }
+        assert.equal(await page.locator('#scout-combo-free-input').inputValue(), 'unfinished draft');
+        await current.locator('[data-context-action="favorite"]').click();
+        await current.locator('[data-context-action="favorite"][aria-pressed="true"]').waitFor();
+        assert.equal(await page.locator('#scout-work-fav-btn').getAttribute('aria-pressed'), 'true');
+        const work = await page.evaluate(() => GM_getValue('creamu_scout_works', [])[0]);
+        assert.ok(work.tags.includes('landscape'));
+        assert.ok(!work.tags.some(tag => /Unrelated navigation/.test(tag)));
+        assert.equal(await page.locator('#scout-combo-free-input').inputValue(), 'unfinished draft');
+        await openScoutTab(page, 'works');
+        await current.locator('[data-context-action="tags"]').click();
+        await page.locator('[data-jlc-wb-page="combo"]:not([hidden])').waitFor();
+        assert.equal(await page.locator('#scout-search-word-picker').evaluate(el => el.open), true);
+        assert.equal(await page.locator('#scout-combo-free-input').inputValue(), 'unfinished draft');
+        await page.evaluate(() => {
+          document.querySelector('.scout-detail-title').textContent = 'Next documentary';
+          history.pushState({}, '', location.hostname.includes('xvideos') ? '/video.beta002/next' : '/video-beta002/next');
+        });
+        await current.locator('strong', { hasText: 'Next documentary' }).waitFor();
+        await current.locator('[data-context-action="favorite"][aria-pressed="false"]').waitFor();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await current.locator('[data-context-action="return"]').click();
+        await waitWorkbenchClosed(page);
+        assert.notEqual(await page.locator('body').evaluate(el => el.style.overflow), 'hidden');
+        assert.equal(await page.evaluate(() => document.activeElement.classList.contains('scout-detail-title')), true);
+        await page.locator('#scout-detail-console').click();
+        await assertScoutPageLayout(page, 'combo');
+        const toolbar = await page.locator('#scout-work-fav-bar').boundingBox();
+        assert.ok(toolbar.x >= 0 && toolbar.x + toolbar.width <= 391, 'toolbar clears native floated headings');
+        await page.locator('#scout-combo-free-input').fill('keyboard draft');
+        await page.evaluate(() => {
+          Object.defineProperty(visualViewport, 'height', { configurable: true, value: 400 });
+          visualViewport.dispatchEvent(new Event('resize'));
+        });
+        const input = await page.locator('#scout-combo-free-input').boundingBox();
+        const footer = await page.locator('.scout-combo-dock').boundingBox();
+        assert.ok(input.y >= 0 && input.y + input.height <= footer.y, 'detail context leaves room for keyboard input');
+        await page.evaluate(() => { delete visualViewport.height; visualViewport.dispatchEvent(new Event('resize')); });
+        await captureScoutUi(page, 'scout-detail-context-' + site);
+        await page.evaluate(() => history.pushState({}, '', '/?k=sample'));
+        await current.waitFor({ state: 'hidden' });
+        assert.equal(await page.locator('#scout-work-fav-bar').count(), 0, 'detail controls leave with the detail page');
+      }
+    );
+  }
+
   await runCase(
-    'Scout tracking mobile: breakpoint bar dismisses and locates the saved item',
+    'Scout tracking mobile: inline bar locates the saved item and opens management',
     {
       host: 'www.xvideos.com',
       fixtureFile: 'xvideos-list.html',
@@ -1741,28 +1924,161 @@ try {
         pathname: '/',
         title: /site list fixture/,
       });
-      const pagebar = page.locator('#jlc-tracking-pagebar');
+      const pagebar = page.locator('#scout-search-track-bar');
       await pagebar.waitFor({ timeout: 5000 });
-      await assertNoInlinePresentation(page, '#jlc-tracking-pagebar', 'tracking pagebar');
-      await assertVisibleElementsInsideViewport(
-        page,
-        '#jlc-tracking-pagebar, #jlc-tracking-pagebar button',
-        'tracking pagebar controls'
-      );
-      assert.match(await pagebar.textContent() || '', /本页有断点/);
-      assert.match(await page.locator('#scout-bp-jump-btn').textContent() || '', /定位/);
-
-      await page.locator('#scout-bp-close-bar-btn').click();
-      await pagebar.waitFor({ state: 'detached' });
-      await page.evaluate(() => history.pushState({}, '', '/?k=other'));
-      await page.waitForTimeout(400);
-      await page.evaluate(() => history.pushState({}, '', '/?k=documentary+city'));
-      await pagebar.waitFor({ timeout: 5000 });
+      await assertNoInlinePresentation(page, '#scout-search-track-bar', 'tracking bar');
+      await assertVisibleElementsInsideViewport(page, '#scout-search-track-bar, #scout-search-track-bar button', 'tracking controls');
+      assert.equal(await pagebar.evaluate(el => getComputedStyle(el).position), 'static');
       await page.locator('#scout-bp-jump-btn').click();
-      await pagebar.waitFor({ state: 'detached' });
       await page.locator('#video_alpha001.scout-breakpoint-highlight').waitFor();
+      await page.locator('#scout-search-track-toggle').click();
+      await page.locator('[data-jlc-wb-page="tracks"]:not([hidden])').waitFor();
+      await waitWorkbenchOpen(page);
+      await page.locator('#scout-wb-close-btn').click();
+      await page.evaluate(() => history.pushState({}, '', '/?k=other'));
+      await page.locator('#scout-search-track-toggle', { hasText: '收藏搜索' }).waitFor();
+      await page.evaluate(() => history.pushState({}, '', '/?k=documentary+city'));
+      await page.locator('#scout-search-track-toggle', { hasText: '已追更' }).waitFor();
     }
   );
+
+  for (const site of ['xvideos', 'xnxx', 'eporner']) {
+    const searchPath = site === 'xvideos' ? '/?k=documentary' : '/search/documentary/';
+    await runCase(
+      'Scout browsing: explicit preview, navigation, and mobile drawer on ' + site,
+      {
+        host: 'www.' + site + '.com',
+        fixtureHtml: scoutBrowseFixture(site),
+        scriptPath: PATHS.scoutDist,
+        viewport: { width: 1440, height: 900 },
+        gmValues: {
+          ...SCOUT_WORKBENCH_FIXTURE_DATA,
+          scout_combo_tokens: [],
+          creamu_scout_tracks: [{ id: 'browse-track', site, query: 'documentary', label: 'Documentary', url: 'https://www.' + site + '.com' + searchPath, last_seen_page: 1, last_seen_item: '' }],
+          creamu_scout_publishers: [],
+        },
+        beforeScript: (page) => page.evaluate(async ({ site, searchPath }) => {
+          history.replaceState({}, '', searchPath);
+          window.__scoutOpenedUrls = [];
+          window.GM_openInTab = url => window.__scoutOpenedUrls.push(url);
+          // A real, locally generated video exercises playback without external media.
+          if (site !== 'eporner') {
+            const canvas = document.createElement('canvas');
+            canvas.width = 320; canvas.height = 180;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#586c61'; ctx.fillRect(0, 0, 320, 180);
+            ctx.fillStyle = '#e8e5d6'; ctx.font = '24px sans-serif'; ctx.fillText('Preview sample', 35, 95);
+            const stream = canvas.captureStream(10);
+            const recorder = new MediaRecorder(stream);
+            const chunks = [];
+            recorder.ondataavailable = e => chunks.push(e.data);
+            const stopped = new Promise(resolve => recorder.onstop = resolve);
+            recorder.start();
+            await new Promise(resolve => setTimeout(resolve, 200));
+            recorder.stop(); await stopped;
+            stream.getTracks().forEach(track => track.stop());
+            const url = URL.createObjectURL(new Blob(chunks, { type: recorder.mimeType }));
+            document.querySelectorAll('img').forEach(img => img.setAttribute('data-pvv', url));
+          }
+        }, { site, searchPath }),
+      },
+      async page => {
+        await waitFab(page);
+        const card = page.locator('#video_alpha001');
+        const state = () => page.evaluate(() => ({
+          clicks: Object.keys(GM_getValue('creamu_scout_clicks', {})).length,
+          last: GM_getValue('creamu_scout_tracks', [])[0].last_seen_item,
+          opened: window.__scoutOpenedUrls.length,
+        }));
+        await card.dispatchEvent('pointerdown', { button: 0 });
+        await card.locator('.uploader a').evaluate(el => el.addEventListener('click', e => e.preventDefault()));
+        await card.locator('.uploader a').click();
+        assert.deepEqual(await state(), { clicks: 0, last: '', opened: 0 });
+        if (site !== 'eporner') {
+          await card.locator('.scout-preview-button').click();
+          await page.waitForFunction(() => document.querySelector('.scout-list-preview-video')?.readyState >= 2);
+          assert.deepEqual(await state(), { clicks: 0, last: '', opened: 0 }, 'preview is not a visit or breakpoint');
+          await card.locator('.scout-preview-button').click();
+          assert.equal(await page.locator('.scout-list-preview-video').count(), 0);
+        } else {
+          assert.equal(await page.locator('.scout-preview-button').count(), 0, 'no unsupported preview action');
+        }
+        await card.locator('.cover-link').click();
+        assert.deepEqual(await state(), { clicks: 1, last: 'alpha001', opened: 1 });
+        const second = page.locator('#video_alpha002 .cover-link');
+        await second.dispatchEvent('auxclick', { button: 1 });
+        assert.equal((await state()).last, 'alpha002', 'middle click records the actual destination');
+        await openAndCheckTitle(page, /Scout/);
+        await assertScoutPageLayout(page, 'combo');
+        const space = await page.evaluate(() => ({
+          pageRight: document.getElementById('content').getBoundingClientRect().right,
+          panelLeft: document.getElementById('jlc-wb').getBoundingClientRect().left,
+        }));
+        assert.ok(space.pageRight <= space.panelLeft, 'docked console leaves the page visible for comparison');
+        await captureScoutUi(page, 'scout-' + site + '-desktop');
+        await page.locator('#scout-wb-close-btn').click();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.locator('#jlc-wb-fab').click();
+        assert.ok((await page.locator('#jlc-wb').boundingBox()).height < 600, 'mobile opens as a partial-height drawer');
+        assert.notEqual(await page.locator('body').evaluate(el => el.style.overflow), 'hidden');
+        await captureScoutUi(page, 'scout-' + site + '-mobile');
+        await page.locator('#scout-combo-free-input').fill('draft not submitted');
+        assert.ok((await page.locator('#jlc-wb').boundingBox()).height > 780, 'editing expands the drawer');
+        assert.equal(await page.locator('body').evaluate(el => el.style.overflow), 'hidden');
+        await page.evaluate(() => {
+          window.__scoutViewportHeightDescriptor = Object.getOwnPropertyDescriptor(visualViewport, 'height');
+          Object.defineProperty(visualViewport, 'height', { configurable: true, value: 400 });
+          visualViewport.dispatchEvent(new Event('resize'));
+        });
+        const keyboardPanel = await page.locator('#jlc-wb').boundingBox();
+        assert.ok(keyboardPanel.y + keyboardPanel.height <= 401, 'drawer stays above a shortened visual viewport');
+        const keyboardInput = await page.locator('#scout-combo-free-input').boundingBox();
+        const keyboardFooter = await page.locator('.scout-combo-dock').boundingBox();
+        assert.ok(keyboardInput.y + keyboardInput.height <= keyboardFooter.y, 'focused input remains above the footer');
+        await page.evaluate(() => {
+          if (window.__scoutViewportHeightDescriptor) Object.defineProperty(visualViewport, 'height', window.__scoutViewportHeightDescriptor);
+          else delete visualViewport.height;
+          visualViewport.dispatchEvent(new Event('resize'));
+        });
+        const focusStyle = await page.locator('#scout-combo-free-input').evaluate(el => {
+          const cs = getComputedStyle(el); return [cs.backgroundColor, cs.color];
+        });
+        assert.notEqual(focusStyle[0], focusStyle[1], 'focused input remains readable');
+        await page.locator('#scout-search-word-picker > summary').click();
+        await page.locator('#scout-search-advanced > summary').click();
+        const scroll = await page.locator('.scout-combo-scroll').evaluate(el => { el.scrollTop = 120; return el.scrollTop; });
+        await page.locator('#scout-wb-close-btn').click();
+        assert.notEqual(await page.locator('body').evaluate(el => el.style.overflow), 'hidden');
+        await page.locator('#jlc-wb-fab').click();
+        assert.equal(await page.locator('#scout-combo-free-input').inputValue(), 'draft not submitted');
+        assert.equal(await page.locator('.scout-combo-scroll').evaluate(el => el.scrollTop), scroll);
+        await page.setViewportSize({ width: 320, height: 568 });
+        await assertScoutPageLayout(page, 'combo');
+        await page.setViewportSize({ width: 844, height: 390 });
+        await assertScoutPageLayout(page, 'combo');
+        await page.setViewportSize({ width: 390, height: 844 });
+        await openScoutSettingsTab(page, 'ui');
+        await page.locator('#scout-cfg-cream-site').uncheck();
+        await page.locator('#jlc-wb-settings-close').click();
+        await assertScoutPageLayout(page, 'combo');
+        assert.ok(await page.locator('#jlc-wb').evaluate(el => getComputedStyle(el).color !== 'rgba(0, 0, 0, 0)'));
+        await page.evaluate(() => {
+          window.__scoutFullScreenDescriptor = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+          Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: document.getElementById('content') });
+          document.dispatchEvent(new Event('fullscreenchange'));
+        });
+        assert.equal(await page.locator('#jlc-wb').isVisible(), false);
+        assert.equal(await page.locator('#jlc-wb-fab').isVisible(), false);
+        assert.notEqual(await page.locator('body').evaluate(el => el.style.overflow), 'hidden');
+        await page.evaluate(() => {
+          if (window.__scoutFullScreenDescriptor) Object.defineProperty(document, 'fullscreenElement', window.__scoutFullScreenDescriptor);
+          else delete document.fullscreenElement;
+          document.dispatchEvent(new Event('fullscreenchange'));
+        });
+        await waitFab(page);
+      }
+    );
+  }
 
   for (const theme of SCOUT_THEME_CASES.slice(1)) {
     await runCase(
@@ -1879,6 +2195,7 @@ try {
     },
     async (page) => {
       await openAndCheckTitle(page, /ExH/i);
+      await page.locator('#exc-wb-layout-toggle').click();
       await exerciseWorkbenchGeometry(page, {
         fab: 'exhFabDragBound',
         panel: 'exhPanelResizeBound',
@@ -2045,6 +2362,10 @@ try {
       },
       beforeScript: async (page) => {
         await page.evaluate(() => {
+          const cover = document.createElement('td');
+          cover.className = 'gl1e';
+          cover.innerHTML = '<img alt="cover" width="100" height="140" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">';
+          document.querySelector('.itg tr').prepend(cover);
           window.GM_xmlhttpRequest = (options) => {
             setTimeout(() => {
               options.onload?.({
@@ -2061,7 +2382,7 @@ try {
     async (page) => {
       const card = page.locator('.exc-gl-item');
       await card.waitFor({ timeout: 15000 });
-      await card.hover();
+      await card.locator('.exc-cover-host').hover();
       await page.locator('#exc-hover-preview').waitFor({ state: 'visible', timeout: 2000 });
       await page.mouse.move(2, 2);
       await page.waitForTimeout(1200);
@@ -2850,7 +3171,8 @@ try {
         return {
           requests: window.__jlcDetailResourceRequests.slice(),
           reusedDom: centerNode?.querySelector('.jlc-resource-card') === window.__jlcInitialResourceCard,
-          cards: centerNode?.querySelectorAll('.jlc-resource-card').length || 0,
+          cards: Array.from(centerNode?.querySelectorAll('.jlc-resource-card') || [])
+            .map(card => card.dataset.jlcResource).sort(),
           links: centerNode?.querySelectorAll('[data-jlc-resource="links"] a').length || 0,
           linksIsCard: links?.classList.contains('jlc-resource-card') || false,
           linksInsideGrid: !!(links && grid?.contains(links)),
@@ -2867,7 +3189,8 @@ try {
       });
       assert.equal(deferred.reusedDom, true, 'delayed startup passes should preserve resource card DOM');
       assert.equal(deferred.requests.length, 0, 'offscreen resource cards should not issue network requests');
-      assert.equal(deferred.cards, 3, 'external links should not consume a resource grid column');
+      assert.deepEqual(deferred.cards, ['magnet', 'screenshot', 'subtitle', 'trailer'],
+        'resource cards should include subtitles and keep external links outside the grid');
       assert.ok(deferred.links > 0, 'the enabled external-links module should be wired into the resource center');
       assert.equal(deferred.linksIsCard, false, 'external links should render as a compact strip');
       assert.equal(deferred.linksInsideGrid, false, 'external links should stay outside the resource grid');
@@ -2965,7 +3288,15 @@ try {
         (startupLibrary.transactions.byStore.videos || 0) <= 1,
         'JLC startup should not read the full video library for hidden UI'
       );
-      await openAndCheckTitle(page, /JavLibrary|Creamu/i, 25000);
+      await openAndCheckTitle(page, /控制台/i, 25000);
+      const comparison = await page.evaluate(() => {
+        const panel = document.getElementById('jlc-wb').getBoundingClientRect();
+        const grid = document.getElementById('grid-b').getBoundingClientRect();
+        return { docked: document.documentElement.classList.contains('jlc-console-docked'), gridRight: grid.right, panelLeft: panel.left };
+      });
+      assert.equal(comparison.docked, true, 'desktop console should leave space for the current page');
+      assert.ok(comparison.gridRight <= comparison.panelLeft, 'page and console must remain simultaneously visible');
+      await page.getByRole('button', { name: '切换为自由浮窗' }).click();
       await exerciseWorkbenchGeometry(page, {
         fab: 'jlcFabDragBound',
         panel: 'jlcPanelResizeBound',
@@ -3012,7 +3343,7 @@ try {
       await page.evaluate(() => {
         document.querySelector('.jlc-tool-btn.j-l')?.click();
       });
-      await page.locator('.jlc-tool-btn.j-l.active-like').waitFor();
+      await page.locator('.jlc-tool-btn.j-l.active-like').waitFor({ state: 'attached' });
       await page.evaluate(() => window.__resetJlcStorageMetrics());
       await openWorkbenchNav(page, 'filter');
       await openWorkbenchNav(page, 'library');
@@ -3062,10 +3393,14 @@ try {
           await exerciseJlcCoverDownloadDialog(page, 'JLC cover download dialog');
         }
       }
-      await page.locator('#jlc-wb-settings-close').click();
-
-      await page.locator('#jlc-wb-close-btn').click();
+      await page.locator('#jlc-wb-settings-close').focus();
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('#jlc-wb-settings-btn').getAttribute('aria-expanded'), 'false');
+      assert.equal(await page.locator('#jlc-wb-settings-btn').evaluate(el => el === document.activeElement), true);
+      await page.keyboard.press('Escape');
       await waitWorkbenchClosed(page, 25000);
+      assert.equal(await page.locator('#jlc-wb-fab').getAttribute('aria-expanded'), 'false');
+      assert.equal(await page.locator('#jlc-wb-fab').evaluate(el => el === document.activeElement), true);
     }
   );
 
@@ -3090,7 +3425,7 @@ try {
     },
     async (page) => {
       await waitJlcListDecorated(page);
-      await openAndCheckTitle(page, /JavLibrary|Creamu/i, 25000);
+      await openAndCheckTitle(page, /控制台/i, 25000);
       await page.waitForFunction(
         (count) => document.querySelectorAll('#jlc-wb-tracking-root .jlc-wb-item').length === count,
         JLC_TRACKING_STRESS_COUNT,
@@ -3272,8 +3607,8 @@ try {
         jlc_config_stable: {
           version: 3,
           metatube_url: 'https://meta.test',
-          fav_tags: ['Priority'],
-          custom_persons: [],
+          fav_tags: ['Priority', ' priority ', 'Scene'],
+          custom_persons: ['Known', 'Another'],
           webdav_enabled: false,
         },
       },
@@ -3283,6 +3618,12 @@ try {
       beforeScript: async (page) => {
         await page.evaluate(async () => {
           await window.__seedJlcLibrary({ movieIds: ['TEST-001'] });
+          window.GM_setClipboard = text => { window.__copiedMetaTag = text; };
+          const setValue = window.GM_setValue;
+          window.GM_setValue = (key, value) => {
+            if (key === 'jlc_config_stable' && window.__failTagSave) throw new Error('Storage unavailable');
+            return setValue(key, value);
+          };
           window.__creamuMetaStats = {
             active: 0,
             maxActive: 0,
@@ -3315,7 +3656,10 @@ try {
                 responseText: JSON.stringify({
                   data: [{
                     number: avid,
-                    genres: ['Priority', 'Genre ' + index],
+                    genres: ['Priority', 'Genre ' + index, ...(index === 2
+                      ? ['Scene', 'Priority Extended', ...Array.from({ length: 14 }, (_, tagIndex) => '分类标签 ' + (tagIndex + 1))]
+                      : [])],
+                    actors: index === 1 ? ['Known', 'Another'] : index === 4 ? ['Known'] : [],
                     release_date: '2026-07-' + String((index % 28) + 1).padStart(2, '0'),
                   }],
                 }),
@@ -3382,7 +3726,7 @@ try {
       assert.equal(new Set(stats.cachedAvids).size, 48, 'metadata cache rows should stay unique by avid');
       assert.equal(
         await page.locator('#grid-b .item-b .meta-tag.hot').count(),
-        48,
+        50,
         'every card should render its matching hot tag'
       );
       assert.equal(
@@ -3390,6 +3734,167 @@ try {
         true,
         'the startup Emby snapshot should decorate matching cards'
       );
+      const card = index => page.locator('[data-jlc-avid="TEST-' + String(index).padStart(3, '0') + '"]');
+      const frameColor = index => card(index).locator('.box-b').evaluate(el => getComputedStyle(el).outlineColor);
+      assert.equal(await page.locator('#grid-b .preference-match-item').count(), 3, 'metadata arrival updates automatic highlights');
+      for (const index of [1, 2, 4]) {
+        assert.equal(await card(index).locator('.b-preference').textContent(), '偏好命中 2 项');
+      }
+      assert.equal(await frameColor(1), 'rgb(82, 181, 75)', 'Emby keeps green while exposing preference count');
+      assert.equal(await frameColor(2), 'rgb(255, 204, 0)', 'two different tags produce gold');
+      assert.equal(await frameColor(4), 'rgb(255, 204, 0)', 'one tag and a familiar actor produce gold');
+      assert.equal(await card(3).locator('.b-preference').count(), 0, 'duplicate configured tags do not pass the threshold');
+      assert.deepEqual(await page.evaluate(() => window.__readJlcStore('videos')), [], 'automatic matches never write manual marks');
+      const assertCompactTags = async () => {
+        const layout = await card(2).evaluate(item => {
+          const cover = item.querySelector('.cover-b').getBoundingClientRect();
+          const badges = item.querySelector('.jlc-badge-container').getBoundingClientRect();
+          const overlay = item.querySelector('.meta-overlay-box');
+          const tags = [...overlay.querySelectorAll('.meta-tag:not(.more)')].map(tag => tag.getBoundingClientRect());
+          return {
+            maxTagHeight: Math.max(...tags.map(rect => rect.height)),
+            contained: badges.bottom <= cover.bottom && badges.right <= cover.right,
+            scrollable: overlay.scrollHeight > overlay.clientHeight && getComputedStyle(overlay).overflowY === 'auto'
+          };
+        });
+        assert.ok(layout.maxTagHeight <= 20, 'interactive tags retain their compact height');
+        assert.equal(layout.contained, true, 'dense tags stay within the cover');
+        assert.equal(layout.scrollable, true, 'excess tags remain reachable by scrolling');
+      };
+      await assertCompactTags();
+      const fullWidthTag = card(2).getByRole('button', { name: '复制标签：Priority Extended', exact: true });
+      assert.equal(await fullWidthTag.evaluate(el => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return el.childElementCount === 0 && el.scrollWidth <= el.clientWidth
+          && el.getBoundingClientRect().width <= range.getBoundingClientRect().width + 16;
+      }), true, 'plain text tags reserve no width for a secondary control');
+      assert.match(await fullWidthTag.getAttribute('title'), /Priority Extended\n单击复制；右键或长按/);
+      const touch = await page.context().newCDPSession(page);
+      await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await assertCompactTags();
+      const lastVisibleTag = card(2).getByRole('button', { name: '复制标签：分类标签 8', exact: true });
+      await lastVisibleTag.scrollIntoViewIfNeeded();
+      const rect = await lastVisibleTag.boundingBox();
+      const point = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+      const touchStart = () => touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+      const touchEnd = () => touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await touchStart();
+      await touchEnd();
+      assert.equal(await page.evaluate(() => window.__copiedMetaTag), '分类标签 8', 'scrolling exposes compact tags for copying');
+      await page.evaluate(() => { window.__copiedMetaTag = 'unchanged'; });
+      await touchStart();
+      await page.locator('#jlc-meta-tag-menu:popover-open').waitFor({ timeout: 1500 });
+      await touchEnd();
+      assert.equal(await page.evaluate(() => window.__copiedMetaTag), 'unchanged', 'releasing a long press does not copy');
+      await page.keyboard.press('Escape');
+      await touchStart();
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: point.x, y: point.y - 35 }] });
+      await touchEnd();
+      await page.waitForTimeout(550);
+      assert.equal(await page.locator('#jlc-meta-tag-menu:popover-open').count(), 0, 'scroll gestures cancel long press');
+      assert.equal(await page.evaluate(() => window.__copiedMetaTag), 'unchanged', 'scroll gestures do not copy');
+      if (process.env.CREAMU_E2E_SCREENSHOTS) {
+        await card(2).screenshot({ path: process.env.CREAMU_E2E_SCREENSHOTS + '/jlc-compact-tags-touch.png' });
+      }
+      await touch.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+      await touch.detach();
+      await page.setViewportSize({ width: 1280, height: 800 });
+      const originalUrl = page.url();
+      await card(2).getByRole('button', { name: '复制标签：Priority Extended', exact: true }).press('Enter');
+      assert.equal(await page.evaluate(() => window.__copiedMetaTag), 'Priority Extended', 'copy uses the full name even when visually truncated');
+      await card(2).getByRole('button', { name: '复制标签：Priority', exact: true }).press('Shift+F10');
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('#jlc-meta-tag-menu:popover-open').count(), 0, 'Escape dismisses the tag menu');
+      await card(2).getByRole('button', { name: '复制标签：Priority', exact: true }).click({ button: 'right' });
+      assert.equal(await page.evaluate(() => window.__copiedMetaTag), 'Priority Extended', 'opening the context menu does not copy');
+      if (process.env.CREAMU_E2E_SCREENSHOTS) {
+        await page.screenshot({ path: process.env.CREAMU_E2E_SCREENSHOTS + '/jlc-tag-menu.png' });
+      }
+      await page.evaluate(() => { window.__failTagSave = true; });
+      await page.getByRole('button', { name: '在所有影片中隐藏此标签', exact: true }).click();
+      await page.getByText('标签显示设置保存失败，请重试。', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: '复制标签：Priority', exact: true }).count(), 48, 'failed persistence does not hide tags');
+      await page.evaluate(() => { window.__failTagSave = false; });
+      await page.getByRole('button', { name: '在所有影片中隐藏此标签', exact: true }).click();
+      assert.equal(await page.getByRole('button', { name: '复制标签：Priority', exact: true }).count(), 0, 'hiding affects every rendered film');
+      assert.equal(await card(2).getByRole('button', { name: '复制标签：Priority Extended', exact: true }).count(), 1, 'hiding matches the complete tag, not a substring');
+      assert.deepEqual(await page.evaluate(() => GM_getValue('jlc_config_stable').hidden_meta_tags), ['Priority']);
+      assert.equal(await card(2).locator('.b-preference').textContent(), '偏好命中 2 项');
+      assert.equal(await frameColor(2), 'rgb(255, 204, 0)', 'display preferences do not change matching');
+      assert.equal(page.url(), originalUrl, 'tag controls do not navigate');
+      assert.deepEqual(await page.evaluate(() => window.__readJlcStore('videos')), [], 'tag controls do not mark films as visited');
+      assert.equal(await page.evaluate(() => window.__creamuMetaStats.requests.length), 48, 'display changes do not refetch metadata');
+      await (await waitFab(page)).click();
+      await waitWorkbenchOpen(page);
+      await page.locator('#jlc-wb-settings-btn').click();
+      await page.locator('[data-jlc-settings-tab="display"]').click();
+      if (process.env.CREAMU_E2E_SCREENSHOTS) {
+        await page.getByRole('button', { name: '恢复显示标签：Priority', exact: true }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: process.env.CREAMU_E2E_SCREENSHOTS + '/jlc-hidden-tags-settings.png' });
+      }
+      await page.getByRole('button', { name: '恢复显示标签：Priority', exact: true }).click();
+      assert.equal(await page.getByRole('button', { name: '复制标签：Priority', exact: true }).count(), 48, 'restoring refreshes every rendered film');
+      assert.deepEqual(await page.evaluate(() => GM_getValue('jlc_config_stable').hidden_meta_tags), []);
+      await page.locator('#jlc-wb-settings-close').click();
+      await page.locator('#jlc-wb-close-btn').click();
+      if (process.env.CREAMU_E2E_SCREENSHOTS) {
+        for (const index of [1, 2, 4]) {
+          await card(index).screenshot({ path: process.env.CREAMU_E2E_SCREENSHOTS + '/jlc-preference-' + index + '.png' });
+        }
+      }
+
+      await card(2).locator('.jlc-card-more summary').click();
+      await card(2).getByRole('button', { name: '屏蔽', exact: true }).click();
+      await card(2).getByRole('button', { name: '取消屏蔽', exact: true }).waitFor();
+      assert.notEqual(await frameColor(2), 'rgb(255, 204, 0)', 'manual blocking suppresses automatic gold');
+      await card(2).getByRole('button', { name: '取消屏蔽', exact: true }).click();
+      await card(2).getByRole('button', { name: '屏蔽', exact: true }).waitFor();
+      assert.equal(await frameColor(2), 'rgb(255, 204, 0)', 'undoing a block restores the qualifying frame');
+      await card(3).locator('.jlc-card-more summary').click();
+      await card(3).getByRole('button', { name: '心动', exact: true }).click();
+      await card(3).getByRole('button', { name: '取消心动', exact: true }).waitFor();
+      assert.equal(await frameColor(3), 'rgb(255, 204, 0)', 'manual like needs no automatic threshold');
+      const manualMarks = await page.evaluate(() => window.__readJlcStore('videos'));
+      await (await waitFab(page)).click();
+      await waitWorkbenchOpen(page);
+      await openWorkbenchNav(page, 'filter');
+      const favorites = page.getByRole('textbox', { name: '心动标签', exact: true });
+      await favorites.fill('');
+      await favorites.dispatchEvent('change');
+      await page.waitForFunction(() => !document.querySelector('#grid-b .preference-match-item'));
+      assert.equal(await page.locator('#grid-b .b-preference').count(), 0, 'editing preferences removes stale counts');
+      assert.equal(await frameColor(1), 'rgb(82, 181, 75)');
+      assert.notEqual(await frameColor(2), 'rgb(255, 204, 0)');
+      assert.equal(await frameColor(3), 'rgb(255, 204, 0)', 'editing preferences preserves manual gold');
+      await favorites.fill('Priority, priority, Scene');
+      await favorites.dispatchEvent('change');
+      await page.waitForFunction(() => document.querySelectorAll('#grid-b .preference-match-item').length === 3);
+      assert.equal(await frameColor(2), 'rgb(255, 204, 0)', 'cached metadata restores qualifying frames');
+      assert.deepEqual(await page.evaluate(() => window.__readJlcStore('videos')), manualMarks, 'preference edits never alter manual marks');
+      await page.locator('#jlc-wb-close-btn').click();
+      const genre3 = card(3).getByRole('button', { name: '复制标签：Genre 3', exact: true });
+      await genre3.click({ button: 'right' });
+      await page.evaluate(() => { window.__failTagSave = true; });
+      await page.getByRole('button', { name: '添加到心动标签', exact: true }).click();
+      await page.getByText('心动标签保存失败，请重试。', { exact: true }).waitFor();
+      assert.deepEqual(await page.evaluate(() => GM_getValue('jlc_config_stable').fav_tags), ['Priority', 'Scene']);
+      assert.equal(await genre3.evaluate(el => el.classList.contains('hot')), false);
+      await page.evaluate(() => { window.__failTagSave = false; });
+      await page.getByRole('button', { name: '添加到心动标签', exact: true }).click();
+      // Keyword matching also includes Genre 30–39; each configured keyword still counts once.
+      await page.waitForFunction(() => document.querySelectorAll('#grid-b .preference-match-item').length === 14);
+      assert.equal(await genre3.evaluate(el => el.classList.contains('hot')), true, 'new favorite updates tag color');
+      assert.equal(await card(3).locator('.b-preference').textContent(), '偏好命中 2 项');
+      assert.equal(await card(30).locator('.b-preference').textContent(), '偏好命中 2 项', 'offscreen films update through the same matching rules');
+      assert.deepEqual(await page.evaluate(() => GM_getValue('jlc_config_stable').fav_tags), ['Priority', 'Scene', 'Genre 3']);
+      assert.equal(await page.locator('#jlc-wb-i-fav').inputValue(), 'Priority, Scene, Genre 3', 'menu updates the existing settings field');
+      await genre3.click({ button: 'right' });
+      assert.equal(await page.getByRole('button', { name: '已添加到心动标签', exact: true }).isDisabled(), true, 'reopening cannot add duplicates');
+      await page.keyboard.press('Escape');
+      assert.equal(await page.evaluate(() => window.__creamuMetaStats.requests.length), 48, 'favorite changes reuse metadata');
+      assert.deepEqual(await page.evaluate(() => window.__readJlcStore('videos')), manualMarks, 'favorite tags do not change manual marks');
     }
   );
 
@@ -3405,7 +3910,7 @@ try {
     },
     async (page) => {
       await waitJlcListDecorated(page);
-      await openAndCheckTitle(page, /JavLibrary|Creamu/i, 25000);
+      await openAndCheckTitle(page, /控制台/i, 25000);
       const box = await page.locator('#jlc-wb').boundingBox();
       assert.ok(box, 'workbench should have a layout box');
       assert.ok(box.x >= -1, 'workbench should not start outside the left edge');

@@ -223,7 +223,7 @@
         });
 
         if (!order.length) return '';
-        return '<div class="jlc-resource-status-list">' + order.map(key => {
+        return '<details class="jlc-resource-sources"><summary>来源与检测结果 · ' + order.length + '</summary><div class="jlc-resource-status-list">' + order.map(key => {
             const item = map.get(key);
             if (!item) return '';
             const state = normalizeResourceStatusState(item.state || 'partial');
@@ -234,7 +234,7 @@
                 return '<a class="jlc-resource-status is-' + escapeHtml(state) + '" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer nofollow">' + inner + '</a>';
             }
             return '<span class="jlc-resource-status is-' + escapeHtml(state) + '">' + inner + '</span>';
-        }).join('') + '</div>';
+        }).join('') + '</div></details>';
     }
 
     function describeRequestStatus(result, fallback = '') {

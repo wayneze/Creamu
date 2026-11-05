@@ -572,18 +572,21 @@
         avid: ['识别码', '識別碼', '番号', '番號', 'id'],
         director: ['导演', '導演', '監督', 'director'],
         maker: ['制作商', '製作商', '制作', '製作', 'メーカー', 'maker', 'studio', '片商'],
-        label: ['发行商', '發行商', 'レーベル', 'label', '厂牌', '廠牌'],
-        cast: ['演员', '演員', '出演', '女优', '女優', 'actor', 'cast']
+        label: ['发行商', '發行商', 'レーベル', 'label', '厂牌', '廠牌']
     });
-    const DETAIL_COPY_FIELD_ORDER = ['avid', 'director', 'maker', 'label', 'cast'];
+    const DETAIL_COPY_FIELD_ORDER = ['avid', 'director', 'maker', 'label'];
     const DETAIL_COPY_FIELD_IDS = Object.freeze({
         javlibrary: {
             avid: 'video_id',
             director: 'video_director',
             maker: 'video_maker',
-            label: 'video_label',
-            cast: 'video_cast'
+            label: 'video_label'
         }
+    });
+    const DETAIL_CAST_LINKS = Object.freeze({
+        javlibrary: '#video_cast a[href*="vl_star.php"]',
+        javbus: '.col-md-3.info a[href*="/star/"]',
+        javdb: '.video-meta-panel a[href*="/actors/"], .movie-panel-info a[href*="/actors/"]'
     });
 
     function escapeRegExpText(value) {
@@ -654,11 +657,13 @@
         const root = preferredValueNode || getDetailFieldValueNode(block) || block;
         const clipboardText = root?.getAttribute?.('data-clipboard-text') || block?.getAttribute?.('data-clipboard-text');
         if (clipboardText) return compactText(clipboardText);
-        const anchorTexts = Array.from(root?.querySelectorAll?.('a') || [])
+        const content = root?.cloneNode(true);
+        content?.querySelectorAll('.jlc-detail-copy-btn, .avid-date-badge').forEach(node => node.remove());
+        const anchorTexts = Array.from(content?.querySelectorAll?.('a') || [])
             .map(node => compactText(node))
             .filter(Boolean);
         if (anchorTexts.length) return anchorTexts.join(' / ');
-        return stripDetailFieldLabel(root?.textContent || block?.textContent || '', aliases);
+        return stripDetailFieldLabel(content?.textContent || block?.textContent || '', aliases);
     }
 
     function resolveDetailFieldTarget(context, fieldKey) {
@@ -703,26 +708,29 @@
     }
 
     function ensureInlineDetailCopyButton(host, fieldKey, text) {
-        if (host instanceof HTMLAnchorElement && host.parentElement) host = host.parentElement;
+        const anchor = host instanceof HTMLAnchorElement ? host : null;
+        if (anchor) host = anchor.parentElement;
         if (!(host instanceof HTMLElement) || !fieldKey || !text) return;
-        let button = Array.from(host.children || []).find(node => node.classList?.contains('jlc-detail-copy-btn') && node.dataset.jlcCopyKey === fieldKey) || null;
+        const candidates = anchor ? [anchor.nextElementSibling] : Array.from(host.children);
+        let button = candidates.find(node => node?.classList?.contains('jlc-detail-copy-btn') && node.dataset.jlcCopyKey === fieldKey) || null;
         if (!button) {
             button = document.createElement('button');
             button.type = 'button';
             button.className = 'jlc-detail-copy-btn';
             button.dataset.jlcCopyKey = fieldKey;
             button.innerHTML = copy_Svg;
-            button.title = lang.copyButton;
-            button.setAttribute('aria-label', lang.copyButton);
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 copyPlainText(button.dataset.jlcCopyText || '');
                 return false;
             });
-            host.appendChild(button);
+            if (anchor) anchor.after(button);
+            else host.appendChild(button);
         }
         button.dataset.jlcCopyText = text;
+        button.title = lang.copyButton + '：' + text;
+        button.setAttribute('aria-label', button.title);
     }
 
     function removeDetailPageCopyButtons() {
@@ -743,6 +751,9 @@
             if (target?.host && target.text) {
                 ensureInlineDetailCopyButton(target.host, fieldKey, target.text);
             }
+        });
+        document.querySelectorAll(DETAIL_CAST_LINKS[context.site]).forEach(anchor => {
+            ensureInlineDetailCopyButton(anchor, 'cast', compactText(anchor));
         });
     }
 

@@ -303,10 +303,10 @@
       body.innerHTML =
         '<section class="jlc-wb-settings-section is-active">' +
         '<h3>外观</h3>' +
-        '<div class="legacy-row legacy-toggle"><span>站点奶油主题</span><input type="checkbox" id="exc-cfg-cream-site" ' +
+        '<div class="legacy-row legacy-toggle"><span>站点柔和浅色主题</span><input type="checkbox" id="exc-cfg-cream-site" ' +
         (config.cream_site_theme ? 'checked' : '') +
         '></div>' +
-        '<div class="legacy-note">e/exhentai 页面奶油底色。可随时关。</div>' +
+        '<div class="legacy-note">灰米色页面、舒展卡片间距。关闭后恢复站点原色，控制台保持浅色。宽屏可在控制台顶栏切换并排与浮窗。</div>' +
         '<label>详情页缩略图倍率</label>' +
         '<select id="exc-cfg-gdt-scale" class="jlc-wb-select">' +
         [1, 1.25, 1.5, 1.75, 2]

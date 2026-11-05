@@ -27,10 +27,10 @@ function applyScoutSiteTheme() {
 
 function getScoutSitePageThemeCss() {
   return `
-/* ===== 三站统一暗色页主题：同结构，只换强调色（PC/手机同一套） ===== */
+/* Shared page tokens; each site keeps a suitable light or dark surface. */
 html.scout-cream-site,
 html.scout-cream-site body {
-  /* 默认暗底 */
+  --scout-color-scheme: dark;
   --scout-page-bg: #12141a;
   --scout-page-panel: #1a1e28;
   --scout-page-header: #161a24;
@@ -46,19 +46,25 @@ html.scout-cream-site body {
   --scout-accent-soft: rgba(91, 141, 239, 0.18);
   background: var(--scout-page-bg) !important;
   color: var(--scout-text-color) !important;
-  color-scheme: dark;
+  color-scheme: var(--scout-color-scheme);
 }
 
-/* xvideos：暗红强调 */
+/* XVideos uses a muted light surface; XNXX and Eporner retain dark surfaces. */
 html.scout-cream-site body.creamu-site-xvideos {
-  --scout-accent: #e54840;
-  --scout-accent-soft: rgba(229, 72, 64, 0.20);
-  --scout-link: #f09088;
-  --scout-link-hover: #ffb8b0;
-  --scout-page-header: #1a1214;
-  --scout-card: #22181a;
-  --scout-card-bg: #22181a;
-  --scout-page-panel: #1e1618;
+  --scout-color-scheme: light;
+  --scout-page-bg: #e5e4df;
+  --scout-page-header: #edede7;
+  --scout-page-panel: #efeee9;
+  --scout-card: #e7e6df;
+  --scout-card-bg: #efeee9;
+  --scout-bg-clean: #e5e4df;
+  --scout-page-border: #cdd0c6;
+  --scout-text-color: #353c36;
+  --scout-text-muted: #6c756a;
+  --scout-accent: #a64740;
+  --scout-accent-soft: #a6474014;
+  --scout-link: #744a42;
+  --scout-link-hover: #963d35;
 }
 /* xnxx：冷蓝强调（仍暗底，不走白天粉蓝） */
 html.scout-cream-site body.creamu-site-xnxx {
@@ -87,14 +93,6 @@ html.scout-cream-site body.creamu-site-eporner {
 html.scout-cream-site body a { color: var(--scout-link); }
 html.scout-cream-site body a:visited { color: var(--scout-link); opacity: 0.9; }
 html.scout-cream-site body a:hover { color: var(--scout-link-hover); }
-
-/* 订阅钮底色已在 getScoutThemeCss 中；此处仅保证 cream 下对比 */
-html.scout-cream-site #scout-search-track-bar.scout-track-fab,
-html.scout-cream-site #scout-search-track-bar.scout-track-banner {
-  background: rgba(18, 20, 28, 0.94) !important;
-  border-color: var(--scout-page-border, rgba(255,255,255,0.12)) !important;
-  color: var(--scout-text-color, #e8eaef) !important;
-}
 
 /* 顶栏/表单/分页/侧栏：仅 PC。手机保持站点原生控件，避免列表周边被改乱 */
 @media (min-width: 821px) {
@@ -147,7 +145,7 @@ html.scout-cream-site #scout-search-track-bar.scout-track-banner {
     border: 1px solid var(--scout-page-border) !important;
     border-radius: 10px !important;
     box-shadow: 0 1px 0 rgba(0,0,0,0.04) !important;
-    color-scheme: dark;
+    color-scheme: var(--scout-color-scheme);
   }
   /*
    * 页级暗色按钮：只用 :where() 排除工作台，避免 :not(#id) 把特异性抬到
@@ -155,7 +153,7 @@ html.scout-cream-site #scout-search-track-bar.scout-track-banner {
    */
   html.scout-cream-site input[type="button"],
   html.scout-cream-site input[type="submit"],
-  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)) {
+  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)):where(:not(.scout-preview-button)) {
     background: var(--scout-page-panel) !important;
     color: var(--scout-text-color) !important;
     border: 1px solid var(--scout-page-border) !important;
@@ -165,7 +163,7 @@ html.scout-cream-site #scout-search-track-bar.scout-track-banner {
   }
   html.scout-cream-site input[type="button"]:hover,
   html.scout-cream-site input[type="submit"]:hover,
-  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)):hover {
+  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)):where(:not(.scout-preview-button)):hover {
     border-color: var(--scout-theme-color) !important;
     color: var(--scout-theme-color) !important;
   }
@@ -254,20 +252,6 @@ html.scout-cream-site .video-title {
   }
 }
 @media (max-width: 820px) {
-  html.scout-cream-site body.creamu-site-xvideos .video-metadata.scout-tags-collapsed,
-  html.scout-cream-site body.creamu-site-xnxx .video-metadata.scout-tags-collapsed,
-  html.scout-cream-site body.creamu-site-xnxx .metadata-row.video-tags.scout-tags-collapsed,
-  html.scout-cream-site body.creamu-site-xnxx .video-tags.scout-tags-collapsed {
-    max-height: 2.15em !important;
-    overflow: hidden !important;
-  }
-  html.scout-cream-site body.creamu-site-xvideos .video-metadata.scout-tags-expanded,
-  html.scout-cream-site body.creamu-site-xnxx .video-metadata.scout-tags-expanded,
-  html.scout-cream-site body.creamu-site-xnxx .metadata-row.video-tags.scout-tags-expanded,
-  html.scout-cream-site body.creamu-site-xnxx .video-tags.scout-tags-expanded {
-    max-height: none !important;
-    overflow: visible !important;
-  }
   html.scout-cream-site .scout-desc-collapsed {
     -webkit-line-clamp: 2 !important;
     max-height: 3em !important;

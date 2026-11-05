@@ -218,6 +218,18 @@ console.log('Scout exact search filter tests');
   assert.match(bar.innerHTML, /1 条未能核验/);
   assert.match(pagination.getAttribute('href'), /#creamu-exact=test$/);
 
+  state.parsed.mode = 'browse';
+  state.verifier = async (_recipe, result) => {
+    if (result.url.endsWith('.fail')) throw new Error('request failed');
+    // Missing only a preference must not hide an otherwise verified result.
+    return { evaluation: { state: 'verified', exact_match: result.url.endsWith('.match') } };
+  };
+  context.applyScoutExactSearchFilter();
+  await settle();
+  assert.ok(miss.classList.contains('scout-exact-filter-match'));
+  assert.ok(!miss.classList.contains('scout-exact-filter-hidden'));
+  assert.match(document.getElementById('scout-exact-filter-bar').innerHTML, /必须有/);
+
   state.parsed = null;
   context.applyScoutExactSearchFilter();
   assert.ok(!match.classList.contains('scout-exact-filter-match'));

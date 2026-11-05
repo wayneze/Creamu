@@ -1,0 +1,29 @@
+{
+  "parts": [
+    "00-header.meta.js",
+    "10-state.js",
+    "20-site.js",
+    "25-theme.js",
+    "30-interface.js",
+    "32-workbench.js",
+    "33-multiview.js",
+    "34-multi-player.js",
+    "35-player.js",
+    "40-room.js",
+    "50-boot.js"
+  ],
+  "injectAfter": {
+    "10-state.js": [
+      "packages/shared/creamu-webdav.js",
+      "packages/shared/creamu-workbench-css.js",
+      "packages/shared/creamu-workbench-geometry.js",
+      "packages/shared/creamu-workbench-interactions.js"
+    ]
+  },
+  "output": "dist/creamu-fc2.user.js",
+  "required": [
+    { "label": "FC2 entry", "text": "function bootCreamuFc2" },
+    { "label": "room layout", "text": "function mountFc2Room" },
+    { "label": "WebDAV", "text": "function createCreamuWebDavSync" }
+  ]
+}

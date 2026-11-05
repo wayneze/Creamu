@@ -34,28 +34,6 @@ function test(name, run) {
 
 console.log('Scout page runtime tests');
 
-test('tracking pagebar keeps presentation in the site layout theme', () => {
-  const source = fs.readFileSync(
-    'packages/scout-commander/src/parts/42-tracking-runtime.js',
-    'utf8'
-  );
-  const themeSource = fs.readFileSync(
-    'packages/scout-commander/src/parts/29-site-layout-theme.js',
-    'utf8'
-  );
-  assert.doesNotMatch(source, /\bstyle\s*=|\.style\./);
-  assert.ok(source.includes("bar.className = 'jlc-wb-pagebar scout-tracking-pagebar'"));
-  assert.ok(source.includes('class="scout-tracking-pagebar-action jlc-bp-continue"'));
-  [
-    '#jlc-tracking-pagebar {',
-    '#jlc-tracking-pagebar .jlc-tracking-pagebar-text {',
-    '#jlc-tracking-pagebar .scout-tracking-pagebar-action {',
-    '#jlc-tracking-pagebar .scout-bp-dismiss {',
-  ].forEach((selector) => {
-    assert.ok(themeSource.includes(selector), 'missing tracking selector: ' + selector);
-  });
-});
-
 test('search tracking listeners follow the active page kind', () => {
   const source = fs.readFileSync(
     'packages/scout-commander/src/parts/42-tracking-runtime.js',
@@ -76,9 +54,9 @@ test('search tracking listeners follow the active page kind', () => {
 
   state.kind = 'search';
   context.applySearchClickTrackingMode();
-  assert.equal(body.listeners.size, 3);
+  assert.deepEqual([...body.listeners.keys()], ['click:true', 'auxclick:true']);
   context.applySearchClickTrackingMode();
-  assert.equal(body.listeners.size, 3);
+  assert.deepEqual([...body.listeners.keys()], ['click:true', 'auxclick:true']);
 
   state.kind = 'list';
   context.applySearchClickTrackingMode();

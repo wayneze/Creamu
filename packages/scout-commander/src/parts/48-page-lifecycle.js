@@ -104,6 +104,13 @@ function refreshPageEnhancements(reason, options) {
     const navigated = href !== __scoutLastHref || kind !== __scoutLastKind;
     __scoutLastHref = href;
     __scoutLastKind = kind;
+    if (navigated) {
+      stopListPreview();
+      if (document.getElementById('jlc-wb')?.classList.contains('is-open')) {
+        ensureScoutSearchContextDraft();
+        refreshScoutWorkbenchPageIfActive('combo');
+      }
+    }
     let listEntries = options && options.listEntries;
 
     if (typeof applyBlockSiteAutoPreviewMode === 'function') {
@@ -126,6 +133,7 @@ function refreshPageEnhancements(reason, options) {
       markCurrentVideoPageClicked();
       enhancePageTags();
       enhancePagePublisher();
+      refreshScoutWorkbenchContext();
       rememberScoutDetailContent();
     } else if (kind === 'search') {
       if (!listEntries) listEntries = collectListVideoEntries();
@@ -133,7 +141,7 @@ function refreshPageEnhancements(reason, options) {
       if (typeof applyScoutExactSearchFilter === 'function') {
         try { applyScoutExactSearchFilter(listEntries); } catch (e) { console.warn(e); }
       }
-      // 搜索页顶栏：订阅/取消追更（不依赖打开工作台）
+      // 搜索列表上方：收藏、管理与继续浏览
       if (typeof enhanceSearchTrackSubscribe === 'function') {
         try { enhanceSearchTrackSubscribe(); } catch (e) { console.warn(e); }
       }
@@ -154,6 +162,9 @@ function refreshPageEnhancements(reason, options) {
     if (kind === 'video') {
       document.getElementById('scout-search-track-bar')?.remove();
       if (typeof stopListPreview === 'function') stopListPreview();
+    } else {
+      document.getElementById('scout-work-fav-bar')?.remove();
+      refreshScoutWorkbenchContext();
     }
   } catch (err) {
     console.warn('[Creamu Scout] refresh failed:', reason, err);
@@ -187,7 +198,6 @@ function isScoutUiNode(node) {
     node.id === 'scout-desc-toggle' ||
     node.id === 'scout-collect-dialog' ||
     node.id === 'creamu-scout-toast-container' ||
-    node.id === 'jlc-tracking-pagebar' ||
     node.id === 'jlc-wb' ||
     node.id === 'jlc-wb-fab'
   ) {
@@ -197,7 +207,6 @@ function isScoutUiNode(node) {
     node.classList.contains('scout-lex-flow-card') ||
     node.classList.contains('scout-lex-flow-overlay') ||
     node.classList.contains('scout-lex-hit-bar') ||
-    node.classList.contains('scout-tag-addon') ||
     node.classList.contains('scout-tag-heart') ||
     node.classList.contains('scout-pub-addon') ||
     node.classList.contains('scout-pub-badge') ||
@@ -209,7 +218,7 @@ function isScoutUiNode(node) {
   }
   if (node.id === 'scout-seek-hud') return true;
   return !!(node.closest && node.closest(
-    '#scout-lex-hit-bar, #scout-work-fav-bar, #scout-exact-filter-bar, #scout-collect-dialog, #creamu-scout-toast-container, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
+    '[data-scout-ui], #scout-lex-hit-bar, #scout-work-fav-bar, #scout-exact-filter-bar, #scout-collect-dialog, #creamu-scout-toast-container, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-pub-addon, .scout-list-preview-layer'
   ));
 }
 

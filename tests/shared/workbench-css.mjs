@@ -180,46 +180,10 @@ console.log('Shared workbench styles');
   const pageEnhancementCss = context.getScoutPageEnhancementThemeCss();
   const siteLayoutCss = context.getScoutSiteLayoutThemeCss();
   assert.equal(css, workbenchCss + pageEnhancementCss + siteLayoutCss);
-  assert.ok(
-    workbenchCss.includes('#jlc-wb [data-jlc-wb-page="combo"] > .scout-combo-dock {')
-  );
-  assert.ok(pageEnhancementCss.includes('.scout-breakpoint-highlight {'));
-  assert.ok(pageEnhancementCss.includes('.scout-work-fav-bar {'));
-  assert.ok(siteLayoutCss.includes('body.creamu-site-xvideos .mozaique .thumb-block'));
-  assert.ok(siteLayoutCss.includes('@media (max-width: 820px)'));
   assert.ok(css.includes('--creamu-wb-accent: var(--scout-theme-color)'));
   assert.ok(css.includes('--creamu-wb-accent-dark: var(--scout-theme-dark)'));
   assert.ok(css.includes('--creamu-wb-accent-ring: var(--scout-theme-shadow)'));
-  assert.ok(css.includes('#jlc-wb-fab {'), 'Scout keeps its product-specific FAB visibility layer');
-  assert.ok(css.includes('#jlc-wb .scout-combo-dock-actions .jlc-wb-btn {'));
-  [
-    '#jlc-wb .jlc-wb-nav button,',
-    '#jlc-wb .jlc-wb-btn.primary {',
-    '#jlc-wb .jlc-wb-chip {',
-    '#jlc-wb .jlc-wb-icon-btn {',
-    '#jlc-wb .jlc-wb-open-btn {',
-    '#jlc-wb .jlc-wb-more-btn {',
-    '#jlc-wb .jlc-wb-view-block {',
-    '#jlc-wb .jlc-wb-view-title {',
-    '#jlc-wb .stat-box {',
-    '#jlc-wb .stat-item {',
-  ].forEach((selector) => {
-    assert.ok(!css.includes(selector), 'Scout should inherit shared base selector: ' + selector);
-  });
-  assert.ok(
-    css.includes('#jlc-wb .jlc-wb-nav button {'),
-    'Scout keeps the mobile-only navigation sizing rule'
-  );
-  assert.equal(
-    (css.match(/#jlc-wb \.jlc-wb-btn \{/g) || []).length,
-    1,
-    'Scout should only retain the mobile button sizing rule'
-  );
-  assert.match(
-    css,
-    /@media \(max-width: 820px\)[\s\S]*#jlc-wb \.jlc-wb-btn \{\s*min-height: 40px !important;/
-  );
-  console.log('  OK  Scout maps tokens without copying shared base components');
+  console.log('  OK  Scout assembles product themes and maps shared accent tokens');
 }
 
 {

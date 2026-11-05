@@ -8,6 +8,7 @@ function createScoutExactFilterState() {
     key: '',
     site: '',
     recipe: null,
+    mode: 'exact',
     terms: [],
     records: new Map(),
     queue: [],
@@ -195,7 +196,7 @@ function renderScoutExactFilterBar(state) {
     ? ` · ${counts.failed} 条未能核验，已保留`
     : '';
   bar.innerHTML = `
-    <span class="scout-exact-filter-text">只看同时命中 · 保留 ${counts.match}/${counts.total}${pendingText}${failedText}</span>
+    <span class="scout-exact-filter-text">${state.mode === 'browse' ? '按必须有 / 不要筛选' : '只看同时命中'} · 保留 ${counts.match}/${counts.total}${pendingText}${failedText}</span>
     <span class="scout-exact-filter-actions">
       ${counts.retryable ? '<button type="button" data-scout-exact-action="retry">重试失败</button>' : ''}
       <button type="button" data-scout-exact-action="show-all">显示全部</button>
@@ -237,14 +238,14 @@ function getScoutExactFilterPaginationAnchors() {
   return anchors;
 }
 
-function preserveScoutExactFilterPagination(recipe) {
+function preserveScoutExactFilterPagination(recipe, mode) {
   getScoutExactFilterPaginationAnchors().forEach((anchor) => {
     const href = compactText(anchor.getAttribute && anchor.getAttribute('href'));
     if (!href || href === '#' || /^javascript:/i.test(href)) return;
     const stored = compactText(anchor.getAttribute('data-scout-exact-original-href'));
     const original = stored || href;
     if (!stored) anchor.setAttribute('data-scout-exact-original-href', original);
-    const next = buildScoutExactFilterUrl(original, recipe);
+    const next = buildScoutExactFilterUrl(original, recipe, mode);
     if (next && next !== href) anchor.setAttribute('href', next);
   });
 }
@@ -275,7 +276,10 @@ async function verifyScoutExactFilterRecord(state, record) {
     recordRelations: false,
   });
   if (state !== __scoutExactFilterState || state.runId !== __scoutExactFilterState.runId) return;
-  if (evaluated && evaluated.evaluation && evaluated.evaluation.exact_match) {
+  const matched = state.mode === 'browse'
+    ? evaluated?.evaluation?.state === 'verified'
+    : evaluated?.evaluation?.exact_match;
+  if (matched) {
     record.status = 'match';
     record.error = '';
   } else {
@@ -380,6 +384,7 @@ function applyScoutExactSearchFilter(listEntries) {
     site,
     currentScope,
     scoutSearchRecipeFingerprint(recipe),
+    parsed.mode || 'exact',
     getScoutExactFilterPageHref(),
   ].join('|');
   let state = __scoutExactFilterState;
@@ -389,11 +394,12 @@ function applyScoutExactSearchFilter(listEntries) {
     state.key = pageKey;
     state.site = site;
     state.recipe = recipe;
+    state.mode = parsed.mode || 'exact';
     state.terms = typeof getLexiconTerms === 'function' ? getLexiconTerms() : [];
   }
 
   const pending = syncScoutExactFilterRecords(state, listEntries);
-  preserveScoutExactFilterPagination(recipe);
+  preserveScoutExactFilterPagination(recipe, state.mode);
   renderScoutExactFilterBar(state);
   if (pending.length) startScoutExactFilterWorkers(state);
 }

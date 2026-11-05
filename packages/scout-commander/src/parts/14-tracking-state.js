@@ -31,13 +31,22 @@ function findTrackBySiteQuery(site, query) {
   const key = normalizeSearchQueryKey(query);
   if (!siteNorm || !key) return null;
   const tracks = getTracks();
+  const recipe = getScoutCurrentSearchRecipe();
+  const fingerprint = recipe ? scoutSearchRecipeFingerprint(recipe) : '';
   return (
     tracks.find(
       (t) =>
         t.site === siteNorm &&
-        normalizeSearchQueryKey(t.query) === key
+        normalizeSearchQueryKey(t.query) === key &&
+        (!fingerprint || t.recipe_fingerprint === fingerprint)
     ) || null
   );
+}
+
+function getScoutCurrentSearchRecipe() {
+  if (typeof location === 'undefined' || typeof parseScoutExactFilterLocation !== 'function') return null;
+  const parsed = parseScoutExactFilterLocation(location);
+  return parsed?.mode === 'browse' && parsed.scope === getScoutExactFilterSearchScope(location.href) ? parsed.recipe : null;
 }
 
 function addTrack({ site, query, label, url, recipe, recipe_id, probe_queries }) {
@@ -229,13 +238,13 @@ function addTracksForScoutRecipe(recipe, label, preparedPlan) {
     const probes = plan && Array.isArray(plan.probes)
       ? plan.probes.filter((probe) => probe.site === site)
       : [];
-    const primary = probes[0];
-    if (!primary || !primary.query) return;
+    const query = buildScoutBrowsingQuery(normalized, site);
+    if (!query) return;
     created.push(addTrack({
       site,
-      query: primary.query,
+      query,
       label: label || normalized.label || describeScoutSearchRecipe(normalized),
-      url: primary.url,
+      url: buildSearchUrl(site, query),
       recipe: normalized,
       recipe_id: normalized.id,
       probe_queries: probes

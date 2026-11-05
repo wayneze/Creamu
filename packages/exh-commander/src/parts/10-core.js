@@ -1,4 +1,4 @@
-  const VERSION = '0.9.62';
+  const VERSION = '0.10.5';
   const NS = 'exh-commander';
   const DB_NAME = 'exh_commander_db';
   const DB_VERSION = 2;
@@ -74,7 +74,7 @@
     list_tag_stream_max: 4,
     open_best_in_new_tab: true,
     theme_accent: '#ff4400',
-    cream_site_theme: false,
+    cream_site_theme: true,
     /** 画廊 #gdt 缩略倍率（相对原尺寸；不增删张数） */
     gallery_thumb_scale: 1.5,
     /** 列表悬停：拉画廊页前几张缩略，快速扫内容 */
@@ -351,6 +351,7 @@
       // 默认收起；与 JLC 一致，避免一进站就弹工作台
       open: false,
       width: DEFAULT_CONFIG.workbench_width,
+      panelMode: 'dock',
       tab: 'library',
       query: '',
       scrollTop: 0,

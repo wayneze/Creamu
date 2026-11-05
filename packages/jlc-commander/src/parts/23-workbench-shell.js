@@ -6,8 +6,11 @@
             const fab = document.createElement('button');
             fab.id = 'jlc-wb-fab';
             fab.type = 'button';
-            fab.title = 'Creamu · JavLibrary（可拖动）';
-            fab.innerHTML = '<span>⌘</span><span class="jlc-wb-fab-badge">0</span>';
+            fab.title = '打开 Creamu 控制台 · 拖动可调整位置';
+            fab.setAttribute('aria-label', '打开 Creamu 控制台');
+            fab.setAttribute('aria-controls', 'jlc-wb');
+            fab.setAttribute('aria-expanded', 'false');
+            fab.innerHTML = '<span class="jlc-brand-mark" aria-hidden="true">c</span><span>控制台</span><span class="jlc-wb-fab-badge" aria-hidden="true">0</span>';
             document.body.appendChild(fab);
             bindWorkbenchFabDrag(fab);
         } else {
@@ -18,37 +21,44 @@
 
         const shell = document.createElement('div');
         shell.id = 'jlc-wb';
+        shell.setAttribute('role', 'region');
+        shell.setAttribute('aria-label', 'Creamu · JavLibrary 控制台');
+        shell.tabIndex = -1;
         shell.innerHTML = ''
             + '<div class="jlc-wb-resize-w" title="拖拽调整宽度"></div>'
             + '<div class="jlc-wb-resize-h" title="拖拽调整高度"></div>'
             + '<div class="jlc-wb-resize-corner" title="拖拽调整大小"></div>'
             + '<div class="jlc-wb-header" title="按住标题栏拖动窗口">'
-            + '  <div><div class="jlc-wb-title">Creamu · JavLibrary</div><div class="jlc-wb-subtitle" id="jlc-wb-header-sub">加载中… · 可拖动</div></div>'
+            + '  <div class="jlc-wb-brand"><div><div class="jlc-wb-title">控制台</div><div class="jlc-wb-subtitle"><span id="jlc-wb-header-sub">追更与资料</span></div></div></div>'
             + '  <div class="jlc-wb-header-actions">'
-            + '    <button type="button" class="jlc-wb-chip" id="jlc-wb-open-mode-toggle" title="切换默认打开方式">新标签</button>'
-            + '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-settings-btn" title="设置">⚙</button>'
-            + '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-min-btn" title="收起">—</button>'
-            + '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-close-btn" title="关闭">×</button>'
+            + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-layout-toggle" title="切换并排停靠与自由浮窗">浮窗</button>'
+            + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-settings-btn" aria-controls="jlc-wb-settings" aria-expanded="false">设置</button>'
+            + '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-close-btn" title="收起控制台" aria-label="收起控制台">×</button>'
             + '  </div>'
             + '</div>'
-            + '<div class="jlc-wb-nav">'
-            + '  <button type="button" data-nav="tracking" class="active">追更</button>'
-            + '  <button type="button" data-nav="library">库</button>'
+            + '<nav class="jlc-wb-nav" aria-label="控制台导航">'
+            + '  <button type="button" data-nav="tracking" class="active" aria-current="page">追更</button>'
+            + '  <button type="button" data-nav="library">熟人库</button>'
             + '  <button type="button" data-nav="filter">过滤</button>'
-            + '</div>'
+            + '</nav>'
             + '<div class="jlc-wb-body">'
-            + '  <div data-jlc-wb-page="tracking"><div id="jlc-wb-tracking-root"></div></div>'
+            + '  <div data-jlc-wb-page="tracking">'
+            + '    <div class="jlc-wb-tracking-actions">'
+            + '      <span class="jlc-wb-footer-summary" id="jlc-wb-footer-summary" role="status">我的追更</span>'
+            + '      <div><button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">收藏当前搜索</button>'
+            + '      <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-refresh-all">刷新全部</button></div>'
+            + '    </div><div id="jlc-wb-tracking-root"></div></div>'
             + '  <div data-jlc-wb-page="library" hidden><div id="jlc-wb-library-root">'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">熟人与统计</div>'
             + '      <div class="stat-box"><div class="stat-item"><b id="jlc-wb-st-m">0</b><span>影片</span></div><div class="stat-item"><b id="jlc-wb-st-p">0</b><span>追踪</span></div><div class="stat-item"><b id="jlc-wb-st-v">0</b><span>已阅</span></div></div>'
             + '      <div class="legacy-note jlc-wb-intro-note">Emby 影片/熟人缓存统计；下方可手动加熟人。</div>'
-            + '      <div class="jlc-wb-inline-form"><input id="jlc-wb-i-new-p" type="text" placeholder="手动添加演员/导演"><button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-add-p">+</button></div>'
+            + '      <div class="jlc-wb-inline-form"><input id="jlc-wb-i-new-p" type="text" placeholder="演员或导演姓名" aria-label="演员或导演姓名"><button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-add-p">添加</button></div>'
             + '      <div id="jlc-wb-person-list" class="jlc-wb-list-stack"></div>'
             + '    </div></div></div>'
             + '  <div data-jlc-wb-page="filter" hidden><div id="jlc-wb-filter-root">'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">心动标签</div>'
-            + '      <div class="legacy-note jlc-wb-intro-note">列表高亮你关心的标签。回车或失焦即保存。</div>'
-            + '      <textarea id="jlc-wb-i-fav" rows="3" placeholder="女优, 巨乳, … 逗号分隔"></textarea>'
+            + '      <div class="legacy-note jlc-wb-intro-note">不同标签各算 1 项，熟人合计 1 项；命中至少 2 项自动亮金框，已入库仍显示绿框。自动命中不加入手动心动。逗号分隔，失焦保存。</div>'
+            + '      <textarea id="jlc-wb-i-fav" aria-label="心动标签" rows="3" placeholder="女优, 巨乳, … 逗号分隔"></textarea>'
             + '    </div>'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">屏蔽标题词</div>'
             + '      <div class="legacy-note jlc-wb-intro-note">标题含这些词会淡化/隐藏。回车添加，点 × 删除。</div>'
@@ -61,27 +71,18 @@
             + '    <div class="legacy-note jlc-wb-status-note" id="jlc-wb-hidden-summary">—</div>'
             + '  </div></div>'
             + '</div>'
-            + '<div class="jlc-wb-footer">'
-            + '  <div class="jlc-wb-footer-summary" id="jlc-wb-footer-summary">—</div>'
-            + '  <div class="jlc-wb-footer-actions">'
-            + '    <button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">⭐ 收藏当前</button>'
-            + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-refresh-all">刷新全部</button>'
-            + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-sync-now" title="先同步 Emby，再推送 WebDAV（含点击/心动/追更/屏蔽词）">☁ 立即同步</button>'
-            + '  </div>'
-            + '</div>'
-            + '<div class="jlc-wb-settings" id="jlc-wb-settings">'
+            + '<div class="jlc-wb-settings" id="jlc-wb-settings" role="region" aria-label="控制台设置">'
             + '  <div class="jlc-wb-settings-panel">'
             + '    <div class="jlc-wb-settings-head">'
             + '      <strong>设置</strong>'
-            + '      <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-settings-close">×</button>'
+            + '      <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-settings-close" aria-label="返回控制台" title="返回控制台">←</button>'
             + '    </div>'
             + '    <div class="jlc-wb-settings-nav" id="jlc-wb-settings-nav">'
             + '      <button type="button" data-jlc-settings-tab="resource" class="active">资源</button>'
             + '      <button type="button" data-jlc-settings-tab="display">显示</button>'
-            + '      <button type="button" data-jlc-settings-tab="services">服务</button>'
-            + '      <button type="button" data-jlc-settings-tab="backup">备份</button>'
+            + '      <button type="button" data-jlc-settings-tab="services">服务同步</button>'
+            + '      <button type="button" data-jlc-settings-tab="backup">数据备份</button>'
             + '    </div>'
-            + '    <div id="jlc-wb-config-hint" class="legacy-note" hidden></div>'
             + '    <div class="jlc-wb-settings-body">'
             // —— 资源：详情页增强 ——
             + '      <section class="jlc-wb-settings-section is-active" data-jlc-settings-panel="resource">'
@@ -97,14 +98,17 @@
             + '      </section>'
             // —— 服务：Emby / MetaTube / WebDAV ——
             + '      <section class="jlc-wb-settings-section" data-jlc-settings-panel="services">'
-            + '        <h3>Emby / MetaTube</h3>'
+            + '        <h3>数据同步</h3>'
+            + '        <p class="legacy-note jlc-wb-intro-note">先更新 Emby 影片与熟人，再同步 WebDAV 数据。</p>'
+            + '        <button type="button" class="jlc-wb-btn primary jlc-wb-block-action" id="jlc-wb-sync-now">立即同步全部数据</button>'
+            + '        <h3 class="jlc-wb-section-title">Emby / MetaTube</h3>'
             + '        <div id="jlc-wb-config-diag" class="legacy-note"></div>'
             + '        <label>Emby 地址</label><input id="jlc-wb-i-url" type="text" placeholder="http://emby.example:8096">'
             + '        <label>Emby API Key</label><input id="jlc-wb-i-key" type="password">'
             + '        <div class="legacy-note">密钥框留空=不修改已保存值；只有输入新内容才会覆盖。</div>'
-            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-sync">🔄 立即同步 Emby</button>'
+            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-sync">立即同步 Emby</button>'
             + '        <label>MetaTube Server</label><input id="jlc-wb-i-mt" type="text" placeholder="http://127.0.0.1:1234">'
-            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-diag">🔍 重新读取并显示配置</button>'
+            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-diag">重新读取并显示配置</button>'
             + '        <h3 class="jlc-wb-section-title">WebDAV 同步</h3>'
             + '        <div class="legacy-note">通用 WebDAV（坚果云 / Nextcloud / 群晖等）。读写 {路径}/jlc.vault.json。坚果云请用应用密码。</div>'
             + '        <label>地址</label><input id="jlc-wb-wd-url" type="text" placeholder="https://dav.jianguoyun.com/dav/">'
@@ -143,13 +147,13 @@
             + '        <div class="legacy-note">完整备份不含 meta_cache。</div>'
             + '        <h3 class="jlc-wb-section-title">数据检查</h3>'
             + '        <div class="legacy-note jlc-wb-intro-note">查看本机断点、浏览时间与点击记录数量。</div>'
-            + '        <button type="button" class="jlc-wb-btn primary jlc-wb-block-action" id="jlc-wb-btn-integrity">🩺 检查断点·浏览·点击</button>'
+            + '        <button type="button" class="jlc-wb-btn primary jlc-wb-block-action" id="jlc-wb-btn-integrity">检查断点·浏览·点击</button>'
             + '        <pre id="jlc-wb-data-integrity" class="legacy-note jlc-wb-data-report" hidden></pre>'
             + '      </section>'
             + '    </div>'
             + '    <div class="jlc-wb-settings-footer">'
-            + '      <button type="button" class="jlc-wb-btn primary" id="jlc-wb-btn-save">💾 保存并应用</button>'
-            + '      <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-rescan">🔁 重扫当前页</button>'
+            + '      <button type="button" class="jlc-wb-btn primary" id="jlc-wb-btn-save">保存并应用</button>'
+            + '      <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-rescan">重扫当前页</button>'
             + '    </div>'
             + '  </div>'
             + '</div>';
@@ -167,7 +171,11 @@
             });
         });
         shell.querySelector('#jlc-wb-close-btn')?.addEventListener('click', closeWorkbenchV3);
-        shell.querySelector('#jlc-wb-min-btn')?.addEventListener('click', closeWorkbenchV3);
+        shell.querySelector('#jlc-wb-layout-toggle')?.addEventListener('click', () => {
+            const next = getWorkbenchSession().panelMode === 'float' ? 'dock' : 'float';
+            persistWorkbenchSession({ panelMode: next });
+            applyWorkbenchShellGeometry({}, { skipPersist: true });
+        });
         shell.querySelector('#jlc-wb-settings-btn')?.addEventListener('click', () => {
             const session = getWorkbenchSession();
             const next = !session.settingsOpen;
@@ -175,15 +183,6 @@
             if (next) {
                 syncWorkbenchSettingsForm();
             }
-        });
-        shell.querySelector('#jlc-wb-open-mode-toggle')?.addEventListener('click', () => {
-            const session = getWorkbenchSession();
-            const next = session.openMode === 'tab' ? 'same' : 'tab';
-            config.open_mode = next;
-            GM_setValue('jlc_config_stable', config);
-            persistWorkbenchSession({ openMode: next });
-            updateWorkbenchOpenModeChip();
-            showAlert(next === 'tab' ? '默认改为新标签打开。' : '默认改为本页打开。');
         });
         shell.querySelector('#jlc-wb-save-current')?.addEventListener('click', async () => {
             const currentContext = getCurrentTrackingPageContext();
@@ -236,8 +235,26 @@
             }
         });
 
+        shell.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault();
+            if (getWorkbenchSession().settingsOpen) setWorkbenchSettingsOpen(false);
+            else closeWorkbenchV3();
+        });
+        shell.querySelectorAll('label').forEach(label => {
+            const field = label.nextElementSibling;
+            if (field?.id && field.matches('input, select, textarea')) label.htmlFor = field.id;
+        });
+        shell.querySelectorAll('.legacy-toggle').forEach(row => {
+            const label = document.createElement('label');
+            label.className = row.className;
+            label.append(...row.childNodes);
+            row.replaceWith(label);
+        });
         bindWorkbenchSettingsEvents(shell);
-        updateWorkbenchOpenModeChip();
+        window.addEventListener('resize', () => {
+            applyWorkbenchShellGeometry({}, { skipPersist: true });
+        });
         syncWorkbenchSettingsForm();
         if (!workbenchUiBound) {
             workbenchUiBound = true;
@@ -250,18 +267,9 @@
         }
     }
 
-    function updateWorkbenchOpenModeChip() {
-        const chip = document.getElementById('jlc-wb-open-mode-toggle');
-        if (!chip) return;
-        const mode = getWorkbenchSession().openMode || config.open_mode || 'tab';
-        chip.textContent = mode === 'same' ? '本页' : '新标签';
-        chip.classList.toggle('is-on', mode === 'tab');
-    }
-
     async function restoreWorkbenchSession() {
         createWorkbenchV3();
         const session = getWorkbenchSession();
-        updateWorkbenchOpenModeChip();
         if (session.panelOpen) {
             openWorkbenchV3(normalizeWorkbenchMainNav(session.nav));
             if (session.settingsOpen) {

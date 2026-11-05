@@ -76,11 +76,12 @@ function normalizeScoutExactFilterRecipe(input) {
   return normalized;
 }
 
-function buildScoutExactFilterUrl(url, recipe) {
+function buildScoutExactFilterUrl(url, recipe, mode = 'exact') {
   const normalized = normalizeScoutExactFilterRecipe(recipe);
   if (!normalized) return String(url || '');
   const payload = {
     version: 1,
+    mode: mode === 'browse' ? 'browse' : 'exact',
     scope: getScoutExactFilterSearchScope(url),
     sites: normalized.sites,
     conditions: normalized.conditions.map((condition) => ({
@@ -150,6 +151,7 @@ function parseScoutExactFilterLocation(locationLike) {
   return {
     recipe,
     scope: compactText(payload.scope),
+    mode: payload.mode === 'browse' ? 'browse' : 'exact',
   };
 }
 
@@ -489,6 +491,14 @@ function buildScoutSearchProbeSets(recipe, site, maxProbes, availableTerms) {
     }));
   });
   return probes;
+}
+
+function buildScoutBrowsingQuery(recipe, site) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const required = normalized.conditions.filter(condition => condition.role === 'required');
+  const selected = required.length ? required : normalized.conditions.filter(condition => condition.role === 'preference');
+  const terms = getLexiconTerms();
+  return compileScoutSiteQuery(site, selected.map(condition => ({ ...condition, text: getScoutConditionVariants(condition, site, terms)[0] || condition.text })));
 }
 
 function buildScoutSearchPlan(recipe, options) {

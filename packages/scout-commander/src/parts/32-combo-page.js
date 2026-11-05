@@ -1,8 +1,8 @@
 // @@creamu-part:32-combo-page
 const SCOUT_SEARCH_ROLE_LABELS = {
-  required: '必须',
-  preference: '偏好',
-  excluded: '排除',
+  required: '必须有',
+  preference: '更喜欢',
+  excluded: '不要',
 };
 
 function createScoutSearchUiSession(previous) {
@@ -56,34 +56,77 @@ function renderScoutSearchConditionOptions(selectedRole) {
 }
 
 function renderScoutSearchConditions(recipe) {
-  const normalized = normalizeScoutSearchRecipe(recipe);
-  return SCOUT_SEARCH_ROLE_ORDER.map((role) => {
-    const conditions = normalized.conditions.filter((condition) => condition.role === role);
-    const rows = conditions.length
-      ? conditions.map((condition) => `
-          <div class="scout-search-condition is-${role}" data-condition-id="${escapeHtml(condition.id)}">
-            <span class="scout-search-condition-text" title="${escapeHtml(condition.text)}">${escapeHtml(condition.text)}</span>
-            <select class="jlc-wb-select scout-search-condition-role" aria-label="条件类型">
-              ${renderScoutSearchConditionOptions(role)}
-            </select>
-            <select class="jlc-wb-select scout-search-condition-priority" aria-label="偏好层级"${role === 'preference' ? '' : ' hidden'}>
-              ${[1, 2, 3].map((priority) => (
-                `<option value="${priority}"${condition.priority === priority ? ' selected' : ''}>` +
-                  `${priority} 级</option>`
-              )).join('')}
-            </select>
-            <button type="button" class="jlc-wb-icon-btn scout-search-condition-remove" title="移除" aria-label="移除 ${escapeHtml(condition.text)}">×</button>
-          </div>`).join('')
-      : '<div class="scout-search-condition-empty">暂无</div>';
-    return `
-      <section class="scout-search-condition-group is-${role}" data-condition-role="${role}">
-        <div class="scout-search-section-head">
-          <strong>${SCOUT_SEARCH_ROLE_LABELS[role]}</strong>
-          <span>${conditions.length}</span>
-        </div>
-        <div class="scout-search-condition-list">${rows}</div>
-      </section>`;
-  }).join('');
+  return normalizeScoutSearchRecipe(recipe).conditions.map(condition => `
+    <div class="scout-search-condition is-${condition.role}" data-condition-id="${escapeHtml(condition.id)}">
+      <span class="scout-search-condition-text" title="${escapeHtml(condition.text)}">${escapeHtml(condition.text)}</span>
+      <select class="jlc-wb-select scout-search-condition-role" aria-label="条件类型">${renderScoutSearchConditionOptions(condition.role)}</select>
+      <select class="jlc-wb-select scout-search-condition-priority" aria-label="偏好层级"${condition.role === 'preference' ? '' : ' hidden'}>
+        ${[1, 2, 3].map(priority => `<option value="${priority}"${condition.priority === priority ? ' selected' : ''}>${priority} 级</option>`).join('')}
+      </select>
+      <button type="button" class="jlc-wb-icon-btn scout-search-condition-remove" aria-label="移除 ${escapeHtml(condition.text)}">×</button>
+    </div>`).join('');
+}
+
+let scoutSearchContextHref = '';
+let scoutSearchInput = '';
+
+function ensureScoutSearchContextDraft() {
+  if (scoutSearchContextHref === location.href) return;
+  scoutSearchContextHref = location.href;
+  const current = parseScoutExactFilterLocation(location);
+  const query = detectPageKind() === 'search' ? parseSearchContext().query : '';
+  if (!getScoutSearchDraft().conditions.length && (current || query)) {
+    saveScoutSearchDraft(current?.recipe || addScoutSearchTerms(getScoutSearchDraft(), query, 'required', 1));
+  }
+  markScoutWorkbenchPagesDirty('combo');
+}
+
+function renderScoutSearchContext() {
+  const site = detectSite();
+  const kind = detectPageKind();
+  if (kind === 'search') {
+    const ctx = parseSearchContext();
+    const track = findTrackBySiteQuery(site, ctx.query);
+    return `<section class="scout-search-context"><small>正在浏览 · ${escapeHtml(scoutSiteShortLabel(site))}</small>
+      <strong>${escapeHtml(ctx.query || '当前列表')}</strong><div class="scout-context-actions">
+      <button type="button" class="jlc-wb-btn ghost" data-context-action="use">用当前搜索</button>
+      <button type="button" class="jlc-wb-btn ghost" data-context-action="track"${track ? ' disabled' : ''}>${track ? '已加入追更' : '收藏当前搜索'}</button>
+      ${track ? `<button type="button" class="jlc-wb-btn primary" data-context-action="resume">继续 · 第 ${track.last_seen_page || 1} 页</button>` : ''}</div></section>`;
+  }
+  return '';
+}
+
+function getScoutRecipeNavigationUrl(recipe, site, url) {
+  const query = buildScoutBrowsingQuery(recipe, site);
+  if (!query) return '';
+  const target = buildScoutExactFilterUrl(url || buildSearchUrl(site, query), recipe, 'browse');
+  if (!parseScoutExactFilterLocation(new URL(target))) {
+    showToast('搜索条件过长：最多 16 个条件，每个不超过 96 字，请精简后再搜索', true);
+    return '';
+  }
+  return target;
+}
+
+function openScoutCurrentSiteSearch() {
+  let recipe = getScoutSearchDraft();
+  if (compactText(scoutSearchInput)) {
+    const target = getScoutSearchTarget(document.querySelector('[data-jlc-wb-page="combo"]'));
+    recipe = addScoutSearchTerms(recipe, scoutSearchInput.split(/[,，;；]+/), target.role, target.priority);
+    scoutSearchInput = '';
+    document.getElementById('scout-combo-free-input').value = '';
+    saveScoutRecipeAndRender(recipe);
+  }
+  const site = detectSite() || recipe.sites[0];
+  if (!recipe.sites.includes(site)) {
+    recipe = saveScoutRecipeAndRender({ ...recipe, sites: [...recipe.sites, site] });
+  }
+  const url = getScoutRecipeNavigationUrl(recipe, site);
+  if (!url) {
+    if (!recipe.conditions.some(condition => condition.role !== 'excluded')) showToast('输入搜索词，或从页面标签中选择', true);
+    return;
+  }
+  incrementScoutRecipeTermUsage(recipe);
+  openScoutUrl(url, { newTab: !isScoutNarrowViewport() });
 }
 
 function getScoutSearchPoolTerms(recipe, type, query, availableTerms) {
@@ -339,7 +382,7 @@ function renderScoutSearchAssessments() {
   if (!session.plan) {
     host.innerHTML = '';
     empty.hidden = false;
-    empty.textContent = '评估组合后在此比较三个站点';
+    empty.textContent = '比较三站，查看结果量与核验样本';
   } else {
     host.innerHTML = session.plan.recipe.sites
       .map((site) => renderScoutSearchAssessmentSite(site))
@@ -365,10 +408,10 @@ function renderScoutSearchRelatedSection() {
 
 function renderScoutSearchRuntimeState() {
   const session = __scoutSearchUiSession;
-  const runButton = document.getElementById('scout-combo-search-btn');
+  const runButton = document.getElementById('scout-combo-compare-btn');
   if (runButton) {
     runButton.disabled = session.running;
-    runButton.textContent = session.running ? '评估中' : '评估组合';
+    runButton.textContent = session.running ? '比较中…' : '比较三站';
   }
   renderScoutSearchAssessments();
 }
@@ -468,6 +511,10 @@ function renderComboPage() {
   if (!container.hasAttribute('data-search-target-role')) {
     setScoutSearchTarget(container, 'required', 1);
   }
+  const oldInput = container.querySelector('#scout-combo-free-input');
+  if (oldInput) scoutSearchInput = oldInput.value;
+  const scrollTop = container.querySelector('.scout-combo-scroll')?.scrollTop || 0;
+  const disclosures = new Set([...container.querySelectorAll('details[open][id]')].map(el => el.id));
   const target = getScoutSearchTarget(container);
   const recipe = getScoutSearchDraft();
   const terms = getLexiconTerms();
@@ -484,9 +531,10 @@ function renderComboPage() {
 
   container.innerHTML = `
     <div class="jlc-wb-list-scroll scout-combo-scroll">
+      ${renderScoutSearchContext()}
       <header class="scout-search-builder-head">
         <div>
-          <strong>搜索条件</strong>
+          <strong>继续找你想看的</strong>
           <span>${escapeHtml(describeScoutSearchRecipe(recipe))}</span>
         </div>
         <div class="scout-search-role-switch" role="group" aria-label="添加目标">
@@ -496,7 +544,7 @@ function renderComboPage() {
       </header>
 
       <div class="scout-search-add-row">
-        <input type="text" class="jlc-wb-search" id="scout-combo-free-input" placeholder="输入词或短语">
+        <input type="text" class="jlc-wb-search" id="scout-combo-free-input" aria-label="搜索词" placeholder="输入搜索词，或添加页面标签" value="${escapeHtml(scoutSearchInput)}">
         <div class="scout-search-priority-switch"${target.role === 'preference' ? '' : ' hidden'} role="group" aria-label="偏好层级">
           ${[1, 2, 3].map((priority) => `
             <button type="button" data-search-priority="${priority}" class="${target.priority === priority ? 'is-active' : ''}">${priority}</button>`).join('')}
@@ -508,7 +556,7 @@ function renderComboPage() {
         <div class="scout-search-condition-column">
           ${renderScoutSearchConditions(recipe)}
         </div>
-        <div class="scout-search-pool-column">
+        <details class="scout-search-pool-column" id="scout-search-word-picker"><summary>从词库与当前标签选词</summary>
           <div class="scout-search-pool-toolbar">
             <input type="search" class="jlc-wb-search" id="scout-search-term-filter" placeholder="筛选词库">
             <select class="jlc-wb-select" id="scout-search-type-filter" aria-label="词库分类">
@@ -518,15 +566,17 @@ function renderComboPage() {
           <div class="scout-search-pool" id="scout-combo-pool">${renderScoutSearchPoolHtml(recipe, selectedType, '', terms)}</div>
           <div id="scout-search-related-host">${renderScoutRelatedSuggestions(recipe)}</div>
           ${renderScoutCurrentTagChoices(currentMeta)}
-        </div>
+        </details>
       </div>
 
-      <section class="scout-search-site-plan">
+      <details class="scout-search-site-plan" id="scout-search-advanced"><summary>站点与高级设置</summary>
+        <label class="scout-priority-toggle"><input type="checkbox" id="scout-search-show-priority"${container.classList.contains('scout-show-priority') ? ' checked' : ''}> 调整偏好优先级</label>
         <div class="scout-search-site-row" role="group" aria-label="搜索站点">${siteSwitches}</div>
         ${planHtml}
-      </section>
+        <button type="button" class="jlc-wb-btn ghost" id="scout-combo-clear-btn">清空搜索条件</button>
+      </details>
 
-      <section class="scout-search-results-section" aria-label="组合评估">
+      <details class="scout-search-results-section" id="scout-search-comparison"><summary>三站比较与核验结果</summary>
         <header class="scout-search-results-head">
           <div>
             <strong id="scout-search-result-status">未运行</strong>
@@ -535,8 +585,8 @@ function renderComboPage() {
         </header>
         <details id="scout-search-errors" class="scout-search-errors" hidden></details>
         <div id="scout-search-assessments" class="scout-search-assessments"></div>
-        <div id="scout-search-results-empty" class="jlc-wb-empty">评估组合后在此比较三个站点</div>
-      </section>
+        <div id="scout-search-results-empty" class="jlc-wb-empty">比较三站，查看结果量与核验样本</div>
+      </details>
     </div>
 
     <div class="jlc-wb-footer scout-combo-dock">
@@ -546,9 +596,10 @@ function renderComboPage() {
         <button type="button" class="jlc-wb-icon-btn" id="scout-search-save-cancel" title="取消" aria-label="取消收藏">×</button>
       </div>
       <div class="scout-combo-dock-actions">
-        <button type="button" class="jlc-wb-btn primary" id="scout-combo-search-btn">评估组合</button>
-        <button type="button" class="jlc-wb-btn ghost" id="scout-save-current-search-btn">收藏配方</button>
-        <button type="button" class="jlc-wb-btn ghost" id="scout-combo-clear-btn">清空</button>
+        <button type="button" class="jlc-wb-btn primary" id="scout-combo-search-btn">当前站搜索</button>
+        <button type="button" class="jlc-wb-btn ghost" id="scout-combo-compare-btn">比较三站</button>
+        <button type="button" class="jlc-wb-btn ghost" id="scout-save-current-search-btn">收藏搜索</button>
+
       </div>
     </div>
   `;
@@ -570,16 +621,19 @@ function renderComboPage() {
     const input = container.querySelector('#scout-combo-free-input');
     const raw = compactText(input && input.value);
     if (!raw) return;
+    input.value = '';
+    scoutSearchInput = '';
     const values = /[,，;；]/.test(raw) ? raw.split(/[,，;；]+/) : [raw];
     saveScoutRecipeAndRender(
       addScoutSearchTerms(recipe, values, target.role, target.priority)
     );
   };
   container.querySelector('#scout-combo-add-btn')?.addEventListener('click', addManualTerms);
+  container.querySelector('#scout-combo-free-input')?.addEventListener('input', event => { scoutSearchInput = event.target.value; });
   container.querySelector('#scout-combo-free-input')?.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    addManualTerms();
+    openScoutCurrentSiteSearch();
   });
 
   container.querySelectorAll('.scout-search-condition').forEach((row) => {
@@ -650,15 +704,27 @@ function renderComboPage() {
     });
   });
 
-  container.querySelector('#scout-combo-search-btn')?.addEventListener('click', () => {
+  container.querySelector('#scout-combo-search-btn')?.addEventListener('click', openScoutCurrentSiteSearch);
+  container.querySelector('#scout-combo-compare-btn')?.addEventListener('click', () => {
+    if (compactText(scoutSearchInput)) addManualTerms();
+    document.getElementById('scout-search-comparison').open = true;
+    scoutDrawerExpanded = true;
+    applyScoutWorkbenchGeometry(document.getElementById('jlc-wb'));
     startScoutRecipeSearch();
   });
   container.querySelector('#scout-combo-clear-btn')?.addEventListener('click', () => {
+    scoutSearchInput = '';
+    container.querySelector('#scout-combo-free-input').value = '';
     saveScoutRecipeAndRender(Object.assign({}, recipe, { conditions: [], label: '' }));
   });
 
   const saveBar = container.querySelector('#scout-search-savebar');
   container.querySelector('#scout-save-current-search-btn')?.addEventListener('click', () => {
+    if (compactText(scoutSearchInput)) {
+      addManualTerms();
+      document.getElementById('scout-save-current-search-btn').click();
+      return;
+    }
     saveBar.hidden = false;
     const labelInput = container.querySelector('#scout-search-label');
     if (labelInput && !labelInput.value) {
@@ -680,7 +746,7 @@ function renderComboPage() {
     }
     const label = compactText(container.querySelector('#scout-search-label')?.value) ||
       describeScoutSearchRecipe(recipe);
-    const saved = saveScoutSearchDraft(Object.assign({}, recipe, { label }));
+    const saved = saveScoutSearchDraft(Object.assign({}, getScoutSearchDraft(), { label }));
     const tracks = addTracksForScoutRecipe(saved, label, buildScoutSearchPlan(saved, { terms }));
     if (!tracks.length) {
       showToast('当前配方无法收藏', true);
@@ -689,8 +755,20 @@ function renderComboPage() {
     if (typeof setupSearchClickTracking === 'function') setupSearchClickTracking();
     showToast(`已收藏 ${tracks.length} 个站点`);
     saveBar.hidden = true;
+    enhanceSearchTrackSubscribe();
     markScoutWorkbenchPageRendered('combo');
   });
+
+  container.querySelector('#scout-search-show-priority').onchange = event => container.classList.toggle('scout-show-priority', event.target.checked);
+  container.querySelectorAll('[data-context-action]').forEach(button => button.onclick = () => {
+    const action = button.dataset.contextAction;
+    const ctx = parseSearchContext();
+    if (action === 'use') saveScoutRecipeAndRender(parseScoutExactFilterLocation(location)?.recipe || addScoutSearchTerms({ sites: recipe.sites, conditions: [] }, ctx.query, 'required', 1));
+    if (action === 'track') { addTrack({ site: detectSite(), query: ctx.query, label: ctx.query, url: ctx.url, recipe: getScoutCurrentSearchRecipe() }); renderComboPage(); enhanceSearchTrackSubscribe(); }
+    if (action === 'resume') openTrackAtBreakpoint(findTrackBySiteQuery(detectSite(), ctx.query));
+  });
+  disclosures.forEach(id => { const el = container.querySelector('#' + id); if (el) el.open = true; });
+  container.querySelector('.scout-combo-scroll').scrollTop = scrollTop;
 
   container.querySelector('#scout-search-assessments')?.addEventListener('click', (event) => {
     const removeButton = event.target.closest('[data-search-remove-condition]');
@@ -712,8 +790,5 @@ function renderComboPage() {
 
   markScoutWorkbenchPageRendered('combo');
   renderScoutSearchRuntimeState();
-  if (window.__scoutRunSearchOnOpen) {
-    window.__scoutRunSearchOnOpen = false;
-    setTimeout(() => startScoutRecipeSearch(), 0);
-  }
+
 }

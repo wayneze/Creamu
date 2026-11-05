@@ -1,5 +1,22 @@
 // 20-sites.js
 
+function getScoutPageTagSelector(site) {
+  if (site === 'xvideos' || site === 'xnxx') {
+    return (
+      '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
+      '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a'
+    );
+  }
+  if (site === 'eporner') {
+    return (
+      '#video-info-tags .vit-category a, #video-info-tags .vit-pornstar a, ' +
+      '#video-info-tags a[href^="/tag/"], #video-info-tags a[href^="/cat/"], #video-tags a, .tag-container a'
+    );
+  }
+  return '';
+}
+
+
 /**
  * 列表卡选标题链接（跳过仅缩略图的空 <a>，避免标签流整卡跳过）。
  */
@@ -297,8 +314,7 @@ const SITE_ADAPTERS = {
       const tags = [];
       const seen = new Set();
       doc.querySelectorAll(
-        '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
-        '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a'
+        getScoutPageTagSelector('xvideos')
       ).forEach((a) => {
         const txt =
           typeof tagTextFromAnchor === 'function'
@@ -414,15 +430,14 @@ const SITE_ADAPTERS = {
     scrapeVideoMeta(sourceDocument, pageUrl) {
       const doc = sourceDocument || document;
       const href = pageUrl || location.href;
-      const titleEl = doc.querySelector('h2.page-title') || doc.querySelector('.video-metadata .title') || doc.querySelector('title');
+      const titleEl = doc.querySelector('#video-content-metadata .video-title strong') || doc.querySelector('#video-content-metadata .video-title') || doc.querySelector('h2.page-title') || doc.querySelector('.video-metadata .title') || doc.querySelector('title');
       let title = titleEl ? titleEl.textContent.trim() : '';
       title = title.replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s*\d+p\s*/gi, ' ').replace(/\s+/g, ' ').trim();
       
       const tags = [];
       const seen = new Set();
       doc.querySelectorAll(
-        '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
-        '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a, .tags a'
+        getScoutPageTagSelector('xnxx')
       ).forEach((a) => {
         const txt =
           typeof tagTextFromAnchor === 'function'
@@ -562,8 +577,7 @@ const SITE_ADAPTERS = {
       const seen = new Set();
       doc
         .querySelectorAll(
-          'a[href^="/tag/"], a[href^="/cat/"], .vit-pornstar a, .vit-category a, ' +
-            '#video-tags a, .tag-container a, a.tag'
+          getScoutPageTagSelector('eporner')
         )
         .forEach((a) => {
           const txt =
@@ -590,7 +604,7 @@ const SITE_ADAPTERS = {
       const thumb = pickDetailThumbUrl(doc, href);
 
       const uploaderEl = doc.querySelector(
-        'a[href*="/profile/"][title="Uploader"], a[href*="/profile/"], ' +
+        '#video-info-tags .vit-uploader a, a[href*="/profile/"][title="Uploader"], ' +
           '.publisher-name, a[href*="/channel/"], .post-channel a'
       );
       const uploader = uploaderEl ? uploaderEl.textContent.trim() : '';

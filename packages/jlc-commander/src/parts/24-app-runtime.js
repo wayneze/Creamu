@@ -65,6 +65,7 @@
         try {
             bindMetaSweepEvents();
             new Page();
+            installJlcPageLayout();
         } catch (e) {
             console.error('[Creamu] Page', e);
         }

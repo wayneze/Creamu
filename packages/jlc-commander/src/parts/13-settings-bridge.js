@@ -54,9 +54,6 @@
         if (['javbus', 'javdb'].includes(currentWeb)) {
             items.push({ type: 'toggle', key: 'avInfo', label: lang.menu_avInfo });
         }
-        if (currentWeb === 'javlibrary') {
-            items.push({ type: 'toggle', key: 'menutoTop', label: lang.menu_menutoTop });
-        }
         items.push({ type: 'range', key: 'columnNum', label: lang.menu_columnNum, value: Status.getColumnNum(), min: 1, max: 8 });
         items.push({ type: 'range', key: 'waterfallWidth', label: '%', value: Status.get('waterfallWidth'), min: 1, max: currentObj?.maxWidth ? currentObj.maxWidth : 100 });
         items.push({ type: 'range', key: 'uiBtnScale', label: lang.menu_uiBtnScale, value: Status.get('uiBtnScale'), min: 70, max: 110, step: 5 });
@@ -94,9 +91,6 @@
             $('#grid-b a[name="av-title"]').toggleClass('titleNowrap');
         },
         avInfo() {},
-        menutoTop() {
-            location.reload();
-        },
         columnNum(columnNum) {
             GM_addStyle(`#grid-b .item-b{ width: ${100 / columnNum}%;}`);
         },

@@ -8,16 +8,9 @@
     "31-search-memory.js",
     "32-user-post-sorter.js",
     "35-ad-sanitizer.js",
+    "40-page-runtime.js",
     "50-boot.js"
   ],
-  "injectAfter": {
-    "25-theme.js": [
-      "packages/shared/creamu-workbench-css.js",
-      "packages/shared/creamu-workbench-geometry.js",
-      "packages/shared/creamu-workbench-interactions.js",
-      "packages/shared/creamu-webdav.js"
-    ]
-  },
   "output": "dist/creamu-hj.user.js",
   "required": [
     { "label": "header metadata", "text": "Creamu · HJ" },

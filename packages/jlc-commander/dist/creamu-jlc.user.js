@@ -2,8 +2,8 @@
 // @name         Creamu · JavLibrary
 // @name:zh-CN   Creamu · JavLibrary
 // @namespace    https://github.com/wayneze/Creamu
-// @version      3.8.6
-// @description  Creamu：JavLibrary 奶油工作台；WebDAV 同步；追更 / Emby / 备份
+// @version      3.9.6
+// @description  Creamu：统一浅色页面与影片详情；随时呼出的对照控制台；追更 / Emby / WebDAV
 // @author       wayneze
 // @include      *javbus.com/*
 // @include      *javdb.com/*
@@ -38,7 +38,6 @@
         columnNumHalf:4,
         /** 工作台按钮缩放百分比（70–110），只影响按钮，不影响列表内容 */
         uiBtnScale: 100,
-        menutoTop : false,
 		hiddenWord :[],
 		hiddenAvid :[]
     };
@@ -50,10 +49,8 @@
     const fullImgCSS=`width: 100%!important;height:100%!important;`;
     const halfImgCSS=`position: relative;left: -112%;width: 212% !important;height: 100% !important;max-width: 212%;`;
 
-    const copy_Svg = `<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor"  width="16" height="16" viewBox="0 0 16 16"><path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v13.5a.5.5 0 0 1-.777.416L8 13.101l-5.223 2.815A.5.5 0 0 1 2 15.5V2zm2-1a1 1 0 0 0-1 1v12.566l4.723-2.482a.5.5 0 0 1 .554 0L13 14.566V2a1 1 0 0 0-1-1H4z"/></svg>`;
+    const copy_Svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>`;
     const download_Svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" class="tool-svg" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8zm15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.5 4.5a.5.5 0 0 0-1 0v5.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V4.5z"/></svg>`;
-    const picture_Svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"  class="tool-svg" viewBox="0 0 16 16"><path d="M6.002 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/><path d="M2.002 1a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2h-12zm12 1a1 1 0 0 1 1 1v6.5l-3.777-1.947a.5.5 0 0 0-.577.093l-3.71 3.71-2.66-1.772a.5.5 0 0 0-.63.062L1.002 12V3a1 1 0 0 1 1-1h12z"/></svg>`;
-    const magnet_Svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"  class="tool-svg" x="0px" y="0px" viewBox="0 0 1000 1000" ><g><g transform="translate(0.000000,460.000000) scale(0.100000,-0.100000)"><path d="M4171.6,3994c-183.9-13.4-515.3-67.1-706.9-113c-770.2-187.7-1448.4-563.3-2021.2-1118.8c-707-685.9-1130.3-1494.4-1299-2481c-59.4-358.3-59.4-1002,0-1360.2c157.1-923.4,546-1705.1,1172.5-2354.6c695.4-722.3,1534.6-1159.1,2548.1-1325.7c174.4-28.7,388.9-34.5,1643.8-40.2l1440.7-7.7v1302.8v1302.8l-1354.5,7.6c-1207,5.7-1369.8,9.6-1480.9,40.2c-448.3,116.9-785.5,335.3-1036.5,666.7c-252.9,339.1-364,666.7-364,1088.2s111.1,749.1,364,1088.2c241.4,318,595.8,551.8,1000.1,659.1c157.1,40.2,191.6,42.1,1517.3,47.9l1354.5,7.7v1302.8v1300.9l-1344.9-3.8C4863.3,4001.6,4219.5,3997.8,4171.6,3994z"/><path d="M7620.1,2704.6V1401.8h1139.9H9900v1302.8v1302.8H8760.1H7620.1V2704.6z"/><path d="M7620.1-3502.7v-1302.8h1139.9H9900v1302.8v1302.8H8760.1H7620.1V-3502.7z"/></g></g></svg>`;
 
     const LOCALE = {
         zh: {
@@ -65,15 +62,14 @@
             menu_halfImg:'竖图模式',
             menu_fullTitle:'标题全显',
             menu_columnNum:'列',
-            menu_uiBtnScale:'按钮缩放 %',
-            menu_menutoTop:'左侧菜单移至上方',
-            copyButton:'复制',
+            menu_uiBtnScale:'按钮缩放 %',            copyButton:'复制',
             copySuccess:'复制成功',
             getAvImg_norespond:'blogjav.net网站暂时无法响应',
             getAvImg_none:'未搜索到',
             tool_magnetTip:'磁力',
             tool_downloadTip:'下载封面',
-            tool_pictureTip:'视频截图(blogjav.net)需代理',
+            tool_pictureTip:'从 BlogJav 查找截图',
+            tool_pictureText:'查看截图',
             scrollerPlugin_end:'完',
             scrollerPlugin_error:'加载失败',
             scrollerPlugin_retry:'重试'
@@ -87,15 +83,14 @@
             menu_halfImg:'Vertical image mode',
             menu_fullTitle:'Full Title',
             menu_columnNum:'columns',
-            menu_uiBtnScale:'Button scale %',
-            menu_menutoTop:'Move the left menu to the top',
-            copyButton:'Copy',
+            menu_uiBtnScale:'Button scale %',            copyButton:'Copy',
             copySuccess:'Copy successful',
             getAvImg_norespond:'blogjav.net is temporarily unable to respond',
             getAvImg_none:'Not found',
             tool_magnetTip:'Magnet',
             tool_downloadTip:'Download cover',
             tool_pictureTip:'Video screenshot from blogjav.net',
+            tool_pictureText:'View screenshots',
             scrollerPlugin_end:'End',
             scrollerPlugin_error:'Load failed',
             scrollerPlugin_retry:'Retry'
@@ -163,6 +158,7 @@
         emby_key: '',
         metatube_url: '',
         fav_tags: [],
+        hidden_meta_tags: [],
         hate_tags: [],
         custom_persons: [],
         resource_center: true,
@@ -187,6 +183,7 @@
             version: 3,
             skin: 'v3',
             panelOpen: false,
+            panelMode: 'dock',
             nav: 'tracking',
             settingsOpen: false,
             settingsSection: '',
@@ -227,6 +224,7 @@
         next.openMode = next.openMode === 'same' ? 'same' : 'tab';
         // 默认收起；仅显式 true 才在启动时打开
         next.panelOpen = next.panelOpen === true;
+        next.panelMode = next.panelMode === 'float' ? 'float' : 'dock';
         // v2 及更早默认 panelOpen=true，升级时改为收起（避免一进站就弹窗）
         const prevVer = Number(raw && raw.version);
         if (!Number.isFinite(prevVer) || prevVer < 3) {
@@ -344,6 +342,7 @@
             // 数组字段若被存成空数组，仍应用用户值；仅在缺省字段时回落到 DEFAULT
             const merged = Object.assign({}, DEFAULT_CONFIG, saved);
             if (Array.isArray(saved.fav_tags)) merged.fav_tags = saved.fav_tags.slice();
+            merged.hidden_meta_tags = Array.isArray(saved.hidden_meta_tags) ? saved.hidden_meta_tags.slice() : [];
             if (Array.isArray(saved.custom_persons)) merged.custom_persons = saved.custom_persons.slice();
             return merged;
         }
@@ -556,40 +555,328 @@
 // @@creamu-part:11-theme
     function initCommanderStyles() {
         GM_addStyle(`
+        :root {
+            --jlc-bg: #f6f4ef; --jlc-surface: #fffdf9; --jlc-soft: #eee9e0;
+            --jlc-text: #302c27; --jlc-muted: #70675d; --jlc-line: #e4ded3;
+            --jlc-accent: #915733;
+        }
+        html.jlc-page { background: var(--jlc-bg); color-scheme: light; }
+        html.jlc-page body {
+            margin: 0 !important; padding: 0 28px 64px !important; min-width: 0 !important;
+            width: auto !important; max-width: none !important; box-sizing: border-box;
+            background: var(--jlc-bg) !important; color: var(--jlc-text);
+            font: 14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif;
+        }
+        html.jlc-console-docked body { padding-right: calc(var(--jlc-dock-width) + 28px) !important; }
+        #jlc-page-header {
+            display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+            position: sticky; top: 0; z-index: 100; min-height: 76px; box-sizing: border-box;
+            padding: 14px 0; margin-bottom: 24px; background: var(--jlc-bg);
+            border-bottom: 1px solid var(--jlc-line); text-align: left;
+        }
+        #jlc-page-header .jlc-page-brand {
+            display: flex; align-items: center; gap: 11px; flex-shrink: 0;
+            color: var(--jlc-text); text-decoration: none; font: 600 26px/1 Georgia, serif;
+        }
+        #jlc-page-header .jlc-page-brand small {
+            display: block; margin-top: 6px; color: var(--jlc-muted);
+            font: 10px/1.2 "Segoe UI", sans-serif; letter-spacing: 1.8px; text-transform: uppercase;
+        }
+        #jlc-page-header .jlc-page-search {
+            flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        }
+        #jlc-page-header #topsearch, #jlc-page-header .jlc-page-search form {
+            position: static; float: none; width: auto; height: auto; min-width: 0; max-width: 100%;
+            margin: 0; padding: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+            color: var(--jlc-text); background: transparent; font: inherit;
+        }
+        #jlc-page-header .jlc-page-search a { color: var(--jlc-accent); font: inherit; font-size: 12px; white-space: nowrap; }
+        #jlc-page-header input:not([type=submit]):not([type=hidden]), #jlc-page-header select {
+            min-width: 0; max-width: 100%; padding: 9px 12px; border-radius: 8px;
+            border: 1px solid var(--jlc-line); background: var(--jlc-surface); color: var(--jlc-text); font: inherit;
+        }
+        #jlc-page-header input[type=submit] {
+            padding: 9px 16px; background: var(--jlc-accent); color: white;
+            border: 0; border-radius: 8px; font: inherit; cursor: pointer;
+        }
+        #jlc-page-header .jlc-page-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+        #jlc-page-header .jlc-page-tools details { position: relative; font-size: 13px; }
+        #jlc-page-header .jlc-page-tools summary { cursor: pointer; padding: 9px 10px; color: var(--jlc-muted); white-space: nowrap; }
+        #jlc-page-header .jlc-native-account summary {
+            background: var(--jlc-surface); border: 1px solid var(--jlc-line); border-radius: 8px; color: var(--jlc-text);
+        }
+        #jlc-page-header .jlc-page-tools summary:focus-visible,
+        #jlc-page-header .jlc-page-tools a:focus-visible { outline: 2px solid var(--jlc-accent); outline-offset: 2px; }
+        #jlc-page-header .jlc-page-tools details > div {
+            position: absolute; right: 0; top: 100%; width: min(360px, calc(100vw - 32px));
+            max-height: 70dvh; overflow: auto; padding: 18px; box-sizing: border-box;
+            background: var(--jlc-surface); border: 1px solid var(--jlc-line); border-radius: 12px;
+            box-shadow: 0 12px 32px #34261a18;
+        }
+        #jlc-page-header .jlc-page-tools .jlc-native-account > div { width: min(230px, calc(100vw - 32px)); padding: 10px; }
+        #jlc-page-header :is(#leftmenu, #topmenu, .navbar, #navbar) {
+            position: static !important; float: none !important; width: auto !important; min-width: 0 !important;
+            height: auto !important; min-height: 0 !important;
+            margin: 0 !important; padding: 0 !important; color: var(--jlc-text);
+            background: transparent !important; border: 0 !important; box-shadow: none !important;
+        }
+        #jlc-page-header :is(#leftmenu, #topmenu) :is(ul, li, .menul1, .menul2),
+        #jlc-page-header #topmenu :is(div, span) {
+            display: block; position: static; float: none; width: auto; height: auto;
+            margin: 0; padding: 0; border: 0; list-style: none; box-shadow: none;
+            background: transparent; color: var(--jlc-text); font: inherit; text-align: left;
+        }
+        #jlc-page-header #leftmenu .menul1 {
+            padding: 10px 10px 4px; color: var(--jlc-muted); font-size: 12px; font-weight: 600;
+        }
+        #jlc-page-header :is(#leftmenu, #topmenu) a {
+            display: block; float: none; position: static; width: auto; height: auto;
+            margin: 0; padding: 8px 10px; border: 0; border-radius: 6px;
+            background: transparent; color: var(--jlc-text); font: inherit; text-decoration: none;
+        }
+        #jlc-page-header :is(#leftmenu, #topmenu) a:hover,
+        #jlc-page-header :is(#leftmenu, #topmenu) a:focus-visible {
+            background: var(--jlc-soft); color: var(--jlc-accent);
+        }
+        #jlc-page-header #topmenu { font: 13px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif; text-align: left; }
+        #jlc-page-header #topmenu a { font: inherit; }
+        #jlc-page-header #topmenu a :is(span, strong) { display: inline; font: inherit; color: inherit; }
+        #jlc-page-header #leftmenu > table { display: none; }
+        html.jlc-page #toplogo { display: none; }
+        html.jlc-page :is(#content, #rightcolumn, #maincontent) {
+            width: auto !important; min-width: 0 !important; max-width: none !important;
+            margin: 0 !important; padding: 0 !important; float: none !important;
+            background: transparent !important; color: var(--jlc-text); border: 0 !important;
+        }
+        html.jlc-page body > .container, html.jlc-page main > .container,
+        html.jlc-page .section > .container { width: 100% !important; max-width: 1500px; padding: 0; }
+        html.jlc-page :is(.page_selector, .pagination, .pagination-list) {
+            display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px;
+            margin: 24px auto; padding: 0; list-style: none;
+        }
+        html.jlc-page :is(.page_selector, .pagination, .pagination-list) a {
+            display: inline-block; border: 1px solid var(--jlc-line); border-radius: 7px;
+            background: var(--jlc-surface); color: var(--jlc-text); padding: 7px 12px; text-decoration: none;
+        }
+        html.jlc-page #grid-b { container-type: inline-size; }
+        html.jlc-page #grid-b .item-b { min-width: 0; box-sizing: border-box; }
+        html.jlc-page #grid-b .box-b { font-size: 13px; }
+        html.jlc-page #grid-b .box-b a { text-decoration: none; }
+        html.jlc-page #grid-b .cover-b { position: relative; overflow: hidden; }
+        html.jlc-page #grid-b .box-b .detail-b { display: flex; flex-direction: column; gap: 10px; }
+        html.jlc-page #grid-b .info-bottom { display: contents; }
+        html.jlc-page #grid-b .info-bottom-one { order: 0; }
+        html.jlc-page #grid-b .info-bottom-two { order: 2; gap: 8px; }
+        html.jlc-page #grid-b .box-b date:first-of-type { font-size: 15px !important; font-weight: 650; letter-spacing: .3px; }
+        html.jlc-page #grid-b a[name=av-title] { order: 1; font-size: 13px; line-height: 1.6; color: var(--jlc-muted); }
+        html.jlc-page :is(#rightcolumn > h3, #rightcolumn > h2, #rightcolumn .boxtitle) {
+            display: block; position: static; float: none; clear: both; width: auto; height: auto; padding: 0;
+            font: 600 22px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+            color: var(--jlc-text); margin: 0 0 16px; text-align: left;
+            background: transparent; border: 0; box-shadow: none;
+        }
+        html.jlc-page #rightcolumn .displaymode {
+            width: 100%; margin: 0 0 18px; padding: 0; border: 0; border-spacing: 0;
+            background: transparent; color: var(--jlc-muted); font: 13px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+        }
+        html.jlc-page #rightcolumn .displaymode tr {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+        }
+        html.jlc-page #rightcolumn .displaymode td { padding: 0; border: 0; background: transparent; }
+        html.jlc-page #rightcolumn .displaymode .left {
+            display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%;
+        }
+        html.jlc-page #rightcolumn .displaymode select {
+            min-width: 0; max-width: 100%; padding: 7px 10px; border: 1px solid var(--jlc-line);
+            border-radius: 7px; background: var(--jlc-surface); color: var(--jlc-text); font: inherit;
+        }
+        html.jlc-page #rightcolumn .displaymode a {
+            display: inline-block; padding: 7px 10px; border: 1px solid var(--jlc-line); border-radius: 7px;
+            background: var(--jlc-surface); color: var(--jlc-accent); text-decoration: none;
+        }
+        html.jlc-page #rightcolumn .displaymode a:hover { background: var(--jlc-soft); }
+        html.jlc-page #rightcolumn .displaymode :is(a, select):focus-visible {
+            outline: 2px solid var(--jlc-accent); outline-offset: 2px;
+        }
+        @container (max-width: 680px) {
+            html.jlc-page #grid-b .item-b { width: 50%; }
+        }
+        @container (max-width: 360px) {
+            html.jlc-page #grid-b .item-b { width: 100%; }
+        }
+        #jlc-detail { max-width: 1500px; margin: 0 auto; container-type: inline-size; text-align: left; }
+        #jlc-detail *, #jlc-page-header * { box-sizing: border-box; }
+        #jlc-detail .jlc-detail-heading { margin: 0 0 24px; }
+        #jlc-detail #video_title {
+            margin: 0; padding: 0; border: 0; width: auto; background: transparent; text-align: left;
+        }
+        #jlc-detail .jlc-detail-eyebrow { color: var(--jlc-accent); font-size: 12px; letter-spacing: 2px; margin-bottom: 8px; }
+        #jlc-detail .jlc-detail-heading :is(h1, h2, h3) {
+            font: 600 25px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif;
+            color: var(--jlc-text); margin: 0; padding: 0; background: transparent;
+        }
+        #jlc-detail .jlc-detail-heading a { color: inherit; text-decoration: none; }
+        #jlc-detail .jlc-detail-overview {
+            display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+            gap: 22px; align-items: start; margin-bottom: 24px;
+        }
+        #jlc-detail .jlc-detail-overview:not(:has(.jlc-detail-artwork)) { grid-template-columns: 1fr; }
+        #jlc-detail .jlc-detail-artwork {
+            background: var(--jlc-soft); border: 1px solid var(--jlc-line); border-radius: 12px; overflow: hidden;
+        }
+        #jlc-detail .jlc-detail-artwork > * {
+            display: block; width: 100% !important; max-width: none !important; padding: 0 !important; margin: 0 !important;
+        }
+        #jlc-detail .jlc-detail-artwork img {
+            display: block; width: 100% !important; max-width: 100%; height: auto !important; object-fit: contain;
+        }
+        #jlc-detail .jlc-detail-facts {
+            min-width: 0; background: var(--jlc-surface); border: 1px solid var(--jlc-line);
+            border-radius: 12px; padding: 16px 18px; color: var(--jlc-text); overflow-wrap: anywhere;
+        }
+        #jlc-detail .jlc-detail-facts > * {
+            width: 100% !important; float: none !important; margin: 0 !important; padding: 0 !important;
+            background: transparent !important; color: inherit; border: 0;
+        }
+        #jlc-detail .jlc-detail-facts :is(table, tbody) { width: 100%; border: 0; border-spacing: 0; border-collapse: collapse; background: transparent; }
+        #jlc-detail .jlc-detail-facts :is(td, th, .panel-block) {
+            padding: 7px 0; background: transparent !important; color: var(--jlc-text); border: 0;
+            border-bottom: 1px solid var(--jlc-line); font-size: 13px; line-height: 1.6;
+        }
+        #jlc-detail .jlc-detail-facts :is(td.header, .header, strong) { color: var(--jlc-muted); font-weight: 500; }
+        #jlc-detail .jlc-detail-facts td.header {
+            width: 86px; white-space: nowrap; padding-right: 12px; text-align: left; vertical-align: middle;
+        }
+        #jlc-detail #video_info .item { margin: 0; padding: 0; }
+        #jlc-detail #video_info table { margin: 0; table-layout: fixed; }
+        #jlc-detail #video_info td.text { font: inherit; font-size: 13px; text-align: left; }
+        #jlc-detail #video_info td.icon { width: 18px; }
+        #jlc-detail #video_info :is(.cast, .genre) { background: transparent; border: 0; padding: 0; }
+        #jlc-detail #video_genres .genre {
+            display: inline-block; margin: 2px 6px 2px 0; padding: 2px 7px;
+            border-radius: 5px; background: var(--jlc-soft); font-size: 12px;
+        }
+        #jlc-detail .jlc-detail-facts a { color: var(--jlc-accent); text-decoration: none; }
+        #jlc-detail .jlc-detail-facts a:hover { text-decoration: underline; }
+        #jlc-detail .jlc-detail-facts p { margin: 0; padding: 8px 0; border-bottom: 1px solid var(--jlc-line); }
+        #jlc-detail #video_cast .cast {
+            display: inline-flex; align-items: center; flex-wrap: wrap; max-width: 100%;
+            margin: 2px 8px 2px 0; vertical-align: top;
+        }
+        #jlc-detail #video_cast .star { display: inline-flex; align-items: center; max-width: 100%; vertical-align: middle; }
+        #jlc-detail #video_cast .star a { min-width: 0; }
+        #jlc-detail #video_cast .star .jlc-detail-copy-btn { flex-shrink: 0; }
+        #jlc-detail :is(.icn_favstar, .icn_favdirector, .icn_favmaker, .icn_favlabel) {
+            display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+            width: 26px; height: 26px; margin: 0 4px; vertical-align: middle;
+            border: 1px solid var(--jlc-line); border-radius: 7px; cursor: pointer;
+            background: var(--jlc-surface); color: var(--jlc-muted);
+        }
+        /* Keep the native span as the event target: JavLibrary reads its ID on click. */
+        #jlc-detail :is(.icn_favstar, .icn_favdirector, .icn_favmaker, .icn_favlabel)::before {
+            content: ""; width: 14px; height: 14px; pointer-events: none;
+            background: currentColor;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+        }
+        #jlc-detail :is(.icn_favstar, .icn_favdirector, .icn_favmaker, .icn_favlabel):hover {
+            background: var(--jlc-soft); border-color: #c6b7a8; color: var(--jlc-accent);
+        }
+        #jlc-detail .jlc-detail-sections {
+            display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+            border-bottom: 1px solid var(--jlc-line); padding: 12px 0; margin-bottom: 24px;
+        }
+        #jlc-detail .jlc-detail-sections a { font-size: 13px; color: var(--jlc-muted); text-decoration: none; }
+        #jlc-detail .jlc-detail-sections a:hover { color: var(--jlc-accent); }
+        #jlc-detail .jlc-detail-sections button {
+            margin-left: auto; padding: 8px 12px; font: inherit; font-size: 12px;
+            color: var(--jlc-accent); background: var(--jlc-surface); border: 1px solid var(--jlc-line);
+            border-radius: 8px; cursor: pointer;
+        }
+        #jlc-detail .jlc-resource-center { padding: 0; border: 0; background: transparent; }
+        #jlc-detail .jlc-resource-header { margin-bottom: 20px; }
+        #jlc-detail .jlc-resource-links { margin-bottom: 20px; }
+        #jlc-detail .jlc-resource-card { padding: 18px; scroll-margin-top: 100px; }
+        #jlc-detail .jlc-resource-title { font-size: 21px; font-weight: 600; }
+        .jlc-resource-sources { order: 10; border-top: 1px solid var(--jlc-line); padding-top: 10px; }
+        .jlc-resource-sources summary { color: var(--jlc-muted); cursor: pointer; font-size: 12px; padding: 4px 0; }
+        .jlc-resource-sources[open] .jlc-resource-status-list { padding-top: 10px; }
+        #jlc-detail .jlc-detail-facts button:not(.jlc-detail-copy-btn),
+        #jlc-detail .jlc-detail-facts :is(input[type=button], input[type=submit]) {
+            background: var(--jlc-soft); color: var(--jlc-text); border: 1px solid var(--jlc-line);
+            border-radius: 7px; padding: 7px 12px; font: inherit; cursor: pointer; margin-top: 8px;
+        }
+        #jlc-detail .jlc-detail-facts #video_favorite_edit {
+            display: grid; gap: 8px; padding-top: 14px !important; text-align: left;
+        }
+        #jlc-detail #video_favorite_edit .favoritetype {
+            display: grid; grid-template-columns: 108px minmax(0, 1fr); align-items: center; gap: 10px;
+            margin: 0; padding: 0; color: var(--jlc-muted); font-size: 11px; line-height: 1.6;
+        }
+        #jlc-detail #video_favorite_edit button {
+            width: 100%; min-height: 32px; padding: 6px 8px; margin: 0;
+            background: var(--jlc-surface); color: var(--jlc-accent); font-size: 12px; line-height: 1.5;
+        }
+        #jlc-detail #video_favorite_edit button.smalldarkbutton {
+            background: var(--jlc-accent); border-color: var(--jlc-accent); color: #fff;
+        }
+        #jlc-detail #video_favorite_edit button.hidden { display: none; }
+        #jlc-detail #video_favorite_edit button:hover { border-color: var(--jlc-accent); }
+        #jlc-detail #video_favorite_edit button:focus-visible { outline: 2px solid var(--jlc-accent); outline-offset: 2px; }
+        @container (max-width: 760px) {
+            #jlc-detail .jlc-detail-overview { grid-template-columns: 1fr; gap: 16px; }
+            #jlc-detail .jlc-resource-grid { grid-template-columns: 1fr; }
+            #jlc-detail .jlc-detail-heading :is(h1,h2,h3) { font-size: 21px; }
+        }
+        @media (max-width: 820px) {
+            html.jlc-page body { padding: 0 16px 60px !important; }
+            #jlc-page-header { gap: 14px; margin-bottom: 20px; }
+            #jlc-page-header .jlc-page-tools details { position: static; }
+            #jlc-page-header .jlc-page-tools details > div { top: 100%; }
+            #jlc-page-header .jlc-page-search:not(:empty) { order: 3; flex-basis: 100%; }
+            #jlc-detail .jlc-detail-sections { gap: 16px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            html.jlc-page #grid-b .item-b, html.jlc-page #grid-b .box-b { animation: none !important; transition: none !important; }
+        }
+        :is(.jlc-resource-center, #jlc-tracking-pagebar) { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; color-scheme: light; }
+        .jlc-resource-center :focus-visible { outline: 2px solid var(--jlc-accent); outline-offset: 3px; }
+
         .jlc-resource-center {
             margin: 18px 0; padding: 16px; border-radius: 14px;
-            background: linear-gradient(180deg, rgba(18,18,18,.96), rgba(30,30,30,.94));
-            color: #f1f1f1; border: 1px solid rgba(255,255,255,.08);
-            box-shadow: 0 8px 24px rgba(0,0,0,.2);
+            background: var(--jlc-bg);
+            color: var(--jlc-text); border: 1px solid var(--jlc-line);
+            box-shadow: none;
         }
         .jlc-resource-header {
             display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
             margin-bottom: 14px; flex-wrap: wrap;
         }
         .scrollBarHide { overflow: hidden; }
-        .jlc-resource-title { font-size: 18px; font-weight: 700; color: #fff; }
-        .jlc-resource-subtitle { font-size: 12px; color: #aaa; margin-top: 4px; }
+        .jlc-resource-title { font-size: 18px; font-weight: 700; color: var(--jlc-text); }
+        .jlc-resource-subtitle { font-size: 12px; color: var(--jlc-muted); margin-top: 4px; }
         .jlc-resource-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .jlc-resource-header-actions button,
+        .jlc-resource-inline-actions a,
         .jlc-resource-inline-actions button,
         .jlc-magnet-actions button,
         .jlc-magnet-actions a {
-            appearance: none; border: 1px solid rgba(255,255,255,.12); background: #2f2f2f;
-            color: #f5f5f5; border-radius: 8px; padding: 8px 12px; cursor: pointer;
+            appearance: none; border: 1px solid var(--jlc-line); background: var(--jlc-surface);
+            color: var(--jlc-text); border-radius: 8px; padding: 8px 12px; cursor: pointer;
             text-decoration: none; font-size: 12px; line-height: 1.2;
         }
         .jlc-resource-header-actions button:hover,
+        .jlc-resource-inline-actions a:hover,
         .jlc-resource-inline-actions button:hover,
         .jlc-magnet-actions button:hover,
         .jlc-magnet-actions a:hover {
-            background: #3a3a3a; border-color: rgba(255,255,255,.22);
+            background: var(--jlc-soft); border-color: #c6b7a8;
         }
         .jlc-resource-grid {
             display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 12px;
         }
         .jlc-resource-card {
-            background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06);
+            background: var(--jlc-surface); border: 1px solid var(--jlc-line);
             border-radius: 12px; padding: 14px; min-width: 0; min-height: 120px;
         }
         .jlc-resource-card[data-jlc-resource="magnet"],
@@ -597,10 +884,10 @@
         .jlc-resource-links {
             display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start;
             margin: -2px 0 12px; padding: 8px 10px; border-radius: 8px;
-            background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.06);
+            background: var(--jlc-surface); border: 1px solid var(--jlc-line);
         }
         .jlc-resource-links-label {
-            padding-top: 5px; color: #aaa; font-size: 11px; line-height: 1.2; white-space: nowrap;
+            padding-top: 5px; color: var(--jlc-muted); font-size: 11px; line-height: 1.2; white-space: nowrap;
         }
         .jlc-resource-links .jlc-resource-body { min-width: 0; gap: 0; }
         .jlc-resource-links .jlc-resource-chip-list { gap: 6px; }
@@ -615,7 +902,7 @@
             .jlc-resource-links { grid-template-columns: minmax(0, 1fr); gap: 6px; }
             .jlc-resource-links-label { padding-top: 0; }
         }
-        .jlc-resource-card h3 { margin: 0 0 10px; font-size: 14px; color: #fff; }
+        .jlc-resource-card h3 { margin: 0 0 10px; font-size: 14px; color: var(--jlc-text); }
         .jlc-resource-card-titlebar {
             display: flex; align-items: center; justify-content: space-between; gap: 10px;
             margin-bottom: 10px;
@@ -625,11 +912,11 @@
             display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
         }
         .jlc-title-inline-button {
-            appearance: none; border: 1px solid rgba(255,255,255,.12); background: #2f2f2f;
-            color: #f5f5f5; border-radius: 999px; padding: 5px 11px; cursor: pointer;
+            appearance: none; border: 1px solid var(--jlc-line); background: var(--jlc-surface);
+            color: var(--jlc-text); border-radius: 999px; padding: 5px 11px; cursor: pointer;
             font-size: 12px; line-height: 1.2;
         }
-        .jlc-title-inline-button:hover { background: #3a3a3a; border-color: rgba(255,255,255,.22); }
+        .jlc-title-inline-button:hover { background: var(--jlc-soft); border-color: #c6b7a8; }
         .jlc-title-inline-button[disabled] { opacity: .65; cursor: wait; }
         .jlc-resource-body { display: flex; flex-direction: column; gap: 10px; }
         .jlc-resource-chip-list,
@@ -639,36 +926,35 @@
         }
         .jlc-resource-chip {
             display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
-            border-radius: 999px; background: rgba(255,255,255,.08); color: #f3f3f3 !important;
-            text-decoration: none; font-size: 12px; border: 1px solid rgba(255,255,255,.1);
+            border-radius: 999px; background: var(--jlc-surface); color: var(--jlc-text) !important;
+            text-decoration: none; font-size: 12px; border: 1px solid var(--jlc-line);
         }
-        .jlc-resource-chip:hover { background: rgba(255,255,255,.14); }
+        .jlc-resource-chip:hover { background: var(--jlc-soft); }
         .jlc-resource-status {
             display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
             border-radius: 999px; font-size: 12px; line-height: 1.2; text-decoration: none;
-            background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.1); color: #d8d8d8;
+            background: var(--jlc-surface); border: 1px solid var(--jlc-line); color: var(--jlc-text);
         }
-        .jlc-resource-status:hover { background: rgba(255,255,255,.12); }
+        .jlc-resource-status:hover { background: var(--jlc-soft); }
         button.jlc-resource-status {
             appearance: none; cursor: pointer; font: inherit;
         }
         .jlc-resource-status strong { color: inherit; font-size: 12px; }
-        .jlc-resource-status small { color: rgba(255,255,255,.72); }
+        .jlc-resource-status small { color: var(--jlc-muted); }
         .jlc-resource-status.is-active-filter {
-            box-shadow: inset 0 0 0 1px rgba(255,255,255,.18), 0 0 0 2px rgba(255,146,84,.16);
-            transform: translateY(-1px);
+            box-shadow: 0 0 0 2px #ddc0a6;
         }
-        .jlc-resource-status.is-pending { color: #bcbcbc; border-color: rgba(255,255,255,.12); }
+        .jlc-resource-status.is-pending { color: var(--jlc-muted); border-color: var(--jlc-line); }
 
-        .jlc-resource-status.is-ok { color: #7dffaf; border-color: rgba(125,255,175,.32); background: rgba(60,180,110,.14); }
-        .jlc-resource-status.is-partial { color: #ffd36f; border-color: rgba(255,211,111,.34); background: rgba(196,134,42,.14); }
+        .jlc-resource-status.is-ok { color: #286346; border-color: #bed4c3; background: #edf5ef; }
+        .jlc-resource-status.is-partial { color: #805a1c; border-color: #ddc89b; background: #faf2df; }
         .jlc-resource-status.is-blocked,
-        .jlc-resource-status.is-error { color: #ff8c8c; border-color: rgba(255,140,140,.34); background: rgba(168,56,56,.14); }
-        .jlc-resource-status.is-empty { color: #b8b8b8; border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.04); }
+        .jlc-resource-status.is-error { color: #a13f35; border-color: #e4c0b9; background: #fcf0ed; }
+        .jlc-resource-status.is-empty { color: var(--jlc-muted); border-color: var(--jlc-line); background: var(--jlc-surface); }
         .jlc-resource-note,
         .jlc-resource-empty,
         .jlc-resource-loading {
-            font-size: 12px; line-height: 1.6; color: #bdbdbd;
+            font-size: 12px; line-height: 1.6; color: var(--jlc-muted);
         }
         .jlc-resource-inline-actions a,
         .jlc-resource-inline-actions button {
@@ -683,7 +969,7 @@
         }
         .jlc-trailer-player-shell {
             width: 100%; max-width: 100%; border-radius: 10px; overflow: hidden;
-            background: #000; border: 1px solid rgba(255,255,255,.08);
+            background: #000; border: 1px solid var(--jlc-line);
         }
         .jlc-trailer-player-shell.is-inline video,
         .jlc-trailer-player-shell.is-inline iframe {
@@ -698,7 +984,7 @@
         .jlc-trailer-main-actions { gap: 10px; }
         .jlc-trailer-source-list { gap: 6px; }
         .jlc-trailer-source-button.is-active {
-            background: #ff4400; border-color: rgba(255,130,80,.55); color: #fff;
+            background: var(--jlc-accent); border-color: transparent; color: #fff;
         }
         .jlc-trailer-overlay {
             position: fixed; inset: 0; z-index: 100000; display: none; align-items: center; justify-content: center;
@@ -706,32 +992,32 @@
         }
         .jlc-trailer-overlay.is-open { display: flex; }
         .jlc-trailer-dialog {
-            width: min(1040px, 94vw); background: #111; border-radius: 16px; padding: 18px;
-            border: 1px solid rgba(255,255,255,.08); box-shadow: 0 20px 60px rgba(0,0,0,.5); position: relative;
+            width: min(1040px, 94vw); background: var(--jlc-surface); border-radius: 16px; padding: 18px;
+            border: 1px solid var(--jlc-line); box-shadow: 0 20px 60px rgba(0,0,0,.5); position: relative;
         }
         .jlc-trailer-dialog-head {
             display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px;
-            color: #fff; flex-wrap: wrap;
+            color: var(--jlc-text); flex-wrap: wrap;
         }
-        .jlc-trailer-dialog-head small { color: #b8b8b8; font-size: 12px; }
+        .jlc-trailer-dialog-head small { color: var(--jlc-muted); font-size: 12px; }
         .jlc-trailer-close {
             position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; border-radius: 999px;
-            background: rgba(255,255,255,.08); color: #fff; font-size: 22px; line-height: 1; border: 1px solid rgba(255,255,255,.1);
+            background: var(--jlc-surface); color: var(--jlc-text); font-size: 22px; line-height: 1; border: 1px solid var(--jlc-line);
         }
-        .jlc-trailer-close:hover { background: rgba(255,255,255,.16); }
+        .jlc-trailer-close:hover { background: var(--jlc-soft); }
         .jlc-trailer-dialog-actions {
             display: flex; justify-content: flex-end; margin-top: 12px;
         }
         .jlc-trailer-dialog-actions a {
-            color: #f5f5f5; text-decoration: none; font-size: 12px; padding: 8px 12px;
-            border-radius: 8px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.1);
+            color: var(--jlc-text); text-decoration: none; font-size: 12px; padding: 8px 12px;
+            border-radius: 8px; background: var(--jlc-surface); border: 1px solid var(--jlc-line);
         }
-        .jlc-trailer-dialog-actions a:hover { background: rgba(255,255,255,.14); }
+        .jlc-trailer-dialog-actions a:hover { background: var(--jlc-soft); }
         .jlc-resource-panel-slot {
-            min-height: 48px; border-radius: 10px; background: rgba(0,0,0,.16); padding: 10px;
+            min-height: 48px; border-radius: 10px; background: var(--jlc-soft); padding: 10px;
         }
         .jlc-inline-screenshot-panel {
-            position: relative; min-height: 0 !important; background: #111; border-radius: 10px;
+            position: relative; min-height: 0 !important; background: var(--jlc-surface); border-radius: 10px;
             padding: 12px; overflow: hidden;
         }
         .jlc-inline-screenshot-panel ul {
@@ -739,7 +1025,7 @@
         }
         .jlc-inline-screenshot-panel .imgResult-li {
             font-size: 13px; line-height: 1.4; padding: 6px 10px; border-radius: 999px;
-            background: rgba(255,255,255,.08);
+            background: var(--jlc-surface);
         }
         .jlc-inline-screenshot-panel img[name="screenshot"] {
             display: block; width: 100%; max-height: 70vh; object-fit: contain; background: #000;
@@ -751,15 +1037,15 @@
         }
         .jlc-magnet-list::-webkit-scrollbar { width: 8px; }
         .jlc-magnet-list::-webkit-scrollbar-thumb {
-            background: rgba(255,255,255,.18); border-radius: 999px;
+            background: #c9b9a8; border-radius: 999px;
         }
         .jlc-magnet-row {
             display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: start;
-            padding: 8px 10px; border-radius: 10px; background: rgba(0,0,0,.16);
+            padding: 8px 10px; border-radius: 10px; background: var(--jlc-soft);
         }
         .jlc-magnet-meta { min-width: 0; flex: 1 1 280px; }
         .jlc-magnet-title {
-            color: #fff; font-size: 13px; line-height: 1.5; word-break: break-word;
+            color: var(--jlc-text); font-size: 13px; line-height: 1.5; word-break: break-word;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
         }
         .jlc-magnet-side {
@@ -767,7 +1053,7 @@
             display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
         }
         .jlc-magnet-sub {
-            color: #9f9f9f; font-size: 11px; line-height: 1.5; text-align: right;
+            color: var(--jlc-muted); font-size: 11px; line-height: 1.5; text-align: right;
             max-width: 320px;
         }
         .jlc-magnet-actions { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
@@ -793,79 +1079,119 @@
             .jlc-magnet-actions { justify-content: flex-start; }
         }
 
-        /* 卡片增强 */        /* 卡片增强 */
-        .item-b { position: relative !important; }
-        .item-b .box-b { transition: all 0.3s !important; }
+        /* 卡片增强 */
+        .item-b { position: relative !important; isolation: isolate; }
+        .item-b .box-b { transition: border-color .15s, box-shadow .15s !important; }
         .item-b.visited-item .box-b { outline: 3px solid #666 !important; outline-offset: -2px; }
-        .item-b.liked-item .box-b { outline: 4px solid #ffcc00 !important; outline-offset: -2px; box-shadow: 0 0 25px #ffcc0055 !important; }
+        .item-b.visited-item .cover-b::after {
+            content: ""; position: absolute; inset: 0; z-index: 1;
+            background: rgb(0 0 0 / 16%); pointer-events: none;
+        }
+        .item-b.liked-item .box-b,
+        .item-b.preference-match-item:where(:not(.hated-item)) .box-b {
+            outline: 4px solid #ffcc00 !important; outline-offset: -2px; box-shadow: 0 0 25px #ffcc0055 !important;
+        }
         .item-b.emby-item .box-b { outline: 4px solid #52b54b !important; outline-offset: -2px; box-shadow: 0 0 20px #52b54b55 !important; }
-        .item-b.hated-item { opacity: 0.1 !important; filter: grayscale(1); pointer-events: none; }
+        .item-b.hated-item .cover-b { opacity: .15; filter: grayscale(1); }
+        .item-b.hated-item .cover-b a, .item-b.hated-item a[name=av-title] { pointer-events: none; }
 
         /* 勋章 / 标签 */
         .jlc-badge-container {
             position: absolute; top: 8px; left: 8px; display: flex;
-            flex-direction: column; gap: 5px; z-index: 5000; pointer-events: none;
+            flex-direction: column; gap: 5px; z-index: 2; pointer-events: none;
+            max-height: calc(100% - 16px); max-width: calc(100% - 16px);
         }
         .jlc-badge {
             padding: 4px 10px; font-size: 11px; font-weight: bold; border-radius: 4px;
-            color: white !important; box-shadow: 2px 2px 6px rgba(0,0,0,0.7);
+            color: white !important; box-shadow: 0 1px 3px #0001;
             white-space: nowrap; width: fit-content; text-transform: uppercase;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+            text-shadow: 0 1px 2px #0008; flex-shrink: 0;
         }
-        .b-fav { background: linear-gradient(135deg, #ff4400, #cc3300) !important; animation: jlc-pulse 2s infinite; }
-        .b-person { background: linear-gradient(135deg, #007bff, #0056b3) !important; border-left: 4px solid #fff; }
-        @keyframes jlc-pulse {
-            0% { box-shadow: 0 0 0 0 rgba(255,68,0,0.8); }
-            70% { box-shadow: 0 0 0 10px rgba(255,68,0,0); }
-            100% { box-shadow: 0 0 0 0 rgba(255,68,0,0); }
-        }
+        .b-fav { background: rgba(145, 87, 51, .68) !important; }
+        .b-preference { background: rgba(138, 101, 0, .68); }
+        .b-person { background: rgba(66, 101, 125, .68) !important; }
         .meta-overlay-box {
-            display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
-            max-width: 140px; margin-top: 2px; pointer-events: none;
+            display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+            max-width: 140px; min-height: 0; margin-top: 2px; pointer-events: auto;
+            overflow: auto; overscroll-behavior: contain; scrollbar-width: thin;
+            scrollbar-color: #70675d66 transparent;
         }
         .meta-tag {
-            display: inline-block; padding: 3px 7px; border-radius: 4px;
-            background: rgba(0,0,0,0.82); color: #ddd; border: 1px solid rgba(255,255,255,0.16);
-            font-size: 10px; line-height: 1.15; box-shadow: 0 2px 6px rgba(0,0,0,0.45);
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap;
-            max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+            appearance: none; display: block; min-width: 0; min-height: 0; margin: 0;
+            padding: 3px 7px; border-radius: 4px;
+            background: rgba(0,0,0,.52); color: #fff; border: 1px solid rgba(255,255,255,.12);
+            font: 10px/1.15 "Segoe UI", "Microsoft YaHei", sans-serif; box-shadow: none;
+            text-shadow: 0 1px 2px #0008; white-space: nowrap;
+            max-width: 100%; flex-shrink: 0; pointer-events: auto; cursor: pointer;
+            overflow: hidden; text-overflow: ellipsis; text-align: left;
+            user-select: none; -webkit-touch-callout: none;
         }
+        button.meta-tag:hover { border-color: #ffffff99; }
+        button.meta-tag:focus-visible { outline: 2px solid white; outline-offset: -2px; }
+        #jlc-meta-tag-menu {
+            position: fixed; inset: auto; margin: 0; padding: 4px; max-width: calc(100vw - 16px);
+            border: 1px solid var(--jlc-line); border-radius: 8px; background: var(--jlc-surface);
+            color: var(--jlc-text); box-shadow: 0 4px 16px #302c2726; font: 13px "Segoe UI", "Microsoft YaHei", sans-serif;
+        }
+        #jlc-meta-tag-menu button {
+            appearance: none; display: block; width: 100%; text-align: left;
+            padding: 10px 12px; border: 0; border-radius: 5px; margin: 0;
+            color: inherit; background: transparent; font: inherit; cursor: pointer;
+        }
+        #jlc-meta-tag-menu button:hover:not(:disabled) { background: var(--jlc-soft); }
+        #jlc-meta-tag-menu button:disabled { color: var(--jlc-muted); cursor: default; }
+        #jlc-meta-tag-menu button:focus-visible { outline: 2px solid var(--jlc-accent); outline-offset: -2px; }
+        #jlc-wb .jlc-hidden-meta-tags { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0; }
+        #jlc-wb .jlc-hidden-meta-tags button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
         .meta-tag.hot {
-            background: linear-gradient(135deg, rgba(255,68,0,0.95), rgba(204,51,0,0.92)) !important;
-            color: #fff !important; font-weight: bold; border-color: #ffaa00;
-            animation: jlc-pulse 2s infinite; box-shadow: 0 0 0 0 rgba(255,68,0,0.8), 0 2px 6px rgba(0,0,0,0.45);
+            background: rgba(145, 87, 51, .68) !important;
+            color: #fff !important; font-weight: 600; border-color: rgba(189, 140, 102, .35);
         }
         .meta-tag.more {
-            background: rgba(20,20,20,0.74) !important; color: #bbb !important;
+            background: rgba(20,20,20,.46) !important; pointer-events: none; cursor: default;
         }
-        .jlc-detail-cover-host { position: relative !important; }
+        .jlc-detail-cover-host { position: relative !important; isolation: isolate; }
         .jlc-detail-badge-container {
-            position: absolute; top: 10px; left: 10px; z-index: 6000; pointer-events: none;
-            max-width: min(52%, 220px);
+            position: absolute; top: 10px; left: 10px; z-index: 2; pointer-events: none;
+            max-width: min(52%, 220px); max-height: calc(100% - 20px);
         }
         .jlc-detail-badge-container .meta-overlay-box { max-width: min(100%, 200px); }
         .jlc-detail-copy-btn {
-            appearance: none; border: 1px solid rgba(255,255,255,.16); background: rgba(20,20,20,.78);
-            color: #f5f5f5; border-radius: 999px; width: 24px; height: 24px; padding: 0;
+            appearance: none; border: 1px solid var(--jlc-line); background: var(--jlc-surface);
+            color: var(--jlc-text); border-radius: 7px; width: 28px; height: 28px; padding: 0;
             margin-left: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
-            vertical-align: middle; line-height: 1; box-shadow: 0 2px 8px rgba(0,0,0,.18);
+            vertical-align: middle; line-height: 1; box-shadow: none;
         }
-        .jlc-detail-copy-btn:hover { background: #3a3a3a; border-color: rgba(255,255,255,.28); color: #fff; }
+        .jlc-detail-copy-btn:hover { background: var(--jlc-soft); border-color: #c6b7a8; }
+        .jlc-detail-copy-btn:focus-visible { outline: 2px solid var(--jlc-accent); outline-offset: 2px; }
+        .jlc-detail-copy-btn[data-jlc-copy-key="cast"] { margin: 0 8px 0 4px; }
         .jlc-detail-copy-btn svg { width: 14px; height: 14px; pointer-events: none; }
         #video_title .jlc-detail-copy-btn,
         h2 .jlc-detail-copy-btn,
         h3 .jlc-detail-copy-btn { margin-left: 10px; }
 
-        /* Commander 工具按钮：整合进旧工具栏 */
-        #grid-b .toolbar-b .jlc-tool-btn {
-            display: inline-flex; align-items: center; justify-content: center;
-            width: 22px; height: 22px; margin-right: 2px; cursor: pointer;
-            opacity: .38; font-size: 14px; line-height: 1; vertical-align: middle;
-            transition: transform .15s ease, opacity .15s ease, color .15s ease;
+        /* One primary action; secondary tools expand within the card. */
+        #grid-b .toolbar-b { position: relative; width: 100%; padding: 0; }
+        #grid-b .toolbar-b button, #grid-b .jlc-card-more summary {
+            appearance: none; display: inline-flex; align-items: center; justify-content: center;
+            min-height: 32px; padding: 6px 10px; margin: 0; border: 0; border-radius: 6px;
+            background: transparent; color: var(--jlc-muted); cursor: pointer;
+            font: 12px/1.5 "Segoe UI", "Microsoft YaHei", sans-serif; text-align: center;
         }
-        #grid-b .toolbar-b .jlc-tool-btn:hover { opacity: 1; transform: scale(1.08); color: #ff4400; }
-        #grid-b .toolbar-b .jlc-tool-btn.active-like { opacity: 1; color: #ffcc00; text-shadow: 0 0 8px rgba(255,204,0,.45); }
-        #grid-b .toolbar-b .jlc-tool-btn.active-hate { opacity: 1; color: #ff6666; text-shadow: 0 0 8px rgba(255,102,102,.4); }
+        #grid-b .toolbar-b > .j-bm { position: absolute; left: 0; top: 0; color: var(--jlc-accent); }
+        #grid-b .jlc-card-more summary { display: block; width: max-content; margin-left: auto; list-style: none; }
+        #grid-b .jlc-card-more summary::-webkit-details-marker { display: none; }
+        #grid-b .jlc-card-more summary::after { content: '⌄'; margin-left: 6px; }
+        #grid-b .jlc-card-more[open] summary::after { content: '⌃'; }
+        #grid-b .jlc-card-menu { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding-top: 8px; }
+        #grid-b .jlc-card-menu button { background: var(--jlc-bg); }
+        #grid-b .toolbar-b button:hover, #grid-b .jlc-card-more summary:hover { color: var(--jlc-accent); background: var(--jlc-soft); }
+        #grid-b .toolbar-b :is(button, summary):focus-visible { outline: 2px solid var(--jlc-accent); outline-offset: 1px; }
+        #grid-b .toolbar-b button:disabled { opacity: .5; cursor: wait; }
+        #grid-b .toolbar-b .active-like { color: var(--jlc-accent); background: var(--jlc-soft); }
+        #grid-b .toolbar-b .active-hate { color: #a13f35; background: #f7e6e2; }
+        #grid-b .toolbar-b > .active-bookmark { color: var(--jlc-accent); background: var(--jlc-soft); }
+        #grid-b .item-tag:empty { display: none; }
         #grid-b .avid-link-b { display: inline-flex !important; align-items: center; gap: 8px; flex-wrap: wrap; }
         #grid-b .avid-line-b { display: inline-flex; align-items: center; gap: 2px; }
         #grid-b .avid-date-badge,
@@ -880,7 +1206,6 @@
             height: auto !important; object-fit: contain; margin: 12px auto !important; opacity: .92;
         }
         #grid-b .minHeight-96 { min-height: 96px; }
-        #grid-b .toolbar-b .jlc-tool-btn.active-bookmark { opacity: 1; color: #7dd3fc; text-shadow: 0 0 8px rgba(125,211,252,.42); }
         #grid-b .item-b.jlc-tracking-old-item .box-b { opacity: 1; filter: none; }
         #grid-b .item-b.jlc-tracking-breakpoint-item .box-b { outline: 3px solid #ff5f56 !important; outline-offset: -2px; box-shadow: 0 0 0 1px rgba(255,95,86,.18), 0 0 22px rgba(255,95,86,.22) !important; }
         #grid-b .item-b.jlc-tracking-breakpoint-item.jlc-bp-locating .box-b {
@@ -903,34 +1228,33 @@
             content: ''; flex: 1 1 auto; min-width: 24px; height: 1px;
             background: linear-gradient(90deg, rgba(255,95,86,.55), rgba(255,95,86,.08));
         }
-        .jlc-tracking-pagehint { font-size: 11px; color: #f6c36b; font-weight: 600; opacity: .92; }
+        .jlc-tracking-pagehint { font-size: 11px; color: var(--jlc-muted); font-weight: 600; }
         .jlc-status-pill, .jlc-site-pill {
             display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 2px 8px; font-size: 11px;
             border: 1px solid transparent;
         }
-        .jlc-site-pill { background: rgba(255,255,255,.06); color: #d0d0d0; border-color: rgba(255,255,255,.08); }
-        .jlc-status-pill.tone-gray { background: rgba(255,255,255,.06); color: #bbb; border-color: rgba(255,255,255,.08); }
-        .jlc-status-pill.tone-green { background: rgba(34,197,94,.14); color: #86efac; border-color: rgba(34,197,94,.28); }
-        .jlc-status-pill.tone-red { background: rgba(239,68,68,.16); color: #fca5a5; border-color: rgba(239,68,68,.3); }
-        .jlc-status-pill.tone-yellow { background: rgba(250,204,21,.14); color: #fde68a; border-color: rgba(250,204,21,.28); }
+        .jlc-site-pill, .jlc-status-pill.tone-gray { background: var(--jlc-soft); color: var(--jlc-muted); border-color: var(--jlc-line); }
+        .jlc-status-pill.tone-green { background: #edf5ef; color: #286346; border-color: #bed4c3; }
+        .jlc-status-pill.tone-red { background: #fcf0ed; color: #a13f35; border-color: #e4c0b9; }
+        .jlc-status-pill.tone-yellow { background: #faf2df; color: #805a1c; border-color: #ddc89b; }
         #jlc-tracking-pagebar {
             display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
             margin: 10px 5px 14px; padding: 12px 14px; border-radius: 12px;
-            background: rgba(17,17,17,.92); border: 1px solid rgba(255,255,255,.08); color: #f5f5f5;
-            box-shadow: 0 10px 24px rgba(0,0,0,.16);
+            background: var(--jlc-surface); border: 1px solid var(--jlc-line); color: var(--jlc-text);
+            box-shadow: none;
         }
         #jlc-tracking-pagebar .jlc-tracking-pagebar-main { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
         #jlc-tracking-pagebar .jlc-tracking-pagebar-title { font-size: 14px; font-weight: 700; }
-        #jlc-tracking-pagebar .jlc-tracking-pagehint { color: #c4a574; font-size: 11px; font-weight: 550; }
-        #jlc-tracking-pagebar .jlc-tracking-pagebar-meta { color: #b0b0b0; font-size: 12px; line-height: 1.5; display: flex; flex-wrap: wrap; gap: 8px; }
+        #jlc-tracking-pagebar .jlc-tracking-pagehint { color: var(--jlc-muted); font-size: 11px; font-weight: 550; }
+        #jlc-tracking-pagebar .jlc-tracking-pagebar-meta { color: var(--jlc-muted); font-size: 12px; line-height: 1.5; display: flex; flex-wrap: wrap; gap: 8px; }
         #jlc-tracking-pagebar .jlc-tracking-pagebar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         /* 继续断点：与断点红框同色系，常用操作要一眼能扫到 */
         #jlc-tracking-pagebar .jlc-bp-continue,
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.jlc-bp-continue {
             appearance: none; border: 0; cursor: pointer;
-            background: linear-gradient(135deg, #ff5f56, #e54840); color: #fff !important;
-            border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 800;
-            box-shadow: 0 3px 0 #b8322b, 0 8px 18px rgba(255,95,86,.28);
+            background: #a13f35; color: #fff !important;
+            border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+            box-shadow: none;
             letter-spacing: .2px;
         }
         #jlc-tracking-pagebar .jlc-bp-continue:hover,
@@ -939,7 +1263,7 @@
         }
         #jlc-tracking-pagebar .jlc-bp-continue:active,
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.jlc-bp-continue:active {
-            transform: translateY(1px); box-shadow: 0 1px 0 #b8322b, 0 4px 10px rgba(255,95,86,.22);
+            filter: brightness(.95);
         }
         #jlc-tracking-pagebar .jlc-bp-continue.is-loading,
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.jlc-bp-continue.is-loading {
@@ -1182,7 +1506,7 @@
         });
 
         if (!order.length) return '';
-        return '<div class="jlc-resource-status-list">' + order.map(key => {
+        return '<details class="jlc-resource-sources"><summary>来源与检测结果 · ' + order.length + '</summary><div class="jlc-resource-status-list">' + order.map(key => {
             const item = map.get(key);
             if (!item) return '';
             const state = normalizeResourceStatusState(item.state || 'partial');
@@ -1193,7 +1517,7 @@
                 return '<a class="jlc-resource-status is-' + escapeHtml(state) + '" href="' + escapeHtml(item.href) + '" target="_blank" rel="noopener noreferrer nofollow">' + inner + '</a>';
             }
             return '<span class="jlc-resource-status is-' + escapeHtml(state) + '">' + inner + '</span>';
-        }).join('') + '</div>';
+        }).join('') + '</div></details>';
     }
 
     function describeRequestStatus(result, fallback = '') {
@@ -2715,9 +3039,6 @@
         if (['javbus', 'javdb'].includes(currentWeb)) {
             items.push({ type: 'toggle', key: 'avInfo', label: lang.menu_avInfo });
         }
-        if (currentWeb === 'javlibrary') {
-            items.push({ type: 'toggle', key: 'menutoTop', label: lang.menu_menutoTop });
-        }
         items.push({ type: 'range', key: 'columnNum', label: lang.menu_columnNum, value: Status.getColumnNum(), min: 1, max: 8 });
         items.push({ type: 'range', key: 'waterfallWidth', label: '%', value: Status.get('waterfallWidth'), min: 1, max: currentObj?.maxWidth ? currentObj.maxWidth : 100 });
         items.push({ type: 'range', key: 'uiBtnScale', label: lang.menu_uiBtnScale, value: Status.get('uiBtnScale'), min: 70, max: 110, step: 5 });
@@ -2755,9 +3076,6 @@
             $('#grid-b a[name="av-title"]').toggleClass('titleNowrap');
         },
         avInfo() {},
-        menutoTop() {
-            location.reload();
-        },
         columnNum(columnNum) {
             GM_addStyle(`#grid-b .item-b{ width: ${100 / columnNum}%;}`);
         },
@@ -2834,6 +3152,7 @@
         }
         const next = Object.assign({}, DEFAULT_CONFIG, rawConfig);
         if (Array.isArray(rawConfig.fav_tags)) next.fav_tags = rawConfig.fav_tags.slice();
+        next.hidden_meta_tags = Array.isArray(rawConfig.hidden_meta_tags) ? rawConfig.hidden_meta_tags.slice() : [];
         if (Array.isArray(rawConfig.custom_persons)) next.custom_persons = rawConfig.custom_persons.slice();
         if (Array.isArray(rawConfig.hate_tags)) next.hate_tags = rawConfig.hate_tags.slice();
         // 原样保留其余未知字段，避免以后扩展丢失
@@ -3037,7 +3356,7 @@
     /** 列表/界面偏好（含屏蔽词），与 jlc_config_stable 分存，需单独进备份与 WebDAV */
     const STATUS_PREF_SIMPLE_KEYS = [
         'autoPage', 'copyBtn', 'toolBar', 'avInfo', 'halfImg', 'fullTitle',
-        'menutoTop', 'hiddenWord', 'hiddenAvid',
+        'hiddenWord', 'hiddenAvid',
         'columnNumFull', 'columnNumHalf'
     ];
     /** 本机专用，不进备份 / WebDAV（按显示器/DPI 各自调） */
@@ -4337,7 +4656,6 @@
             delete item.dataset.jlcBaseDone;
             delete item.dataset.jlcMetaState;
             delete item.dataset.jlcMetaRetry;
-            delete item._jlcDecorModel;
         });
         queueCommanderItems(items, true);
         if (items.length && options.scheduleRescan !== false) scheduleCommanderRescan(8);
@@ -4445,7 +4763,7 @@
         if (!badgeBox) {
             badgeBox = document.createElement('div');
             badgeBox.className = 'jlc-badge-container';
-            item.appendChild(badgeBox);
+            item.querySelector('.cover-b').appendChild(badgeBox);
         }
         return badgeBox;
     }
@@ -4459,58 +4777,57 @@
 
     function ensureCommanderToolbar(item, current) {
         const toolbar = item.querySelector('.toolbar-b');
-        if (!toolbar) return;
+        const menu = toolbar?.querySelector('.jlc-card-menu');
+        if (!menu) return;
+        toolbar.querySelector('summary').textContent = current.status === 'like'
+            ? '已心动 · 更多' : current.status === 'hate' ? '已屏蔽 · 更多' : '更多';
 
-        let likeBtn = toolbar.querySelector('.jlc-tool-btn.j-l');
-        let hateBtn = toolbar.querySelector('.jlc-tool-btn.j-h');
+        for (const [status, label, className] of [['hate', '屏蔽', 'j-h'], ['like', '心动', 'j-l']]) {
+            let button = menu.querySelector('.' + className);
+            if (!button) {
+                button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'jlc-tool-btn ' + className;
+                button.onclick = async (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const next = { ...current, status: current.status === status ? 'none' : status };
+                    const statusButtons = [...menu.querySelectorAll('.jlc-tool-btn')];
+                    statusButtons.forEach(control => { control.disabled = true; });
+                    try {
+                        if (!await setVal('videos', next)) {
+                            showAlert('保存标记失败，请重试。');
+                            return;
+                        }
+                        Object.assign(current, next);
+                        updateItemStateClasses(item, current, item.classList.contains('emby-item'));
+                        ensureCommanderToolbar(item, current);
+                    } finally {
+                        statusButtons.forEach(control => { control.disabled = false; });
+                    }
+                };
+                menu.prepend(button);
+            }
+            const active = current.status === status;
+            button.classList.toggle('active-' + status, active);
+            button.setAttribute('aria-pressed', String(active));
+            button.textContent = active ? '取消' + label : label;
+            button.title = button.textContent;
+        }
         let bookmarkBtn = toolbar.querySelector('.jlc-tool-btn.j-bm');
-        if (!likeBtn) {
-            likeBtn = document.createElement('span');
-            likeBtn.className = 'jlc-tool-btn j-l';
-            likeBtn.title = '心动 / 取消心动';
-            likeBtn.textContent = '👍';
-            likeBtn.onclick = async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                current.status = current.status === 'like' ? 'none' : 'like';
-                await setVal('videos', current);
-                updateItemStateClasses(item, current, item.classList.contains('emby-item'));
-                ensureCommanderToolbar(item, current);
-                renderCommanderBadges(item, item._jlcDecorModel || { matchedRadar: '', orderedTags: [] });
-            };
-            toolbar.appendChild(likeBtn);
-        }
-        if (!hateBtn) {
-            hateBtn = document.createElement('span');
-            hateBtn.className = 'jlc-tool-btn j-h';
-            hateBtn.title = '屏蔽 / 取消屏蔽';
-            hateBtn.textContent = '👎';
-            hateBtn.onclick = async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                current.status = current.status === 'hate' ? 'none' : 'hate';
-                await setVal('videos', current);
-                updateItemStateClasses(item, current, item.classList.contains('emby-item'));
-                ensureCommanderToolbar(item, current);
-            };
-            toolbar.appendChild(hateBtn);
-        }
         if (!bookmarkBtn) {
-            bookmarkBtn = document.createElement('span');
+            bookmarkBtn = document.createElement('button');
+            bookmarkBtn.type = 'button';
             bookmarkBtn.className = 'jlc-tool-btn j-bm';
             bookmarkBtn.title = '把这部设为追更断点';
-            bookmarkBtn.textContent = '🔖';
             bookmarkBtn.onclick = async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 await setTrackingBreakpointByItem(item);
             };
-            toolbar.appendChild(bookmarkBtn);
+            toolbar.prepend(bookmarkBtn);
         }
-        const activeBookmark = normalizeCode(trackingPageState.record?.last_seen_avid || '') === normalizeCode(item.dataset.jlcAvid || '');
-        likeBtn.classList.toggle('active-like', current.status === 'like');
-        hateBtn.classList.toggle('active-hate', current.status === 'hate');
-        bookmarkBtn.classList.toggle('active-bookmark', !!activeBookmark);
+        refreshTrackingToolbarButtons([item]);
     }
 
     function markItemVisited(item, current) {
@@ -4562,7 +4879,12 @@
         const seen = new Set();
         const hotTags = [];
         const coldTags = [];
-        const titleHotKeywords = (config.fav_tags || []).filter(tag => tagMatches(safeTitle, tag));
+        const favoriteTags = uniqueTextList(config.fav_tags || []);
+        const genres = asTextList(meta?.genres);
+        const matchedPreferenceTags = favoriteTags.filter(tag => (
+            tagMatches(safeTitle, tag) || genres.some(genre => tagMatches(genre, tag))
+        ));
+        const titleHotKeywords = favoriteTags.filter(tag => tagMatches(safeTitle, tag));
         let matchedRadar = Array.from(knownPersons).find(name => name && safeTitle.includes(name)) || '';
 
         if (meta) {
@@ -4572,8 +4894,8 @@
             });
 
             let hotMetaCount = 0;
-            asTextList(meta.genres).forEach(genre => {
-                const isHot = (config.fav_tags || []).some(tag => tagMatches(genre, tag));
+            genres.forEach(genre => {
+                const isHot = favoriteTags.some(tag => tagMatches(genre, tag));
                 if (isHot) {
                     hotMetaCount += 1;
                     pushDecorTag(hotTags, seen, genre, true);
@@ -4590,17 +4912,201 @@
         }
 
         return {
+            source: { title: safeTitle, meta },
             matchedRadar,
+            matchedPreferenceTags,
+            preferenceMatchCount: matchedPreferenceTags.length + (matchedRadar ? 1 : 0),
             orderedTags: hotTags.concat(coldTags)
         };
     }
 
+    function setFavoriteTags(tags) {
+        const next = loadConfig();
+        const favorites = uniqueTextList(asTextList(tags));
+        if (JSON.stringify(next.fav_tags) !== JSON.stringify(favorites)) {
+            next.fav_tags = favorites;
+            try {
+                GM_setValue('jlc_config_stable', next);
+            } catch (_) {
+                showAlert('心动标签保存失败，请重试。');
+                return false;
+            }
+            config = next;
+            try { ensureCreamuSync()?.markLocalDirty(); } catch (_) {}
+            document.querySelectorAll('.jlc-badge-container').forEach(box => {
+                const source = box._jlcDecorModel?.source;
+                if (!source) return;
+                const model = buildCommanderDecorationModel(source.title, source.meta);
+                const item = box.closest('.item-b');
+                if (item) renderCommanderBadges(item, model);
+                else fillCommanderBadgeContainer(box, model);
+            });
+        }
+        const input = document.getElementById('jlc-wb-i-fav');
+        if (input) input.value = favorites.join(', ');
+        return true;
+    }
+
+    function setMetaTagHidden(text, hidden) {
+        const key = normalizeTagText(text);
+        if (!key) return false;
+        const next = loadConfig();
+        const tags = uniqueTextList(next.hidden_meta_tags);
+        next.hidden_meta_tags = hidden
+            ? uniqueTextList([...tags, text])
+            : tags.filter(tag => normalizeTagText(tag) !== key);
+        try {
+            GM_setValue('jlc_config_stable', next);
+        } catch (_) {
+            showAlert('标签显示设置保存失败，请重试。');
+            return false;
+        }
+        config = next;
+        try { ensureCreamuSync()?.markLocalDirty(); } catch (_) {}
+        document.querySelectorAll('.jlc-badge-container').forEach(box => {
+            if (box._jlcDecorModel) fillCommanderBadgeContainer(box, box._jlcDecorModel);
+        });
+        renderWorkbenchHiddenMetaTags();
+        return true;
+    }
+
+    function openMetaTagMenu(trigger, text) {
+        let menu = document.getElementById('jlc-meta-tag-menu');
+        if (!menu) {
+            menu = document.createElement('div');
+            menu.id = 'jlc-meta-tag-menu';
+            menu.setAttribute('popover', 'auto');
+            menu.setAttribute('role', 'dialog');
+            const favorite = document.createElement('button');
+            favorite.type = 'button';
+            favorite.dataset.action = 'favorite';
+            const hide = document.createElement('button');
+            hide.type = 'button';
+            hide.dataset.action = 'hide';
+            hide.textContent = '在所有影片中隐藏此标签';
+            menu.append(favorite, hide);
+            document.body.append(menu);
+        }
+        if (menu.matches(':popover-open')) menu.hidePopover();
+        menu.setAttribute('aria-label', '标签操作：' + text);
+        const favorite = menu.querySelector('[data-action="favorite"]');
+        const alreadyFavorite = uniqueTextList(config.fav_tags).some(tag => normalizeTagText(tag) === normalizeTagText(text));
+        favorite.textContent = alreadyFavorite ? '已添加到心动标签' : '添加到心动标签';
+        favorite.disabled = alreadyFavorite;
+        favorite.onclick = () => {
+            if (setFavoriteTags([...loadConfig().fav_tags, text])) {
+                menu.hidePopover();
+                showAlert('已将「' + text + '」添加到心动标签。');
+            }
+        };
+        const hide = menu.querySelector('[data-action="hide"]');
+        hide.onclick = () => {
+            if (setMetaTagHidden(text, true)) {
+                menu.hidePopover();
+                showAlert('已隐藏「' + text + '」，可在设置 → 显示中恢复。');
+            }
+        };
+        menu.showPopover();
+        const anchor = trigger.getBoundingClientRect();
+        const rect = menu.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(anchor.left, innerWidth - rect.width - 8)) + 'px';
+        menu.style.top = Math.max(8, anchor.bottom + rect.height + 4 <= innerHeight - 8
+            ? anchor.bottom + 4 : anchor.top - rect.height - 4) + 'px';
+        (alreadyFavorite ? hide : favorite).focus();
+    }
+
+    function createMetaTagControl(tag) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = `meta-tag ${tag.hot ? 'hot' : ''}`.trim();
+        chip.textContent = tag.text;
+        chip.title = tag.text + '\n单击复制；右键或长按可添加心动标签、隐藏标签';
+        chip.setAttribute('aria-label', '复制标签：' + tag.text);
+        chip.setAttribute('aria-description', '右键、长按或 Shift+F10 打开标签菜单');
+        chip.setAttribute('aria-haspopup', 'dialog');
+
+        let holdTimer = 0;
+        let touchStart = null;
+        let suppressClick = false;
+        const cancelHold = () => {
+            window.clearTimeout(holdTimer);
+            holdTimer = 0;
+            touchStart = null;
+        };
+        chip.addEventListener('pointerdown', event => {
+            event.stopPropagation();
+            cancelHold();
+            suppressClick = false;
+            if (event.pointerType !== 'touch' || !event.isPrimary) return;
+            touchStart = { x: event.clientX, y: event.clientY };
+            holdTimer = window.setTimeout(() => {
+                cancelHold();
+                if (!chip.isConnected) return;
+                suppressClick = true;
+                openMetaTagMenu(chip, tag.text);
+            }, 500);
+        });
+        chip.addEventListener('pointermove', event => {
+            if (touchStart && Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y) > 10) {
+                cancelHold();
+                suppressClick = true;
+            }
+        });
+        chip.addEventListener('pointerup', event => {
+            cancelHold();
+            if (suppressClick) event.preventDefault();
+        });
+        chip.addEventListener('pointercancel', () => {
+            cancelHold();
+            suppressClick = true;
+        });
+        chip.addEventListener('lostpointercapture', cancelHold);
+        chip.addEventListener('contextmenu', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            cancelHold();
+            // A native touch contextmenu may follow the long-press timer.
+            if (!suppressClick) openMetaTagMenu(chip, tag.text);
+            suppressClick = true;
+        });
+        chip.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!suppressClick || event.detail === 0) copyPlainText(tag.text);
+        });
+        chip.addEventListener('auxclick', event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+        chip.addEventListener('keydown', event => {
+            event.stopPropagation();
+            if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                event.preventDefault();
+                cancelHold();
+                openMetaTagMenu(chip, tag.text);
+            }
+        });
+        return chip;
+    }
+
     function fillCommanderBadgeContainer(badgeBox, model) {
         if (!badgeBox) return;
+        badgeBox._jlcDecorModel = model;
         const safeModel = model || { matchedRadar: '', orderedTags: [] };
-        const orderedTags = Array.isArray(safeModel.orderedTags) ? safeModel.orderedTags : [];
+        const hiddenTags = new Set(uniqueTextList(config.hidden_meta_tags).map(normalizeTagText));
+        const orderedTags = (Array.isArray(safeModel.orderedTags) ? safeModel.orderedTags : [])
+            .filter(tag => !hiddenTags.has(normalizeTagText(tag.text)));
         badgeBox.innerHTML = '';
 
+        if (safeModel.preferenceMatchCount >= 2) {
+            const badge = document.createElement('span');
+            badge.className = 'jlc-badge b-preference';
+            badge.textContent = `偏好命中 ${safeModel.preferenceMatchCount} 项`;
+            const reasons = [...safeModel.matchedPreferenceTags];
+            if (safeModel.matchedRadar) reasons.push('熟人：' + safeModel.matchedRadar);
+            badge.title = reasons.join(' / ');
+            badgeBox.appendChild(badge);
+        }
         if (safeModel.matchedRadar) {
             const badge = document.createElement('span');
             badge.className = 'jlc-badge b-person';
@@ -4613,11 +5119,7 @@
             overlay.className = 'meta-overlay-box';
             const visibleTags = orderedTags.slice(0, DECORATE_VISIBLE_LIMIT);
             visibleTags.forEach(tag => {
-                const span = document.createElement('span');
-                span.className = `meta-tag ${tag.hot ? 'hot' : ''}`.trim();
-                span.innerText = tag.text;
-                span.title = tag.text;
-                overlay.appendChild(span);
+                overlay.appendChild(createMetaTagControl(tag));
             });
             if (orderedTags.length > visibleTags.length) {
                 const more = document.createElement('span');
@@ -4631,7 +5133,8 @@
     }
 
     function renderCommanderBadges(item, model) {
-        item._jlcDecorModel = model;
+        // Automatic preference matches are presentation only; manual marks stay in videos.
+        item.classList.toggle('preference-match-item', model.preferenceMatchCount >= 2);
         const badgeBox = getOrCreateBadgeContainer(item);
         fillCommanderBadgeContainer(badgeBox, model);
     }
@@ -4932,7 +5435,7 @@ function getCreamuWorkbenchCss(options = {}) {
             height: min(78vh, 800px); max-height: none; min-width: 360px; min-height: 280px;
             display: none; flex-direction: column; z-index: 999998; overflow: hidden;
             box-sizing: border-box;
-            background: var(--creamu-wb-bg); color: var(--creamu-wb-text); border-radius: 22px; border: 1px solid var(--creamu-wb-border);
+            background: var(--creamu-wb-bg); color: var(--creamu-wb-text); border-radius: var(--creamu-wb-panel-radius, 22px); border: 1px solid var(--creamu-wb-border);
             box-shadow: 0 18px 50px rgba(90,60,30,.22); font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
             font-size: 14.5px;
         }
@@ -4948,21 +5451,21 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-header .jlc-wb-header-actions,
         #jlc-wb .jlc-wb-header .jlc-wb-header-actions * { cursor: pointer; }
         #jlc-wb .jlc-wb-title { font-weight: 800; font-size: 18px; color: var(--creamu-wb-title); letter-spacing: .2px; }
-        #jlc-wb .jlc-wb-subtitle { font-size: 12px; color: #a08468; margin-top: 3px; }
+        #jlc-wb .jlc-wb-subtitle { font-size: 12px; color: var(--creamu-wb-secondary-ink, #a08468); margin-top: 3px; }
         #jlc-wb .jlc-wb-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
         #jlc-wb .jlc-wb-icon-btn, #jlc-wb .jlc-wb-chip, #jlc-wb .jlc-wb-btn {
             appearance: none; border: 1px solid var(--creamu-wb-border-strong); background: var(--creamu-wb-surface-soft); color: var(--creamu-wb-text-strong);
-            border-radius: 999px; cursor: pointer; font-size: 13px; line-height: 1.25; font-weight: 650;
+            border-radius: var(--creamu-wb-control-radius, 999px); cursor: pointer; font-size: 13px; line-height: 1.25; font-weight: 650;
         }
         #jlc-wb .jlc-wb-icon-btn {
             width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
-            background: var(--creamu-wb-surface-raised); font-size: 15px; box-shadow: 0 2px 0 var(--creamu-wb-control-shadow);
+            background: var(--creamu-wb-surface-raised); font-size: 15px; box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-control-shadow));
         }
-        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: var(--creamu-wb-surface-raised); box-shadow: 0 2px 0 var(--creamu-wb-control-shadow); }
-        #jlc-wb .jlc-wb-chip.is-on { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark); }
-        #jlc-wb .jlc-wb-btn { padding: 9px 13px; border-radius: 12px; box-shadow: 0 2px 0 #e0cdae; }
-        #jlc-wb .jlc-wb-btn.primary { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark); }
+        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: var(--creamu-wb-surface-raised); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-control-shadow)); }
+        #jlc-wb .jlc-wb-chip.is-on { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-accent-dark)); }
+        #jlc-wb .jlc-wb-btn { padding: 9px 13px; border-radius: 12px; box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 #e0cdae); }
+        #jlc-wb .jlc-wb-btn.primary { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-accent-dark)); }
         #jlc-wb .jlc-wb-btn.ghost { background: var(--creamu-wb-surface-soft); }
         #jlc-wb .jlc-wb-btn.danger { background: #f3d5d0; border-color: #e8b8b0; color: #8a3a32; box-shadow: none; }
         #jlc-wb .jlc-wb-btn:hover, #jlc-wb .jlc-wb-icon-btn:hover, #jlc-wb .jlc-wb-chip:hover {
@@ -4980,7 +5483,7 @@ function getCreamuWorkbenchCss(options = {}) {
             font-size: 14px; font-weight: 700; transition: .18s; border-radius: 12px;
         }
         #jlc-wb .jlc-wb-nav button.active {
-            color: var(--creamu-wb-on-accent); background: var(--creamu-wb-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark);
+            color: var(--creamu-wb-on-accent); background: var(--creamu-wb-accent); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-accent-dark));
         }
 
         #jlc-wb .jlc-wb-body {
@@ -5035,7 +5538,7 @@ function getCreamuWorkbenchCss(options = {}) {
 
         #jlc-wb .jlc-wb-search {
             flex: 1 1 180px; min-width: 0; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--creamu-wb-border);
-            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14.5px; box-shadow: 0 2px 0 #eadcc6;
+            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14.5px; box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 #eadcc6);
         }
         #jlc-wb .jlc-wb-search:focus { outline: none; border-color: var(--creamu-wb-accent); background: var(--creamu-wb-surface-raised); }
         #jlc-wb select.jlc-wb-select,
@@ -5051,7 +5554,7 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb select.jlc-wb-select {
             padding: 9px 11px; border-radius: 12px; border: 1px solid var(--creamu-wb-border); background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 13.5px;
-            box-shadow: 0 2px 0 #eadcc6;
+            box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 #eadcc6);
         }
 
         #jlc-wb .jlc-wb-group {
@@ -5059,7 +5562,7 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-group-toggle {
             width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            background: transparent; color: #7a5a3c; border: 0; padding: 10px 6px 10px;
+            background: transparent; color: var(--creamu-wb-secondary-ink, #7a5a3c); border: 0; padding: 10px 6px 10px;
             cursor: pointer; font-size: 13.5px; font-weight: 750;
             border-radius: 0; margin: 0 0 2px; line-height: 1.35;
             min-height: 36px;
@@ -5075,19 +5578,19 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-group.collapsed .jlc-wb-group-body { display: none; }
 
         #jlc-wb .jlc-wb-item {
-            position: relative; border-radius: 18px; padding: 12px 12px 12px 12px;
-            background: var(--creamu-wb-surface); border: 1px solid #efe0cc; overflow: visible;
+            position: relative; border-radius: var(--creamu-wb-card-radius, 18px); padding: 12px;
+            background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-card-border, #efe0cc); overflow: visible;
             cursor: pointer; transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, transform .12s ease;
-            box-shadow: 0 3px 0 #ead7bb;
+            box-shadow: var(--creamu-wb-card-elevation, 0 3px 0 #ead7bb);
         }
         #jlc-wb .jlc-wb-item:hover {
-            border-color: #e0c9a8; background: var(--creamu-wb-surface-raised);
-            box-shadow: 0 6px 16px rgba(120,80,30,.12); z-index: 3;
+            border-color: var(--creamu-wb-card-hover-border, #e0c9a8); background: var(--creamu-wb-surface-raised);
+            box-shadow: var(--creamu-wb-card-hover-elevation, 0 6px 16px rgba(120,80,30,.12)); z-index: 3;
         }
         #jlc-wb .jlc-wb-item::before { display: none; }
         #jlc-wb .jlc-wb-item.is-focus {
-            border-color: var(--creamu-wb-accent); box-shadow: 0 0 0 2px var(--creamu-wb-accent-ring), 0 4px 0 #e0c9a8;
-            background: #fff8ee;
+            border-color: var(--creamu-wb-accent); box-shadow: var(--creamu-wb-focus-elevation, 0 0 0 2px var(--creamu-wb-accent-ring), 0 4px 0 #e0c9a8);
+            background: var(--creamu-wb-focus-surface, #fff8ee);
         }
         #jlc-wb .jlc-wb-item.is-current { border-color: #8eb6e8; }
         /* 菜单打开时抬高整卡，避免被下方 Open 按钮盖住 */
@@ -5159,7 +5662,7 @@ function getCreamuWorkbenchCss(options = {}) {
             min-width: 0;
         }
         #jlc-wb .jlc-wb-item-meta-line.is-avid {
-            color: #7a6048; font-weight: 650;
+            color: var(--creamu-wb-secondary-ink, #7a6048); font-weight: 650;
         }
         #jlc-wb .jlc-wb-item-pills {
             display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
@@ -5172,12 +5675,12 @@ function getCreamuWorkbenchCss(options = {}) {
             appearance: none; border: 0; cursor: pointer;
             min-width: 64px; padding: 8px 14px; border-radius: 999px;
             background: linear-gradient(var(--creamu-wb-accent-light), var(--creamu-wb-accent)); color: var(--creamu-wb-on-accent); font-weight: 800; font-size: 13px;
-            box-shadow: 0 3px 0 var(--creamu-wb-accent-dark); transition: transform .12s ease, filter .12s ease;
+            box-shadow: var(--creamu-wb-control-elevation, 0 3px 0 var(--creamu-wb-accent-dark)); transition: transform .12s ease, filter .12s ease;
         }
         #jlc-wb .jlc-wb-open-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
-        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--creamu-wb-accent-dark); }
+        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: var(--creamu-wb-control-elevation, 0 1px 0 var(--creamu-wb-accent-dark)); }
         #jlc-wb .jlc-wb-more-btn {
-            appearance: none; border: 0; background: transparent; color: #b09070;
+            appearance: none; border: 0; background: transparent; color: var(--creamu-wb-secondary-ink, #b09070);
             width: 28px; height: 22px; border-radius: 8px; cursor: pointer; font-size: 16px; line-height: 1;
             font-weight: 800; letter-spacing: 1px;
         }
@@ -5199,14 +5702,14 @@ function getCreamuWorkbenchCss(options = {}) {
             padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--creamu-wb-text-strong);
             font-size: 13px; font-weight: 650;
         }
-        #jlc-wb .jlc-wb-item-menu button:hover { background: #f3e9d8; }
+        #jlc-wb .jlc-wb-item-menu button:hover { background: var(--creamu-wb-inset-surface, #f3e9d8); }
         #jlc-wb .jlc-wb-item-menu button.is-danger { color: var(--creamu-wb-danger); }
 
         #jlc-wb .jlc-status-pill, #jlc-wb .jlc-site-pill {
             display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;
             font-size: 11.5px; font-weight: 700; border: 1px solid transparent;
         }
-        #jlc-wb .jlc-site-pill { background: #f3e9d8; color: var(--creamu-wb-text-subtle); border-color: #eadcc6; }
+        #jlc-wb .jlc-site-pill { background: var(--creamu-wb-inset-surface, #f3e9d8); color: var(--creamu-wb-text-subtle); border-color: var(--creamu-wb-divider); }
         #jlc-wb .jlc-site-pill.is-current { background: #e7f1ff; color: #175cd3; border-color: #c2dbff; }
         /* 上次：默认琥珀；按打开时效加深/减弱 */
         #jlc-wb .jlc-site-pill.is-last { background: #fff4db; color: #9a6700; border-color: #f0d7a0; }
@@ -5224,10 +5727,10 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-item-meta-line .jlc-wb-pagehint,
         #jlc-wb .jlc-wb-pagehint {
-            color: #a89078; font-weight: 550;
+            color: var(--creamu-wb-secondary-ink, #a89078); font-weight: 550;
         }
         #jlc-wb .jlc-wb-item-meta-line.is-sub {
-            color: #a89078; font-weight: 550;
+            color: var(--creamu-wb-secondary-ink, #a89078); font-weight: 550;
         }
         #jlc-wb .jlc-status-pill.tone-gray { background: var(--creamu-wb-surface-muted); color: var(--creamu-wb-text-subtle); }
         #jlc-wb .jlc-status-pill.tone-green { background: #e2f5e4; color: #2f6b3a; }
@@ -5240,8 +5743,8 @@ function getCreamuWorkbenchCss(options = {}) {
         }
 
         #jlc-wb .jlc-wb-view-block {
-            background: var(--creamu-wb-surface); border: 1px solid #efe0cc; border-radius: 16px; padding: 14px; margin-bottom: 14px;
-            box-shadow: 0 3px 0 #ead7bb;
+            background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-card-border, #efe0cc); border-radius: var(--creamu-wb-card-radius, 16px); padding: 14px; margin-bottom: 14px;
+            box-shadow: var(--creamu-wb-card-elevation, 0 3px 0 #ead7bb);
         }
         #jlc-wb .jlc-wb-view-title {
             font-size: 12px; color: var(--creamu-wb-accent); font-weight: 750; letter-spacing: .5px; margin: 0 0 12px;
@@ -5297,7 +5800,7 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-settings.is-open { display: block; }
         #jlc-wb .jlc-wb-settings-panel {
             position: absolute; top: 0; right: 0; width: min(100%, 430px); height: 100%;
-            display: flex; flex-direction: column; background: var(--creamu-wb-bg); border-left: 1px solid #e4d4bc;
+            display: flex; flex-direction: column; background: var(--creamu-wb-bg); border-left: 1px solid var(--creamu-wb-border);
         }
         #jlc-wb .jlc-wb-settings-head {
             flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center;
@@ -5305,11 +5808,11 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-settings-nav {
             flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px;
-            border-bottom: 1px solid var(--creamu-wb-divider); background: #f3e9d8;
+            border-bottom: 1px solid var(--creamu-wb-divider); background: var(--creamu-wb-inset-surface, #f3e9d8);
         }
         #jlc-wb .jlc-wb-settings-nav button {
             appearance: none; border: 1px solid var(--creamu-wb-border-strong); background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text-subtle);
-            border-radius: 999px; padding: 8px 12px; cursor: pointer; font-size: 13.5px; font-weight: 700;
+            border-radius: var(--creamu-wb-control-radius, 999px); padding: 8px 12px; cursor: pointer; font-size: 13.5px; font-weight: 700;
         }
         #jlc-wb .jlc-wb-settings-nav button.active {
             background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent);
@@ -5372,7 +5875,7 @@ function getCreamuWorkbenchCss(options = {}) {
             border-color: var(--creamu-wb-accent); outline: none; background: var(--creamu-wb-surface-raised);
         }
         #jlc-wb .stat-box {
-            display: flex; justify-content: space-around; background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
+            display: flex; justify-content: space-around; background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-card-border, #efe0cc);
             border-radius: 14px; padding: 14px; margin-bottom: 14px;
         }
         #jlc-wb .stat-item { text-align: center; }
@@ -5380,10 +5883,10 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .stat-item span { font-size: 11px; color: var(--creamu-wb-text-muted); }
         #jlc-wb .person-item {
             background: var(--creamu-wb-surface); padding: 12px 14px; border-radius: 12px; margin-bottom: 8px;
-            display: flex; justify-content: space-between; align-items: center; border: 1px solid #efe0cc; font-size: 14px;
+            display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--creamu-wb-card-border, #efe0cc); font-size: 14px;
             color: var(--creamu-wb-text);
         }
-        #jlc-wb .person-item:hover { border-color: #e0c9a8; background: var(--creamu-wb-surface-raised); }
+        #jlc-wb .person-item:hover { border-color: var(--creamu-wb-card-hover-border, #e0c9a8); background: var(--creamu-wb-surface-raised); }
         #jlc-wb .person-item span.remove { color: var(--creamu-wb-accent); cursor: pointer; font-size: 18px; padding: 0 8px; }
 
         #jlc-wb .jlc-wb-resize-w {
@@ -5742,8 +6245,7 @@ function bindCreamuFabDrag(fab, options = {}) {
     }
     if (!moved) return;
     callCreamuPreventDefault(event);
-    const width = fab.offsetWidth || 34;
-    const height = fab.offsetHeight || 34;
+    const { width, height } = getCreamuInteractionRect(fab);
     const next = clampCreamuWorkbenchPoint(
       { left: origin.left + dx, top: origin.top + dy },
       { width, height },
@@ -5776,6 +6278,9 @@ function bindCreamuFabDrag(fab, options = {}) {
 
   const onDown = (event) => {
     if (!isCreamuPrimaryPointer(event) || isDragDisabled(event) || shouldIgnoreDrag(event)) return;
+    // Own the gesture before the browser can start a native link/image drag underneath the FAB.
+    callCreamuPreventDefault(event);
+    fab.focus?.({ preventScroll: true });
     active = true;
     moved = false;
     startPoint = getCreamuClientPoint(event);
@@ -6699,12 +7204,175 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const shell = document.getElementById('jlc-wb');
         if (shell) shell.style.setProperty('--jlc-btn-scale', scale);
         const fab = document.getElementById('jlc-wb-fab');
-        if (fab) fab.style.setProperty('--jlc-btn-scale', scale);
+        if (fab) {
+            fab.style.setProperty('--jlc-btn-scale', scale);
+            applyWorkbenchFabPosition(fab);
+        }
         return pct;
     }
 
     function getJlcWorkbenchCss() {
         return `
+        :where(#jlc-wb, #jlc-wb-fab, #jlc-wb-dialog, #jlc-tracking-pagebar) {
+            --creamu-wb-bg: var(--jlc-bg);
+            --creamu-wb-surface: var(--jlc-surface);
+            --creamu-wb-surface-soft: var(--jlc-bg);
+            --creamu-wb-surface-muted: var(--jlc-soft);
+            --creamu-wb-surface-raised: var(--jlc-surface);
+            --creamu-wb-text: var(--jlc-text);
+            --creamu-wb-text-strong: var(--jlc-text);
+            --creamu-wb-title: var(--jlc-text);
+            --creamu-wb-text-muted: var(--jlc-muted);
+            --creamu-wb-text-subtle: var(--jlc-muted);
+            --creamu-wb-border: var(--jlc-line);
+            --creamu-wb-border-strong: #c6b7a8;
+            --creamu-wb-card-border: var(--jlc-line);
+            --creamu-wb-card-hover-border: #c6b7a8;
+            --creamu-wb-secondary-ink: var(--jlc-muted);
+            --creamu-wb-inset-surface: var(--jlc-soft);
+            --creamu-wb-divider: var(--jlc-line);
+            --creamu-wb-accent: var(--jlc-accent);
+            --creamu-wb-accent-light: var(--jlc-accent);
+            --creamu-wb-accent-dark: var(--jlc-accent);
+            --creamu-wb-accent-hover: #784326;
+            --creamu-wb-accent-ring: #ddc0a6;
+            --creamu-wb-on-accent: #fff;
+            --creamu-wb-control-radius: 8px;
+            --creamu-wb-panel-radius: 16px;
+            --creamu-wb-card-radius: 10px;
+            --creamu-wb-control-elevation: none;
+            --creamu-wb-card-elevation: none;
+            --creamu-wb-card-hover-elevation: 0 3px 12px #34261a0a;
+            --creamu-wb-focus-elevation: 0 0 0 2px #ddc0a6;
+            --creamu-wb-focus-surface: #fcf6ef;
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            color-scheme: light;
+        }
+        #jlc-wb-fab {
+            width: auto; min-width: 112px; height: 44px; padding: 0 14px 0 9px; gap: 9px;
+            border: 1px solid var(--jlc-line) !important; border-radius: 12px;
+            background: var(--jlc-surface) !important; color: var(--jlc-text) !important;
+            box-shadow: 0 4px 20px #34261a18 !important; font-size: 13px; font-weight: 600;
+            bottom: max(20px, env(safe-area-inset-bottom)); right: 20px;
+        }
+        #jlc-wb-fab:active, #jlc-wb-fab.is-dragging { transform: none; }
+        .jlc-brand-mark {
+            display: inline-grid; place-items: center; flex-shrink: 0;
+            width: 30px; height: 30px; border-radius: 9px 9px 9px 3px;
+            background: var(--jlc-accent); color: white; font: bold 23px/1 Georgia, serif;
+        }
+        #jlc-wb-fab .jlc-wb-fab-badge {
+            top: -6px; right: -6px; min-width: 19px; height: 19px;
+            background: var(--jlc-accent); border: 2px solid var(--jlc-surface);
+            font-size: 10px; box-shadow: none;
+        }
+        #jlc-wb-fab.is-panel-open { visibility: hidden; pointer-events: none; }
+        #jlc-wb {
+            min-width: 0; background: var(--jlc-bg); color: var(--jlc-text);
+            box-shadow: 0 18px 60px #34261a26, 0 2px 8px #34261a0d;
+            font-size: 14px; text-align: left;
+        }
+        #jlc-wb button, #jlc-wb input, #jlc-wb select, #jlc-wb textarea { font-family: inherit; }
+        #jlc-wb :is(button, input, select, textarea):focus-visible,
+        #jlc-wb-fab:focus-visible, #jlc-wb-dialog :focus-visible {
+            outline: 2px solid var(--jlc-accent); outline-offset: 3px;
+        }
+        #jlc-wb input::placeholder, #jlc-wb textarea::placeholder { color: var(--jlc-muted); opacity: 1; }
+        #jlc-wb .jlc-wb-header { padding: 20px 20px 16px; gap: 12px; background: var(--jlc-surface); }
+        #jlc-wb .jlc-wb-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        #jlc-wb .jlc-wb-title { font-size: 18px; line-height: 1.3; font-weight: 600; letter-spacing: 0; }
+        #jlc-wb .jlc-wb-subtitle { font-size: 11px; letter-spacing: .6px; margin-top: 5px; }
+        #jlc-wb .jlc-wb-header-actions { flex-wrap: nowrap; gap: 6px; }
+        #jlc-wb .jlc-wb-icon-btn { width: 36px; height: 36px; border-radius: 8px; }
+        #jlc-wb .jlc-wb-header-actions .jlc-wb-btn { padding: 8px 10px; }
+        #jlc-wb.is-docked {
+            top: 0 !important; bottom: 0 !important; right: 0 !important; left: auto !important;
+            width: var(--jlc-dock-width) !important; height: 100dvh !important;
+            border-radius: 0; border-top: 0; border-bottom: 0; border-right: 0;
+            box-shadow: -8px 0 28px #34261a08;
+        }
+        #jlc-wb.is-docked .jlc-wb-header { cursor: default; }
+        #jlc-wb.is-docked .jlc-wb-resize-w, #jlc-wb.is-docked .jlc-wb-resize-h, #jlc-wb.is-docked .jlc-wb-resize-corner { display: none; }
+        #jlc-wb.is-docked .jlc-wb-filter-row { grid-template-columns: 1fr 1fr; }
+        #jlc-wb .jlc-wb-open-btn {
+            background: var(--jlc-soft); color: var(--jlc-accent); border: 1px solid var(--jlc-line);
+        }
+        #jlc-wb .jlc-wb-nav {
+            padding: 0 20px; gap: 24px; background: var(--jlc-surface);
+            border-bottom: 1px solid var(--jlc-line);
+        }
+        #jlc-wb .jlc-wb-nav button {
+            flex: 0 1 auto; padding: 12px 2px; border-radius: 0; font-size: 14px;
+            background: transparent; color: var(--jlc-muted); border-bottom: 2px solid transparent;
+        }
+        #jlc-wb .jlc-wb-nav button.active {
+            background: transparent; color: var(--jlc-accent); border-bottom-color: var(--jlc-accent); box-shadow: none;
+        }
+        #jlc-wb .jlc-wb-tracking-actions {
+            flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+            flex-direction: row; flex-wrap: wrap; gap: 8px; padding: 16px 16px 12px;
+        }
+        #jlc-wb .jlc-wb-tracking-actions > div { display: flex; gap: 6px; }
+        #jlc-wb .jlc-wb-footer-summary { max-width: none; font-size: 12px; }
+        #jlc-wb .jlc-wb-tracking-actions .jlc-wb-btn { padding: 8px 10px; font-size: 12px; }
+        #jlc-wb .jlc-wb-toolbar { padding: 0 16px 14px; gap: 10px; border-bottom: 1px solid var(--jlc-line); }
+        #jlc-wb .jlc-wb-toolbar-row { gap: 6px; }
+        #jlc-wb .jlc-wb-filter-row { display: grid; grid-template-columns: auto auto 1fr 1fr; }
+        #jlc-wb .jlc-wb-search { padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+        #jlc-wb .jlc-wb-chip, #jlc-wb select.jlc-wb-select { padding: 8px; font-size: 12px; min-width: 0; }
+        #jlc-wb .jlc-wb-chip.is-on {
+            background: #f1e4d6; border-color: #d7bfa7; color: #784326;
+        }
+        #jlc-wb .jlc-wb-list-scroll { padding: 4px 16px 32px; }
+        #jlc-wb .jlc-wb-group { margin-bottom: 12px; }
+        #jlc-wb .jlc-wb-group-toggle { font-size: 12px; padding: 12px 0 8px; }
+        #jlc-wb .jlc-wb-group-body { gap: 8px; }
+        #jlc-wb .jlc-wb-item-title { font-weight: 600; font-size: 14px; }
+        #jlc-wb .jlc-wb-open-btn {
+            min-width: 52px; padding: 8px 10px; border-radius: 7px; font-weight: 600;
+        }
+        #jlc-wb .jlc-wb-more-btn { width: 36px; height: 28px; }
+        #jlc-wb .jlc-site-pill.is-last { background: transparent; border-color: transparent; color: var(--jlc-muted); font-weight: 400; }
+        #jlc-wb .jlc-wb-settings-panel { width: 100%; border-left: 0; background: var(--jlc-bg); }
+        #jlc-wb .jlc-wb-settings-head { padding: 18px 20px; background: var(--jlc-surface); }
+        #jlc-wb .jlc-wb-settings-nav { background: var(--jlc-surface); gap: 8px; }
+        #jlc-wb .jlc-wb-settings-nav button { flex: 1; padding: 9px 6px; border-radius: 8px; }
+        #jlc-wb .jlc-wb-settings-footer { flex-direction: row; background: var(--jlc-surface); }
+        #jlc-wb .jlc-wb-settings-footer .jlc-wb-btn { width: auto; flex: 1; }
+        #jlc-wb .legacy-row.legacy-toggle {
+            border: 0; border-bottom: 1px solid var(--jlc-line); border-radius: 0;
+            background: transparent; padding: 12px 0; margin: 0; letter-spacing: 0;
+            display: flex; cursor: pointer;
+        }
+        #jlc-wb .jlc-wb-settings h3 { font-size: 14px; color: var(--jlc-text); letter-spacing: 0; }
+        #jlc-wb .jlc-wb-empty { margin-top: 12px; border-color: var(--jlc-line); background: var(--jlc-surface); }
+        #jlc-wb-dialog .jlc-wb-btn {
+            border: 1px solid var(--jlc-line); border-radius: 8px; padding: 10px 16px;
+            background: var(--jlc-bg); color: var(--jlc-text); cursor: pointer;
+        }
+        #jlc-wb-dialog .jlc-wb-btn.primary { background: var(--jlc-accent); border-color: transparent; color: white; }
+        @media (max-width: 820px) {
+            #jlc-wb { height: min(90dvh, 840px) !important; padding-bottom: env(safe-area-inset-bottom); }
+            #jlc-wb .jlc-wb-resize-w, #jlc-wb .jlc-wb-resize-h, #jlc-wb .jlc-wb-resize-corner { display: none; }
+            #jlc-wb-fab { width: auto; height: 44px; }
+            #jlc-wb .jlc-wb-header { padding: 16px; }
+            #jlc-wb .jlc-wb-nav { padding: 0 16px; }
+            #jlc-wb-layout-toggle { display: none; }
+        }
+        @media (max-width: 440px) {
+            #jlc-wb .jlc-wb-filter-row { grid-template-columns: 1fr 1fr; }
+            #jlc-wb .jlc-wb-tracking-actions { align-items: flex-start; }
+            #jlc-wb .jlc-wb-item-row { gap: 8px; }
+            #jlc-wb .jlc-wb-cover { width: 42px; height: 52px; border-radius: 8px; }
+            #jlc-wb .jlc-wb-item { padding: 10px; }
+        }
+        @media (pointer: coarse) {
+            #jlc-wb input:not([type=checkbox]):not([type=range]), #jlc-wb textarea, #jlc-wb select { font-size: 16px; }
+            #jlc-wb .jlc-wb-more-btn, #jlc-wb .jlc-wb-icon-btn { min-width: 40px; min-height: 40px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #jlc-wb *, #jlc-wb-fab { transition: none !important; animation: none !important; }
+        }
         #jlc-wb .jlc-wb-tag-editor {
             display: flex; flex-direction: column; gap: 8px;
         }
@@ -6715,7 +7383,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px;
             background: var(--creamu-wb-surface-raised); border: 1px solid var(--creamu-wb-border-strong);
             color: var(--creamu-wb-text-strong); font-size: 12.5px; font-weight: 650;
-            box-shadow: 0 2px 0 var(--creamu-wb-divider);
         }
         #jlc-wb .jlc-wb-tag button {
             appearance: none; border: 0; background: transparent; color: #b09070;
@@ -6725,7 +7392,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         #jlc-wb .jlc-wb-tag-input {
             width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--creamu-wb-border);
             background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14px;
-            box-shadow: 0 2px 0 var(--creamu-wb-divider);
         }
         #jlc-wb .jlc-wb-tag-input:focus { outline: none; border-color: var(--creamu-wb-accent); }
         #jlc-wb .jlc-wb-settings-section #jlc-wb-view-root {
@@ -6733,24 +7399,20 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
         #jlc-wb #jlc-wb-config-diag {
             margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; line-height: 1.6;
-            background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
+            background: var(--creamu-wb-surface); border: 1px solid var(--jlc-line);
             color: var(--creamu-wb-text-strong);
-        }
-        #jlc-wb #jlc-wb-config-hint {
-            margin: 0; padding: 10px 12px; line-height: 1.5;
-            background: #fff7ea; border-bottom: 1px solid #f0d7a0; color: #9a6700;
         }
         #jlc-wb .jlc-wb-tracking-alert { color: #9a6700; font-size: 12px; }
         #jlc-wb .jlc-wb-virtual-note { color: #4f769c; font-size: 11px; }
         #jlc-tracking-pagebar.jlc-wb-pagebar {
-            background: rgba(255,253,248,.97); border: 1px solid var(--creamu-wb-border);
-            color: var(--creamu-wb-text); box-shadow: 0 10px 24px rgba(90,60,30,.12);
+            background: var(--jlc-surface); border: 1px solid var(--creamu-wb-border);
+            color: var(--creamu-wb-text); box-shadow: none;
         }
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-title {
             color: var(--creamu-wb-text);
         }
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagehint {
-            color: #a89078 !important; font-weight: 550; font-size: 12px;
+            color: var(--jlc-muted) !important; font-weight: 550; font-size: 12px;
         }
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-meta {
             color: var(--creamu-wb-text-muted);
@@ -6758,16 +7420,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button {
             appearance: none; border: 1px solid var(--creamu-wb-border-strong);
             background: var(--creamu-wb-surface-soft); color: var(--creamu-wb-text-strong);
-            border-radius: 999px; padding: 7px 12px; cursor: pointer; font-size: 13px; font-weight: 650;
+            border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
             zoom: var(--jlc-btn-scale, 1);
         }
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.primary {
             background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent);
         }
-        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.jlc-bp-continue {
-            background: linear-gradient(135deg, #ff5f56, #e54840); border: 0; color: var(--creamu-wb-on-accent);
-            font-weight: 800; box-shadow: 0 3px 0 #b8322b, 0 8px 18px rgba(255,95,86,.22);
-        }`;
+        `;
     }
 
     function initWorkbenchV3Styles() {
@@ -6965,6 +7624,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const badge = fab.querySelector('.jlc-wb-fab-badge');
         const count = Number(updateCount || 0) || 0;
         fab.classList.toggle('has-updates', count > 0);
+        fab.setAttribute('aria-label', '打开 Creamu 控制台' + (count > 0 ? '，' + count + ' 项有更新' : ''));
         if (badge) badge.textContent = count > 99 ? '99+' : String(count);
     }
 
@@ -6990,7 +7650,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (!shell) return;
         const drawer = shell.querySelector('.jlc-wb-settings');
         if (!drawer) return;
+        const wasOpen = drawer.classList.contains('is-open');
         drawer.classList.toggle('is-open', !!open);
+        shell.querySelector('#jlc-wb-settings-btn')?.setAttribute('aria-expanded', String(!!open));
+        shell.querySelectorAll(':scope > .jlc-wb-header, :scope > .jlc-wb-nav, :scope > .jlc-wb-body')
+            .forEach(region => { region.inert = !!open; });
         const nextSection = normalizeWorkbenchSettingsTab(
             section || getWorkbenchSession().settingsSection || 'resource'
         );
@@ -7001,6 +7665,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (open && typeof activateWorkbenchSettingsTab === 'function') {
             activateWorkbenchSettingsTab(nextSection);
         }
+        if (open && !wasOpen) drawer.querySelector('#jlc-wb-settings-close')?.focus();
+        else if (!open && wasOpen && isWorkbenchOpen()) shell.querySelector('#jlc-wb-settings-btn')?.focus();
     }
 
     async function activateWorkbenchNav(nav = 'tracking', options = {}) {
@@ -7010,6 +7676,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         captureWorkbenchScroll();
         shell.querySelectorAll('.jlc-wb-nav button').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.nav === next);
+            if (btn.dataset.nav === next) btn.setAttribute('aria-current', 'page');
+            else btn.removeAttribute('aria-current');
         });
         shell.querySelectorAll('[data-jlc-wb-page]').forEach(page => {
             page.hidden = page.dataset.jlcWbPage !== next;
@@ -7043,7 +7711,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             let data = Array.isArray(Status.get(key)) ? Status.get(key).slice() : [];
             host.innerHTML = ''
                 + '<div class="jlc-wb-tag-list"></div>'
-                + '<input type="text" class="jlc-wb-tag-input" autocomplete="off" placeholder="'
+                + '<input type="text" class="jlc-wb-tag-input" autocomplete="off" aria-label="'
+                + (key === 'hiddenWord' ? '添加屏蔽标题词' : '添加屏蔽番号') + '" placeholder="'
                 + escapeHtml(host.getAttribute('data-placeholder') || '回车添加') + '">';
             const listEl = host.querySelector('.jlc-wb-tag-list');
             const input = host.querySelector('.jlc-wb-tag-input');
@@ -7087,13 +7756,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const fav = document.getElementById('jlc-wb-i-fav');
         if (fav && fav.dataset.bound !== '1') {
             fav.dataset.bound = '1';
-            const saveFav = () => {
-                const list = String(fav.value || '').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-                config.fav_tags = list;
-                try { GM_setValue('jlc_config_stable', config); } catch (_) { /* ignore */ }
-                try { if (typeof ensureCreamuSync === 'function') ensureCreamuSync()?.markLocalDirty(); } catch (_) { /* ignore */ }
-                try { if (typeof refreshCommanderDecorations === 'function') refreshCommanderDecorations(); } catch (_) { /* ignore */ }
-            };
+            const saveFav = () => setFavoriteTags(fav.value);
             fav.addEventListener('change', saveFav);
             fav.addEventListener('blur', saveFav);
         }
@@ -7106,14 +7769,29 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         captureWorkbenchScroll();
         shell.classList.remove('is-open');
         document.getElementById('jlc-wb-fab')?.classList.remove('is-panel-open');
+        document.getElementById('jlc-wb-fab')?.setAttribute('aria-expanded', 'false');
         persistWorkbenchSession({ panelOpen: false, settingsOpen: false });
+        applyWorkbenchShellGeometry({}, { skipPersist: true });
         setWorkbenchSettingsOpen(false);
+        document.getElementById('jlc-wb-fab')?.focus({ preventScroll: true });
     }
 
     function applyWorkbenchShellGeometry(patch = {}, options = {}) {
         const shell = getWorkbenchEl();
         if (!shell) return null;
         const session = getWorkbenchSession();
+        const docked = session.panelMode === 'dock' && window.innerWidth >= 1180;
+        shell.classList.toggle('is-docked', docked);
+        document.documentElement.classList.toggle('jlc-console-docked', docked && isWorkbenchOpen());
+        const dockWidth = Math.min(520, Math.max(380, window.innerWidth * .32));
+        document.documentElement.style.setProperty('--jlc-dock-width', dockWidth + 'px');
+        const layoutToggle = shell.querySelector('#jlc-wb-layout-toggle');
+        if (layoutToggle) {
+            layoutToggle.textContent = session.panelMode === 'dock' ? '浮窗' : '并排';
+            layoutToggle.setAttribute('aria-label', session.panelMode === 'dock' ? '切换为自由浮窗' : '切换为并排停靠');
+            layoutToggle.disabled = window.innerWidth < 1180;
+            layoutToggle.title = window.innerWidth < 1180 ? '窗口宽度达到 1180 像素后可并排' : '切换并排停靠与自由浮窗';
+        }
         const def = getCreamuDefaultWorkbenchRect(window);
         // 宽高只信任 session / 显式 patch，禁止用 live getBoundingClientRect 反写（会越拖越胀）
         const nextWidth = patch.width != null
@@ -7159,18 +7837,24 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         applyWorkbenchShellGeometry(patch);
     }
 
+    function writeWorkbenchFabPosition(fab, point) {
+        // Dragging and saved positions use viewport pixels; CSS zoom also scales left/top.
+        const zoom = Number.parseFloat(getComputedStyle(fab).zoom) || 1;
+        fab.style.left = point.left / zoom + 'px';
+        fab.style.top = point.top / zoom + 'px';
+        fab.style.right = 'auto';
+        fab.style.bottom = 'auto';
+    }
+
     function applyWorkbenchFabPosition(fab, session = getWorkbenchSession()) {
         if (!fab) return;
+        if (session.fabLeft == null || session.fabTop == null) return;
         const left = Number(session.fabLeft);
         const top = Number(session.fabTop);
         if (!Number.isFinite(left) || !Number.isFinite(top)) return;
-        const w = fab.offsetWidth || 34;
-        const h = fab.offsetHeight || 34;
-        const point = clampCreamuWorkbenchPoint({ left, top }, { width: w, height: h }, window);
-        fab.style.left = point.left + 'px';
-        fab.style.top = point.top + 'px';
-        fab.style.right = 'auto';
-        fab.style.bottom = 'auto';
+        const rect = fab.getBoundingClientRect();
+        const point = clampCreamuWorkbenchPoint({ left, top }, rect, window);
+        writeWorkbenchFabPosition(fab, point);
     }
 
     function bindWorkbenchFabDrag(fab) {
@@ -7180,12 +7864,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             boundKey: 'jlcFabDragBound',
             threshold: 5,
             thresholdMode: 'axis',
-            applyPosition: (point) => {
-                fab.style.left = point.left + 'px';
-                fab.style.top = point.top + 'px';
-                fab.style.right = 'auto';
-                fab.style.bottom = 'auto';
-            },
+            applyPosition: (point) => writeWorkbenchFabPosition(fab, point),
             savePosition: (point) => {
                 persistWorkbenchSession({
                     fabLeft: Math.round(point.left),
@@ -7212,7 +7891,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     function bindWorkbenchDrag(shell) {
         bindCreamuWorkbenchDrag(shell, {
             boundKey: 'jlcPanelDragBound',
-            isDragDisabled: () => window.innerWidth <= 820,
+            isDragDisabled: () => window.innerWidth <= 820 || shell.classList.contains('is-docked'),
             shouldIgnoreDrag: (event) => !!event.target?.closest?.('.jlc-wb-header-actions'),
             getStartRect: () => getWorkbenchInteractionRect(shell),
             applyRect: (rect) => applyWorkbenchShellGeometry(rect, { skipPersist: true }),
@@ -7225,7 +7904,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         bindCreamuWorkbenchResize(shell, {
             boundKey: 'jlcPanelResizeBound',
             handleBoundPrefix: 'jlcResizeHandle',
-            isDragDisabled: () => window.innerWidth <= 820,
+            isDragDisabled: () => window.innerWidth <= 820 || shell.classList.contains('is-docked'),
             getStartRect: () => getWorkbenchInteractionRect(shell),
             applyRect: (rect) => applyWorkbenchShellGeometry(rect, { skipPersist: true }),
             onEnd: (rect) => applyWorkbenchShellGeometry(rect),
@@ -7453,7 +8132,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '      <div class="jlc-wb-item-pills">' + subPills.join('') + '</div>'
             + '    </div>'
             + '    <div class="jlc-wb-item-side">'
-            + '      <button type="button" class="jlc-wb-open-btn" data-jlc-wb-open="' + escapeHtml(record.id) + '" title="按默认方式打开">Open</button>'
+            + '      <button type="button" class="jlc-wb-open-btn" data-jlc-wb-open="' + escapeHtml(record.id) + '" title="按默认方式打开">打开</button>'
             + '      <button type="button" class="jlc-wb-more-btn" data-jlc-wb-more="' + escapeHtml(record.id) + '" title="更多操作" aria-label="更多">···</button>'
             + '      <div class="jlc-wb-item-menu" data-jlc-wb-menu="' + escapeHtml(record.id) + '" hidden>'
             + '        <button type="button" data-jlc-wb-open-same="' + escapeHtml(record.id) + '">本页打开</button>'
@@ -7718,6 +8397,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const nav = compactText(tabId || '') ? mapped.nav : (session.nav || 'tracking');
         shell.classList.add('is-open');
         document.getElementById('jlc-wb-fab')?.classList.add('is-panel-open');
+        document.getElementById('jlc-wb-fab')?.setAttribute('aria-expanded', 'true');
         applyWorkbenchShellGeometry();
         persistWorkbenchSession({ panelOpen: true, nav });
         activateWorkbenchNav(nav, { forceRender: true, reuseIfUnchanged: true });
@@ -7727,6 +8407,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             syncWorkbenchSettingsForm();
         } else {
             setWorkbenchSettingsOpen(false);
+            shell.querySelector('.jlc-wb-nav button.active')?.focus({ preventScroll: true });
         }
         if (nav !== 'tracking') void refreshWorkbenchFabBadge();
     }
@@ -7985,29 +8666,33 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             refreshAllBtn.disabled = !!refreshRuntime;
             refreshAllBtn.textContent = runtimeButtonText;
         }
+        const saveCurrentBtn = document.getElementById('jlc-wb-save-current');
+        if (saveCurrentBtn) {
+            saveCurrentBtn.disabled = !context;
+            saveCurrentBtn.title = context ? '把当前列表加入追更' : '请先打开搜索或列表页';
+        }
 
         const useVirtual = list.length >= WB_VIRT_THRESHOLD;
         const toolbarHtml = ''
             + '<div class="jlc-wb-toolbar">'
             + '  <div class="jlc-wb-toolbar-row">'
-            + '    <input class="jlc-wb-search" id="jlc-wb-tracking-query" type="search" placeholder="搜索标题 / 番号 / 备注…" value="' + escapeHtml(session.tracking.query || '') + '">'
+            + '    <input class="jlc-wb-search" id="jlc-wb-tracking-query" aria-label="搜索追更" type="search" placeholder="搜索标题、番号或备注" value="' + escapeHtml(session.tracking.query || '') + '">'
+            + '    <button type="button" class="jlc-wb-chip" data-jlc-wb-continue>'
+            + (resumePendingIds.length ? '继续上次刷新' : '继续上次') + '</button>'
             + '  </div>'
-            + '  <div class="jlc-wb-toolbar-row">'
-            + '    <button type="button" class="jlc-wb-chip' + (session.tracking.filterUpdatesOnly ? ' is-on' : '') + '" data-jlc-wb-filter-updates>仅有更新</button>'
-            + '    <button type="button" class="jlc-wb-chip' + (session.tracking.pinCurrent !== false ? ' is-on' : '') + '" data-jlc-wb-pin-current>当前页置顶</button>'
-            + '    <select class="jlc-wb-select" id="jlc-wb-group-filter">'
+            + '  <div class="jlc-wb-toolbar-row jlc-wb-filter-row">'
+            + '    <button type="button" class="jlc-wb-chip' + (session.tracking.filterUpdatesOnly ? ' is-on' : '') + '" aria-pressed="' + !!session.tracking.filterUpdatesOnly + '" data-jlc-wb-filter-updates>仅有更新</button>'
+            + '    <button type="button" class="jlc-wb-chip' + (session.tracking.pinCurrent !== false ? ' is-on' : '') + '" aria-pressed="' + (session.tracking.pinCurrent !== false) + '" data-jlc-wb-pin-current>当前页置顶</button>'
+            + '    <select class="jlc-wb-select" aria-label="追更分组" id="jlc-wb-group-filter">'
             + '      <option value="all"' + (groupFilter === 'all' ? ' selected' : '') + '>全部分组</option>'
             + TRACKING_GROUP_ORDER.map(key => '<option value="' + key + '"' + (groupFilter === key ? ' selected' : '') + '>' + escapeHtml(getTrackingGroupLabel(key)) + '</option>').join('')
             + '    </select>'
-            + '    <select class="jlc-wb-select" id="jlc-wb-sort">'
+            + '    <select class="jlc-wb-select" aria-label="追更排序" id="jlc-wb-sort">'
             + '      <option value="updates_first"' + (session.tracking.sort === 'updates_first' ? ' selected' : '') + '>有更新优先</option>'
             + '      <option value="last_opened"' + (session.tracking.sort === 'last_opened' ? ' selected' : '') + '>最近打开</option>'
             + '      <option value="last_browsed"' + (session.tracking.sort === 'last_browsed' ? ' selected' : '') + '>最近浏览</option>'
             + '      <option value="name"' + (session.tracking.sort === 'name' ? ' selected' : '') + '>名称</option>'
             + '    </select>'
-            + '    <button type="button" class="jlc-wb-chip' + (resumePendingIds.length ? ' is-on' : '') + '" data-jlc-wb-continue>'
-            + (resumePendingIds.length ? '继续上次刷新' : '继续上次')
-            + '</button>'
             + '  </div>'
             + (resumePendingIds.length
                 ? (resumeReason === 'cf_required'
@@ -8020,7 +8705,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + (useVirtual ? '  <div class="jlc-wb-toolbar-row jlc-wb-virtual-note">虚拟列表已启用（' + list.length + ' 项）</div>' : '')
             + '</div>';
 
-        const emptyHtml = '<div class="jlc-wb-empty">' + (context ? '没有匹配的追更项。可点底部「收藏当前搜索」。' : '还没有追更项，先在列表页收藏一个搜索吧。') + '</div>';
+        const emptyHtml = '<div class="jlc-wb-empty">' + (allRecords.length ? '没有匹配的追更项。试试清空搜索或调整筛选。' : context ? '把感兴趣的搜索留在这里。点击上方「收藏当前搜索」，下次就能继续浏览和查看更新。' : '还没有追更项。打开搜索或列表页后，即可收藏并记录浏览断点。') + '</div>';
 
         if (!flatRows.length) {
             root.innerHTML = toolbarHtml + '<div class="jlc-wb-list-scroll" id="jlc-wb-list-scroll">' + emptyHtml + '</div>';
@@ -8219,8 +8904,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             return ''
                 + '<div class="legacy-row">'
                 + '  <div class="jlc-wb-range-head"><span>' + escapeHtml(item.label) + '</span><b class="jlc-wb-range-value" data-jlc-wb-range-value="' + escapeHtml(item.key) + '">' + value + '</b></div>'
-                + '  <div class="legacy-range"><input type="range" data-jlc-wb-range="' + escapeHtml(item.key) + '" min="' + item.min + '" max="' + item.max + '" step="' + step + '" value="' + value + '"></div>'
-                + (item.key === 'uiBtnScale' ? '<div class="legacy-note">只缩放工作台按钮与悬浮球，列表封面/文字不变。笔记本可试 80–90。</div>' : '')
+                + '  <div class="legacy-range"><input type="range" aria-label="' + escapeHtml(item.label) + '" data-jlc-wb-range="' + escapeHtml(item.key) + '" min="' + item.min + '" max="' + item.max + '" step="' + step + '" value="' + value + '"></div>'
+                + (item.key === 'uiBtnScale' ? '<div class="legacy-note">调整控制台按钮与悬浮入口的大小。</div>' : '')
                 + '</div>';
         };
 
@@ -8228,17 +8913,20 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         container.innerHTML = ''
             + '<h3>列表功能</h3>'
             + toggles.map(item => ''
-                + '<div class="legacy-row legacy-toggle' + (item.disabled ? ' disabled' : '') + '">'
+                + '<label class="legacy-row legacy-toggle' + (item.disabled ? ' disabled' : '') + '">'
                 + '  <span>' + escapeHtml(item.label) + '</span>'
                 + '  <input type="checkbox" data-jlc-wb-toggle="' + escapeHtml(item.key) + '"' + (Status.get(item.key) ? ' checked' : '') + (item.disabled ? ' disabled' : '') + '>'
-                + '</div>').join('')
+                + '</label>').join('')
             + '<h3 class="jlc-wb-section-title">布局</h3>'
             + layoutRanges.map(renderRangeRow).join('')
+            + '<h3 class="jlc-wb-section-title">已隐藏标签</h3>'
+            + '<div class="legacy-note">按完整名称对所有影片生效，只隐藏悬浮标签，不改变偏好命中。点击下方标签恢复显示。</div>'
+            + '<div id="jlc-wb-hidden-meta-tags" class="jlc-hidden-meta-tags"></div>'
             + '<h3 class="jlc-wb-section-title">工作台</h3>'
             + uiRanges.map(renderRangeRow).join('')
             + '<div class="legacy-row">'
             + '  <div class="jlc-wb-note-summary">默认打开方式</div>'
-            + '  <select id="jlc-wb-view-open-mode" class="jlc-wb-select">'
+            + '  <select aria-label="默认打开方式" id="jlc-wb-view-open-mode" class="jlc-wb-select">'
             + '    <option value="tab"' + (openMode === 'tab' ? ' selected' : '') + '>新标签打开</option>'
             + '    <option value="same"' + (openMode === 'same' ? ' selected' : '') + '>本页打开</option>'
             + '  </select>'
@@ -8275,7 +8963,30 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             config.open_mode = next;
             GM_setValue('jlc_config_stable', config);
             persistWorkbenchSession({ openMode: next });
-            updateWorkbenchOpenModeChip();
+        });
+        renderWorkbenchHiddenMetaTags();
+    }
+
+    function renderWorkbenchHiddenMetaTags() {
+        const container = document.getElementById('jlc-wb-hidden-meta-tags');
+        if (!container) return;
+        container.replaceChildren();
+        const tags = uniqueTextList(config.hidden_meta_tags);
+        if (!tags.length) {
+            const empty = document.createElement('p');
+            empty.className = 'legacy-note';
+            empty.textContent = '暂无隐藏标签。右键或长按封面标签可打开标签菜单。';
+            container.append(empty);
+            return;
+        }
+        tags.forEach(tag => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'jlc-wb-btn ghost';
+            button.textContent = tag + ' · 恢复';
+            button.setAttribute('aria-label', '恢复显示标签：' + tag);
+            button.onclick = () => setMetaTagHidden(tag, false);
+            container.append(button);
         });
     }
 
@@ -8291,6 +9002,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (url) url.value = config.emby_url || '';
         if (mt) mt.value = config.metatube_url || '';
         if (fav) fav.value = (config.fav_tags || []).join(', ');
+        renderWorkbenchHiddenMetaTags();
         const hiddenSummary = shell.querySelector('#jlc-wb-hidden-summary');
         if (hiddenSummary) {
             try {
@@ -8345,16 +9057,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             const input = shell.querySelector('[data-jlc-wb-resource="' + k + '"]');
             if (input) input.checked = config[k] !== false;
         });
-        const hint = shell.querySelector('#jlc-wb-config-hint');
-        if (hint) {
-            if (isLikelyFreshDefaultConfig(config)) {
-                hint.hidden = false;
-                hint.textContent = '当前像是空配置（默认心动标签、无 Emby）。若以前用过旧版脚本，这通常是因为新脚本有独立存储：请到旧脚本导出备份，再在 设置 → 备份 里导入。';
-            } else {
-                hint.hidden = true;
-                hint.textContent = '';
-            }
-        }
         updateWorkbenchConfigDiag();
     }
 
@@ -8364,6 +9066,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const next = normalizeWorkbenchSettingsTab(tabId);
         shell.querySelectorAll('[data-jlc-settings-tab]').forEach(btn => {
             btn.classList.toggle('active', btn.getAttribute('data-jlc-settings-tab') === next);
+            if (btn.getAttribute('data-jlc-settings-tab') === next) btn.setAttribute('aria-current', 'page');
+            else btn.removeAttribute('aria-current');
         });
         shell.querySelectorAll('[data-jlc-settings-panel]').forEach(panel => {
             panel.classList.toggle('is-active', panel.getAttribute('data-jlc-settings-panel') === next);
@@ -8395,7 +9099,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             const keyTyped = keyEl?.value.trim() || '';
             const mtVal = shell.querySelector('#jlc-wb-i-mt')?.value.trim().replace(/\/$/, '') || '';
             const favRaw = shell.querySelector('#jlc-wb-i-fav')?.value;
-            const favList = String(favRaw ?? '').split(',').map(s => s.trim()).filter(Boolean);
+            const favList = uniqueTextList(asTextList(favRaw));
 
             config.emby_url = urlVal;
             // 密钥：留空且已有保存值 => 不改；用户输入了才覆盖
@@ -8550,8 +9254,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             const fab = document.createElement('button');
             fab.id = 'jlc-wb-fab';
             fab.type = 'button';
-            fab.title = 'Creamu · JavLibrary（可拖动）';
-            fab.innerHTML = '<span>⌘</span><span class="jlc-wb-fab-badge">0</span>';
+            fab.title = '打开 Creamu 控制台 · 拖动可调整位置';
+            fab.setAttribute('aria-label', '打开 Creamu 控制台');
+            fab.setAttribute('aria-controls', 'jlc-wb');
+            fab.setAttribute('aria-expanded', 'false');
+            fab.innerHTML = '<span class="jlc-brand-mark" aria-hidden="true">c</span><span>控制台</span><span class="jlc-wb-fab-badge" aria-hidden="true">0</span>';
             document.body.appendChild(fab);
             bindWorkbenchFabDrag(fab);
         } else {
@@ -8562,37 +9269,44 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
         const shell = document.createElement('div');
         shell.id = 'jlc-wb';
+        shell.setAttribute('role', 'region');
+        shell.setAttribute('aria-label', 'Creamu · JavLibrary 控制台');
+        shell.tabIndex = -1;
         shell.innerHTML = ''
             + '<div class="jlc-wb-resize-w" title="拖拽调整宽度"></div>'
             + '<div class="jlc-wb-resize-h" title="拖拽调整高度"></div>'
             + '<div class="jlc-wb-resize-corner" title="拖拽调整大小"></div>'
             + '<div class="jlc-wb-header" title="按住标题栏拖动窗口">'
-            + '  <div><div class="jlc-wb-title">Creamu · JavLibrary</div><div class="jlc-wb-subtitle" id="jlc-wb-header-sub">加载中… · 可拖动</div></div>'
+            + '  <div class="jlc-wb-brand"><div><div class="jlc-wb-title">控制台</div><div class="jlc-wb-subtitle"><span id="jlc-wb-header-sub">追更与资料</span></div></div></div>'
             + '  <div class="jlc-wb-header-actions">'
-            + '    <button type="button" class="jlc-wb-chip" id="jlc-wb-open-mode-toggle" title="切换默认打开方式">新标签</button>'
-            + '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-settings-btn" title="设置">⚙</button>'
-            + '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-min-btn" title="收起">—</button>'
-            + '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-close-btn" title="关闭">×</button>'
+            + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-layout-toggle" title="切换并排停靠与自由浮窗">浮窗</button>'
+            + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-settings-btn" aria-controls="jlc-wb-settings" aria-expanded="false">设置</button>'
+            + '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-close-btn" title="收起控制台" aria-label="收起控制台">×</button>'
             + '  </div>'
             + '</div>'
-            + '<div class="jlc-wb-nav">'
-            + '  <button type="button" data-nav="tracking" class="active">追更</button>'
-            + '  <button type="button" data-nav="library">库</button>'
+            + '<nav class="jlc-wb-nav" aria-label="控制台导航">'
+            + '  <button type="button" data-nav="tracking" class="active" aria-current="page">追更</button>'
+            + '  <button type="button" data-nav="library">熟人库</button>'
             + '  <button type="button" data-nav="filter">过滤</button>'
-            + '</div>'
+            + '</nav>'
             + '<div class="jlc-wb-body">'
-            + '  <div data-jlc-wb-page="tracking"><div id="jlc-wb-tracking-root"></div></div>'
+            + '  <div data-jlc-wb-page="tracking">'
+            + '    <div class="jlc-wb-tracking-actions">'
+            + '      <span class="jlc-wb-footer-summary" id="jlc-wb-footer-summary" role="status">我的追更</span>'
+            + '      <div><button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">收藏当前搜索</button>'
+            + '      <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-refresh-all">刷新全部</button></div>'
+            + '    </div><div id="jlc-wb-tracking-root"></div></div>'
             + '  <div data-jlc-wb-page="library" hidden><div id="jlc-wb-library-root">'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">熟人与统计</div>'
             + '      <div class="stat-box"><div class="stat-item"><b id="jlc-wb-st-m">0</b><span>影片</span></div><div class="stat-item"><b id="jlc-wb-st-p">0</b><span>追踪</span></div><div class="stat-item"><b id="jlc-wb-st-v">0</b><span>已阅</span></div></div>'
             + '      <div class="legacy-note jlc-wb-intro-note">Emby 影片/熟人缓存统计；下方可手动加熟人。</div>'
-            + '      <div class="jlc-wb-inline-form"><input id="jlc-wb-i-new-p" type="text" placeholder="手动添加演员/导演"><button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-add-p">+</button></div>'
+            + '      <div class="jlc-wb-inline-form"><input id="jlc-wb-i-new-p" type="text" placeholder="演员或导演姓名" aria-label="演员或导演姓名"><button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-add-p">添加</button></div>'
             + '      <div id="jlc-wb-person-list" class="jlc-wb-list-stack"></div>'
             + '    </div></div></div>'
             + '  <div data-jlc-wb-page="filter" hidden><div id="jlc-wb-filter-root">'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">心动标签</div>'
-            + '      <div class="legacy-note jlc-wb-intro-note">列表高亮你关心的标签。回车或失焦即保存。</div>'
-            + '      <textarea id="jlc-wb-i-fav" rows="3" placeholder="女优, 巨乳, … 逗号分隔"></textarea>'
+            + '      <div class="legacy-note jlc-wb-intro-note">不同标签各算 1 项，熟人合计 1 项；命中至少 2 项自动亮金框，已入库仍显示绿框。自动命中不加入手动心动。逗号分隔，失焦保存。</div>'
+            + '      <textarea id="jlc-wb-i-fav" aria-label="心动标签" rows="3" placeholder="女优, 巨乳, … 逗号分隔"></textarea>'
             + '    </div>'
             + '    <div class="jlc-wb-view-block"><div class="jlc-wb-view-title">屏蔽标题词</div>'
             + '      <div class="legacy-note jlc-wb-intro-note">标题含这些词会淡化/隐藏。回车添加，点 × 删除。</div>'
@@ -8605,27 +9319,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '    <div class="legacy-note jlc-wb-status-note" id="jlc-wb-hidden-summary">—</div>'
             + '  </div></div>'
             + '</div>'
-            + '<div class="jlc-wb-footer">'
-            + '  <div class="jlc-wb-footer-summary" id="jlc-wb-footer-summary">—</div>'
-            + '  <div class="jlc-wb-footer-actions">'
-            + '    <button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">⭐ 收藏当前</button>'
-            + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-refresh-all">刷新全部</button>'
-            + '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-sync-now" title="先同步 Emby，再推送 WebDAV（含点击/心动/追更/屏蔽词）">☁ 立即同步</button>'
-            + '  </div>'
-            + '</div>'
-            + '<div class="jlc-wb-settings" id="jlc-wb-settings">'
+            + '<div class="jlc-wb-settings" id="jlc-wb-settings" role="region" aria-label="控制台设置">'
             + '  <div class="jlc-wb-settings-panel">'
             + '    <div class="jlc-wb-settings-head">'
             + '      <strong>设置</strong>'
-            + '      <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-settings-close">×</button>'
+            + '      <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-settings-close" aria-label="返回控制台" title="返回控制台">←</button>'
             + '    </div>'
             + '    <div class="jlc-wb-settings-nav" id="jlc-wb-settings-nav">'
             + '      <button type="button" data-jlc-settings-tab="resource" class="active">资源</button>'
             + '      <button type="button" data-jlc-settings-tab="display">显示</button>'
-            + '      <button type="button" data-jlc-settings-tab="services">服务</button>'
-            + '      <button type="button" data-jlc-settings-tab="backup">备份</button>'
+            + '      <button type="button" data-jlc-settings-tab="services">服务同步</button>'
+            + '      <button type="button" data-jlc-settings-tab="backup">数据备份</button>'
             + '    </div>'
-            + '    <div id="jlc-wb-config-hint" class="legacy-note" hidden></div>'
             + '    <div class="jlc-wb-settings-body">'
             // —— 资源：详情页增强 ——
             + '      <section class="jlc-wb-settings-section is-active" data-jlc-settings-panel="resource">'
@@ -8641,14 +9346,17 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '      </section>'
             // —— 服务：Emby / MetaTube / WebDAV ——
             + '      <section class="jlc-wb-settings-section" data-jlc-settings-panel="services">'
-            + '        <h3>Emby / MetaTube</h3>'
+            + '        <h3>数据同步</h3>'
+            + '        <p class="legacy-note jlc-wb-intro-note">先更新 Emby 影片与熟人，再同步 WebDAV 数据。</p>'
+            + '        <button type="button" class="jlc-wb-btn primary jlc-wb-block-action" id="jlc-wb-sync-now">立即同步全部数据</button>'
+            + '        <h3 class="jlc-wb-section-title">Emby / MetaTube</h3>'
             + '        <div id="jlc-wb-config-diag" class="legacy-note"></div>'
             + '        <label>Emby 地址</label><input id="jlc-wb-i-url" type="text" placeholder="http://emby.example:8096">'
             + '        <label>Emby API Key</label><input id="jlc-wb-i-key" type="password">'
             + '        <div class="legacy-note">密钥框留空=不修改已保存值；只有输入新内容才会覆盖。</div>'
-            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-sync">🔄 立即同步 Emby</button>'
+            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-sync">立即同步 Emby</button>'
             + '        <label>MetaTube Server</label><input id="jlc-wb-i-mt" type="text" placeholder="http://127.0.0.1:1234">'
-            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-diag">🔍 重新读取并显示配置</button>'
+            + '        <button type="button" class="jlc-wb-btn ghost jlc-wb-block-action" id="jlc-wb-btn-diag">重新读取并显示配置</button>'
             + '        <h3 class="jlc-wb-section-title">WebDAV 同步</h3>'
             + '        <div class="legacy-note">通用 WebDAV（坚果云 / Nextcloud / 群晖等）。读写 {路径}/jlc.vault.json。坚果云请用应用密码。</div>'
             + '        <label>地址</label><input id="jlc-wb-wd-url" type="text" placeholder="https://dav.jianguoyun.com/dav/">'
@@ -8687,13 +9395,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             + '        <div class="legacy-note">完整备份不含 meta_cache。</div>'
             + '        <h3 class="jlc-wb-section-title">数据检查</h3>'
             + '        <div class="legacy-note jlc-wb-intro-note">查看本机断点、浏览时间与点击记录数量。</div>'
-            + '        <button type="button" class="jlc-wb-btn primary jlc-wb-block-action" id="jlc-wb-btn-integrity">🩺 检查断点·浏览·点击</button>'
+            + '        <button type="button" class="jlc-wb-btn primary jlc-wb-block-action" id="jlc-wb-btn-integrity">检查断点·浏览·点击</button>'
             + '        <pre id="jlc-wb-data-integrity" class="legacy-note jlc-wb-data-report" hidden></pre>'
             + '      </section>'
             + '    </div>'
             + '    <div class="jlc-wb-settings-footer">'
-            + '      <button type="button" class="jlc-wb-btn primary" id="jlc-wb-btn-save">💾 保存并应用</button>'
-            + '      <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-rescan">🔁 重扫当前页</button>'
+            + '      <button type="button" class="jlc-wb-btn primary" id="jlc-wb-btn-save">保存并应用</button>'
+            + '      <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-btn-rescan">重扫当前页</button>'
             + '    </div>'
             + '  </div>'
             + '</div>';
@@ -8711,7 +9419,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             });
         });
         shell.querySelector('#jlc-wb-close-btn')?.addEventListener('click', closeWorkbenchV3);
-        shell.querySelector('#jlc-wb-min-btn')?.addEventListener('click', closeWorkbenchV3);
+        shell.querySelector('#jlc-wb-layout-toggle')?.addEventListener('click', () => {
+            const next = getWorkbenchSession().panelMode === 'float' ? 'dock' : 'float';
+            persistWorkbenchSession({ panelMode: next });
+            applyWorkbenchShellGeometry({}, { skipPersist: true });
+        });
         shell.querySelector('#jlc-wb-settings-btn')?.addEventListener('click', () => {
             const session = getWorkbenchSession();
             const next = !session.settingsOpen;
@@ -8719,15 +9431,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             if (next) {
                 syncWorkbenchSettingsForm();
             }
-        });
-        shell.querySelector('#jlc-wb-open-mode-toggle')?.addEventListener('click', () => {
-            const session = getWorkbenchSession();
-            const next = session.openMode === 'tab' ? 'same' : 'tab';
-            config.open_mode = next;
-            GM_setValue('jlc_config_stable', config);
-            persistWorkbenchSession({ openMode: next });
-            updateWorkbenchOpenModeChip();
-            showAlert(next === 'tab' ? '默认改为新标签打开。' : '默认改为本页打开。');
         });
         shell.querySelector('#jlc-wb-save-current')?.addEventListener('click', async () => {
             const currentContext = getCurrentTrackingPageContext();
@@ -8780,8 +9483,26 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             }
         });
 
+        shell.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            event.preventDefault();
+            if (getWorkbenchSession().settingsOpen) setWorkbenchSettingsOpen(false);
+            else closeWorkbenchV3();
+        });
+        shell.querySelectorAll('label').forEach(label => {
+            const field = label.nextElementSibling;
+            if (field?.id && field.matches('input, select, textarea')) label.htmlFor = field.id;
+        });
+        shell.querySelectorAll('.legacy-toggle').forEach(row => {
+            const label = document.createElement('label');
+            label.className = row.className;
+            label.append(...row.childNodes);
+            row.replaceWith(label);
+        });
         bindWorkbenchSettingsEvents(shell);
-        updateWorkbenchOpenModeChip();
+        window.addEventListener('resize', () => {
+            applyWorkbenchShellGeometry({}, { skipPersist: true });
+        });
         syncWorkbenchSettingsForm();
         if (!workbenchUiBound) {
             workbenchUiBound = true;
@@ -8794,18 +9515,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         }
     }
 
-    function updateWorkbenchOpenModeChip() {
-        const chip = document.getElementById('jlc-wb-open-mode-toggle');
-        if (!chip) return;
-        const mode = getWorkbenchSession().openMode || config.open_mode || 'tab';
-        chip.textContent = mode === 'same' ? '本页' : '新标签';
-        chip.classList.toggle('is-on', mode === 'tab');
-    }
-
     async function restoreWorkbenchSession() {
         createWorkbenchV3();
         const session = getWorkbenchSession();
-        updateWorkbenchOpenModeChip();
         if (session.panelOpen) {
             openWorkbenchV3(normalizeWorkbenchMainNav(session.nav));
             if (session.settingsOpen) {
@@ -8883,6 +9595,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         try {
             bindMetaSweepEvents();
             new Page();
+            installJlcPageLayout();
         } catch (e) {
             console.error('[Creamu] Page', e);
         }
@@ -9546,18 +10259,21 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         avid: ['识别码', '識別碼', '番号', '番號', 'id'],
         director: ['导演', '導演', '監督', 'director'],
         maker: ['制作商', '製作商', '制作', '製作', 'メーカー', 'maker', 'studio', '片商'],
-        label: ['发行商', '發行商', 'レーベル', 'label', '厂牌', '廠牌'],
-        cast: ['演员', '演員', '出演', '女优', '女優', 'actor', 'cast']
+        label: ['发行商', '發行商', 'レーベル', 'label', '厂牌', '廠牌']
     });
-    const DETAIL_COPY_FIELD_ORDER = ['avid', 'director', 'maker', 'label', 'cast'];
+    const DETAIL_COPY_FIELD_ORDER = ['avid', 'director', 'maker', 'label'];
     const DETAIL_COPY_FIELD_IDS = Object.freeze({
         javlibrary: {
             avid: 'video_id',
             director: 'video_director',
             maker: 'video_maker',
-            label: 'video_label',
-            cast: 'video_cast'
+            label: 'video_label'
         }
+    });
+    const DETAIL_CAST_LINKS = Object.freeze({
+        javlibrary: '#video_cast a[href*="vl_star.php"]',
+        javbus: '.col-md-3.info a[href*="/star/"]',
+        javdb: '.video-meta-panel a[href*="/actors/"], .movie-panel-info a[href*="/actors/"]'
     });
 
     function escapeRegExpText(value) {
@@ -9628,11 +10344,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const root = preferredValueNode || getDetailFieldValueNode(block) || block;
         const clipboardText = root?.getAttribute?.('data-clipboard-text') || block?.getAttribute?.('data-clipboard-text');
         if (clipboardText) return compactText(clipboardText);
-        const anchorTexts = Array.from(root?.querySelectorAll?.('a') || [])
+        const content = root?.cloneNode(true);
+        content?.querySelectorAll('.jlc-detail-copy-btn, .avid-date-badge').forEach(node => node.remove());
+        const anchorTexts = Array.from(content?.querySelectorAll?.('a') || [])
             .map(node => compactText(node))
             .filter(Boolean);
         if (anchorTexts.length) return anchorTexts.join(' / ');
-        return stripDetailFieldLabel(root?.textContent || block?.textContent || '', aliases);
+        return stripDetailFieldLabel(content?.textContent || block?.textContent || '', aliases);
     }
 
     function resolveDetailFieldTarget(context, fieldKey) {
@@ -9677,26 +10395,29 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
 
     function ensureInlineDetailCopyButton(host, fieldKey, text) {
-        if (host instanceof HTMLAnchorElement && host.parentElement) host = host.parentElement;
+        const anchor = host instanceof HTMLAnchorElement ? host : null;
+        if (anchor) host = anchor.parentElement;
         if (!(host instanceof HTMLElement) || !fieldKey || !text) return;
-        let button = Array.from(host.children || []).find(node => node.classList?.contains('jlc-detail-copy-btn') && node.dataset.jlcCopyKey === fieldKey) || null;
+        const candidates = anchor ? [anchor.nextElementSibling] : Array.from(host.children);
+        let button = candidates.find(node => node?.classList?.contains('jlc-detail-copy-btn') && node.dataset.jlcCopyKey === fieldKey) || null;
         if (!button) {
             button = document.createElement('button');
             button.type = 'button';
             button.className = 'jlc-detail-copy-btn';
             button.dataset.jlcCopyKey = fieldKey;
             button.innerHTML = copy_Svg;
-            button.title = lang.copyButton;
-            button.setAttribute('aria-label', lang.copyButton);
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 copyPlainText(button.dataset.jlcCopyText || '');
                 return false;
             });
-            host.appendChild(button);
+            if (anchor) anchor.after(button);
+            else host.appendChild(button);
         }
         button.dataset.jlcCopyText = text;
+        button.title = lang.copyButton + '：' + text;
+        button.setAttribute('aria-label', button.title);
     }
 
     function removeDetailPageCopyButtons() {
@@ -9717,6 +10438,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             if (target?.host && target.text) {
                 ensureInlineDetailCopyButton(target.host, fieldKey, target.text);
             }
+        });
+        document.querySelectorAll(DETAIL_CAST_LINKS[context.site]).forEach(anchor => {
+            ensureInlineDetailCopyButton(anchor, 'cast', compactText(anchor));
         });
     }
 
@@ -13354,12 +14078,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         return record;
     }
 
-    function refreshTrackingToolbarButtons() {
+    function refreshTrackingToolbarButtons(items = getTrackingItemNodesFromRoot(document)) {
         const activeCode = normalizeCode(trackingPageState.record?.last_seen_avid || '');
-        getTrackingItemNodesFromRoot(document).forEach(item => {
+        items.forEach(item => {
             const button = item.querySelector('.jlc-tool-btn.j-bm');
             if (button) {
-                button.classList.toggle('active-bookmark', !!activeCode && normalizeCode(item.dataset.jlcAvid || '') === activeCode);
+                const active = !!activeCode && normalizeCode(item.dataset.jlcAvid || '') === activeCode;
+                button.classList.toggle('active-bookmark', active);
+                button.setAttribute('aria-pressed', String(active));
+                button.textContent = active ? '当前断点' : '设为断点';
             }
         });
     }
@@ -13521,6 +14248,149 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         return trackingPageSearchPromise;
     }
 
+// Native content keeps its links, form state and event listeners when arranged in the Creamu page.
+    const JLC_PAGE_REGIONS = {
+        javlibrary: {
+            navigation: ['#leftmenu'],
+            search: '#topsearch, #topmenu form',
+            searchLinks: '#topmenu a[href*="search.php"]',
+            account: '#topmenu',
+            title: '#video_title',
+            info: '#video_info',
+            cover: '#video_jacket',
+            actions: '#video_favorite_edit'
+        },
+        javbus: {
+            navigation: ['nav.navbar', '#navbar'],
+            title: '.container > h3',
+            info: '.col-md-3.info',
+            cover: '.screencap'
+        },
+        javdb: {
+            navigation: ['nav.navbar'],
+            title: 'h2.title',
+            info: '.video-meta-panel, .movie-panel-info',
+            cover: '.column-video-cover'
+        },
+        avmoo: { navigation: ['nav.navbar', '#navbar'] }
+    };
+
+    function installJlcPageLayout() {
+        if (document.getElementById('jlc-page-header')) return;
+        const regions = JLC_PAGE_REGIONS[currentWeb];
+        if (!regions) return;
+        document.documentElement.classList.add('jlc-page');
+        document.documentElement.dataset.jlcSite = currentWeb;
+        const header = document.createElement('header');
+        header.id = 'jlc-page-header';
+        header.innerHTML = ''
+            + '<a class="jlc-page-brand" href="/"><span class="jlc-brand-mark" aria-hidden="true">c</span>'
+            + '<span>Creamu<small>' + escapeHtml(getSiteLabel(currentWeb)) + '</small></span></a>'
+            + '<div class="jlc-page-search"></div>'
+            + '<div class="jlc-page-tools">'
+            + '<details class="jlc-native-navigation" name="jlc-page-menu"><summary>网站导航</summary><div></div></details>'
+            + '<details class="jlc-native-account" name="jlc-page-menu"><summary>账号</summary><div></div></details>'
+            + '</div>';
+        // Extract search first: JavLibrary nests it in the same native top bar as account links.
+        const search = regions.search && document.querySelector(regions.search);
+        const searchLinks = regions.searchLinks ? [...document.querySelectorAll(regions.searchLinks)] : [];
+        const searchMount = header.querySelector('.jlc-page-search');
+        if (search) searchMount.append(search);
+        searchLinks.forEach(link => searchMount.append(link));
+        const accountMenu = header.querySelector('.jlc-native-account');
+        const account = regions.account && document.querySelector(regions.account);
+        if (account?.querySelector('a, button')) {
+            // Keep native links, unread counts and event listeners; discard only textual separators.
+            const walker = document.createTreeWalker(account, NodeFilter.SHOW_TEXT);
+            while (walker.nextNode()) {
+                if (/^[\s|[\]]+$/.test(walker.currentNode.textContent)) walker.currentNode.textContent = '';
+            }
+            accountMenu.querySelector('div').append(account);
+        } else accountMenu.remove();
+        const nav = header.querySelector('.jlc-native-navigation > div');
+        regions.navigation.forEach(selector => {
+            document.querySelectorAll(selector).forEach(node => {
+                if (!nav.contains(node)) nav.append(node);
+            });
+        });
+        if (!nav.childElementCount) header.querySelector('.jlc-native-navigation').remove();
+        document.body.prepend(header);
+        const menus = [...header.querySelectorAll('details')];
+        header.addEventListener('keydown', event => {
+            const menu = menus.find(item => item.open);
+            if (event.key !== 'Escape' || !menu) return;
+            event.preventDefault();
+            event.stopPropagation();
+            menu.open = false;
+            menu.querySelector('summary').focus();
+        });
+        document.addEventListener('click', event => {
+            if (!header.contains(event.target)) menus.forEach(menu => { menu.open = false; });
+        });
+    }
+
+    function ensureJlcDetailLayout(context) {
+        if (!context) return null;
+        let detail = document.getElementById('jlc-detail');
+        if (detail) return detail;
+        const regions = JLC_PAGE_REGIONS[context.site];
+        if (!regions) return null;
+        const info = document.querySelector(regions.info) || context.anchor;
+        const title = document.querySelector(regions.title);
+        const cover = document.querySelector(regions.cover) || getDetailCoverDecorationMount(context);
+        // A complete native region is moved once. Never duplicate controls or serialize native markup.
+        const first = [title, cover, info].filter(Boolean).sort((a, b) => (
+            a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+        ))[0];
+        if (!first?.parentElement) return null;
+        const placement = first.closest('#video_jacket_info') || first;
+        detail = document.createElement('article');
+        detail.id = 'jlc-detail';
+        detail.innerHTML = ''
+            + '<div class="jlc-detail-heading"><div class="jlc-detail-eyebrow">影片资料</div></div>'
+            + '<div class="jlc-detail-overview"><div class="jlc-detail-artwork"></div><div class="jlc-detail-facts"></div></div>'
+            + '<nav class="jlc-detail-sections" aria-label="影片内容">'
+            + '<a href="#jlc-detail">资料</a><a href="#jlc-detail-media">预告与截图</a><a href="#jlc-detail-files">磁力与字幕</a>'
+            + '<button type="button" data-jlc-detail-console>打开控制台对照</button></nav>'
+            + '<div class="jlc-detail-resources"></div>';
+        placement.before(detail);
+        const heading = detail.querySelector('.jlc-detail-heading');
+        if (title) heading.append(title);
+        else {
+            const h1 = document.createElement('h1');
+            h1.textContent = context.title || context.avid;
+            heading.append(h1);
+        }
+        const artwork = detail.querySelector('.jlc-detail-artwork');
+        if (cover && !cover.contains(info)) artwork.append(cover);
+        else artwork.remove();
+        const facts = detail.querySelector('.jlc-detail-facts');
+        facts.append(info);
+        const actions = regions.actions && document.querySelector(regions.actions);
+        if (actions && !facts.contains(actions)) facts.append(actions);
+        // Group only the count text; native buttons keep their parent and click handlers.
+        if (context.site === 'javlibrary' && actions) {
+            actions.querySelectorAll('.favoritetype').forEach(row => {
+                const count = document.createElement('span');
+                count.className = 'jlc-favorite-count';
+                Array.from(row.childNodes).filter(node => node.nodeName !== 'BUTTON').forEach(node => count.append(node));
+                row.append(count);
+            });
+        }
+        detail.querySelector('[data-jlc-detail-console]').addEventListener('click', () => openWorkbenchV3());
+        updateJlcDetailSections();
+        return detail;
+    }
+
+    function updateJlcDetailSections() {
+        const detail = document.getElementById('jlc-detail');
+        if (!detail) return;
+        const enabled = config.resource_center !== false;
+        detail.querySelector('[href="#jlc-detail-media"]').hidden = !enabled
+            || (config.resource_trailer === false && config.resource_screenshot === false);
+        detail.querySelector('[href="#jlc-detail-files"]').hidden = !enabled
+            || (config.resource_magnet === false && config.resource_subtitle === false);
+    }
 // @@creamu-part:50-resource-center
     function extractReleaseDateFromText(text) {
         const normalizedText = String(text || '').replace(/年/g, '-').replace(/月/g, '-').replace(/日/g, ' ');
@@ -13582,7 +14452,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             avidNode = document.querySelector('#video_id .text')
                 || document.querySelector('td#video_id + td .text')
                 || document.querySelector('#video_id');
-            avid = normalizeResourceAvid(avidNode?.textContent || document.title);
+            avid = normalizeResourceAvid(avidNode ? extractDetailFieldText(avidNode, [], avidNode) : document.title);
             title = compactText(document.querySelector('#video_title h3 a') || document.querySelector('#video_title a') || document.title);
         } else if (site === 'javbus') {
             anchor = document.querySelector('.col-md-3.info')
@@ -13639,9 +14509,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             container.id = 'jlc-resource-center';
             container.className = 'jlc-resource-center';
         }
-        if (context.anchor.nextElementSibling !== container) {
-            context.anchor.insertAdjacentElement('afterend', container);
-        }
+        const mount = ensureJlcDetailLayout(context)?.querySelector('.jlc-detail-resources');
+        if (mount && container.parentElement !== mount) mount.append(container);
         return container;
     }
 
@@ -13655,34 +14524,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             </a>`).join('')}</div>`;
     }
 
-    function applyJavlibraryMenuTopStyle() {
-        if (typeof document === 'undefined') return;
-        const styleId = 'jlc-javlibrary-menutop-style';
-        let styleEl = document.getElementById(styleId);
-        if (!styleEl) {
-            styleEl = document.createElement('style');
-            styleEl.id = styleId;
-            (document.head || document.documentElement || document.body)?.appendChild(styleEl);
-        }
-        if (currentWeb !== 'javlibrary' || !Status.get('menutoTop')) {
-            styleEl.textContent = '';
-            return;
-        }
-        styleEl.textContent = `
-            #leftmenu { width: 100%; float: none; }
-            #leftmenu > table { display: none; }
-            #leftmenu .menul1,
-            #leftmenu .menul1 > ul { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; }
-            #leftmenu .menul1 { padding: 5px; }
-            #rightcolumn { margin: 0 5px; padding: 10px 5px; }
-        `;
-    }
-
     function syncDetailReleaseBadge(context, dateText) {
         const node = context?.avidNode;
         if (!node || !(node instanceof Element)) return;
+        const insideCell = node.matches('td, th');
+        const host = insideCell ? node : node.parentElement;
         const value = normalizeReleaseDate(dateText);
-        let badge = node.parentElement?.querySelector('.avid-date-badge[data-jlc-detail-date="1"]') || null;
+        let badge = host?.querySelector('.avid-date-badge[data-jlc-detail-date="1"]') || null;
         if (!value) {
             badge?.remove();
             return;
@@ -13691,7 +14539,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             badge = document.createElement('span');
             badge.className = 'avid-date-badge';
             badge.dataset.jlcDetailDate = '1';
-            node.insertAdjacentElement('afterend', badge);
+            if (insideCell) node.append(badge);
+            else node.insertAdjacentElement('afterend', badge);
         }
         badge.textContent = value;
         badge.title = value;
@@ -15212,15 +16061,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             return;
         }
         body.innerHTML = makeResourceStatusMarkup(pendingStatuses)
-            + '<div class="jlc-resource-note">沿用主脚本截图面板，优先 BlogJav，失败再回退 JavStore；默认手动加载避免拖慢首屏。</div>'
+            + '<div class="jlc-resource-note">点击加载影片截图。</div>'
             + '<div class="jlc-resource-inline-actions"><button type="button" data-jlc-load-screenshot>加载截图</button></div>';
         body.querySelector('[data-jlc-load-screenshot]')?.addEventListener('click', loadScreenshots, { once: true });
     }
 // @@creamu-part:54-resource-runtime
     function renderDetailResourceCenter(force = false) {
-        applyJavlibraryMenuTopStyle();
         const context = getCurrentDetailContext();
         if (context) {
+            ensureJlcDetailLayout(context);
+            updateJlcDetailSections();
             void decorateCurrentDetailPage(force);
             ensureDetailPageCopyButtons(context);
         } else {
@@ -15243,19 +16093,18 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         container.dataset.renderSignature = renderSignature;
         const token = Date.now() + '-' + Math.random().toString(36).slice(2);
         container.dataset.renderToken = token;
-        const subtitle = [context.siteLabel, context.avid, releaseDate ? ('发行 ' + releaseDate) : ''].filter(Boolean).join(' · ');
         const cards = [];
         if (config.resource_trailer !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="trailer"><h3>预告片</h3><div class="jlc-resource-body"></div></section>');
+            cards.push('<section class="jlc-resource-card" id="jlc-detail-media" data-jlc-resource="trailer"><h3>预告片</h3><div class="jlc-resource-body"></div></section>');
         }
         if (config.resource_screenshot !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="screenshot"><h3>截图</h3><div class="jlc-resource-body"></div></section>');
+            cards.push('<section class="jlc-resource-card"' + (config.resource_trailer === false ? ' id="jlc-detail-media"' : '') + ' data-jlc-resource="screenshot"><h3>截图</h3><div class="jlc-resource-body"></div></section>');
         }
         if (config.resource_magnet !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="magnet"><h3>磁力</h3><div class="jlc-resource-body"></div></section>');
+            cards.push('<section class="jlc-resource-card" id="jlc-detail-files" data-jlc-resource="magnet"><h3>磁力</h3><div class="jlc-resource-body"></div></section>');
         }
         if (config.resource_subtitle !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="subtitle"><h3>字幕</h3><div class="jlc-resource-body"></div></section>');
+            cards.push('<section class="jlc-resource-card"' + (config.resource_magnet === false ? ' id="jlc-detail-files"' : '') + ' data-jlc-resource="subtitle"><h3>字幕</h3><div class="jlc-resource-body"></div></section>');
         }
         const linksStrip = config.resource_links !== false
             ? '<div class="jlc-resource-links" data-jlc-resource="links"><span class="jlc-resource-links-label">站外</span><div class="jlc-resource-body"></div></div>'
@@ -15263,8 +16112,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         container.innerHTML = ''
             + '<div class="jlc-resource-header">'
             + '    <div>'
-            + '        <div class="jlc-resource-title">JLC 资源中心</div>'
-            + '        <div class="jlc-resource-subtitle">' + escapeHtml(subtitle) + (context.title ? (' · ' + escapeHtml(context.title)) : '') + '</div>'
+            + '        <div class="jlc-resource-title">观看与获取</div>'
+            + '        <div class="jlc-resource-subtitle">' + escapeHtml(context.avid) + ' · 预告、截图与可用资源</div>'
             + '    </div>'
             + '    <div class="jlc-resource-header-actions">'
             + '        <button type="button" data-jlc-resource-refresh>刷新资源</button>'
@@ -15349,7 +16198,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 [data-theme=light] .pop-up-tag[name$='${AVINFO_SUFFIX}'] {background-color: rgb(255 255 255 / 90%);}
                 [data-theme=dark] .scroll-request span{background:white;}
                 [data-theme=dark] #grid-b .box-b a:link {color : inherit;}
-                [data-theme=dark] #grid-b  .box-b{background-color:#222;}
                 [data-theme=dark] .alert-zdy {color: black;background-color: rgb(255 255 255 / 90%);}
                 #myModal #modal-div article.message {margin-bottom: 0}`);
             },
@@ -15404,7 +16252,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 return {AVID,href,src,title,date: '',itemTag:''};
             },
             init_Style: function(){
-                applyJavlibraryMenuTopStyle();
                 GM_addStyle(`#grid-b div{box-sizing: border-box;}`);
             },
         }
@@ -15784,7 +16631,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 toolBar: Status.get("toolBar")?'':'hidden-b',
                 copyBtn: Status.get("copyBtn")?'':'hidden-b',
                 fullTitle: Status.get("fullTitle")?'':'titleNowrap',
-                magnet: ['javbus','javdb'].includes(currentWeb)?'':'hidden-b',
+                magnet: ['javbus','javdb'].includes(currentWeb),
                 magnetTip : lang.tool_magnetTip,
                 downloadTip: lang.tool_downloadTip,
                 pictureTip: lang.tool_pictureTip,
@@ -15812,18 +16659,23 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                                     <a  href="${view.href}" target="_blank"><img style="${imgStyle}" class="lazy ${coverStateClass}"  data-src="${view.src}" ></a>
                                 </div>
                                 <div class="detail-b">
-                                    <a name="av-title" href="${view.href}" target="_blank" title="${view.title}" class="${fullTitle}"><span class="tool-span copy-span ${copyBtn}" name="copy">${copy_Svg}</span> <span>${view.title}</span></a>
+                                    <a name="av-title" href="${view.href}" target="_blank" title="${view.title}" class="${fullTitle}"><span class="tool-span copy-span ${copyBtn}" name="copy" title="${lang.copyButton}">${copy_Svg}</span> <span>${view.title}</span></a>
                                     <div class="info-bottom">
                                       <div class="info-bottom-one">
-                                          <a class="avid-link-b" href="${view.href}" target="_blank"><span class="avid-line-b"><span class="tool-span copy-span ${copyBtn}"  name="copy">${copy_Svg}</span><date name="avid">${view.AVID}</date></span>${releaseDateHtml}</a>
+                                          <a class="avid-link-b" href="${view.href}" target="_blank"><span class="avid-line-b"><span class="tool-span copy-span ${copyBtn}" name="copy" title="${lang.copyButton}">${copy_Svg}</span><date name="avid">${view.AVID}</date></span>${releaseDateHtml}</a>
                                       </div>
                                       ${AvItem.score?`<a  href="${view.href}" target="_blank"><div class="score">${AvItem.score}</div></a>`:``}
                                       <div class="info-bottom-two">
                                         <div class="item-tag">${AvItem.itemTag}</div>
                                         <div class="toolbar-b ${toolBar}" item-id="${view.AVID}${Math.random().toString(16).slice(2)}"  >
-                                        <span name="magnet" class="tool-span  ${magnet}" title="${magnetTip}" AVID="${view.AVID}" data-href="${view.href}">${magnet_Svg}</span>
-                                        <span name="download" class="tool-span" title="${downloadTip}" src="${view.src}" src-title="${view.AVID} ${view.title}">${download_Svg}</span>
-                                        <span name="picture" class="tool-span" title="${pictureTip}" AVID="${view.AVID}" >${picture_Svg}</span>
+                                          <details class="jlc-card-more" name="jlc-card-actions">
+                                            <summary>更多</summary>
+                                            <div class="jlc-card-menu">
+                                              <button type="button" name="download" class="tool-span" title="${downloadTip}" src="${view.src}" src-title="${view.AVID} ${view.title}">${downloadTip}</button>
+                                              <button type="button" name="picture" class="tool-span" title="${pictureTip}" AVID="${view.AVID}">${lang.tool_pictureText}</button>
+                                              ${magnet ? `<button type="button" name="magnet" class="tool-span" title="${magnetTip}" AVID="${view.AVID}" data-href="${view.href}">${magnetTip}</button>` : ''}
+                                            </div>
+                                          </details>
                                        </div>
                                      </div>
                                    </div>
@@ -15835,7 +16687,14 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 elemsHtml = elemsHtml + html;
             }
             let $elems = $(elemsHtml);
-            $elems.find("span[name]").click(function () {
+            $elems.find('.jlc-card-more').on('keydown', function (event) {
+                if (event.key !== 'Escape' || !this.open) return;
+                event.preventDefault();
+                event.stopPropagation();
+                this.open = false;
+                this.querySelector('summary').focus();
+            });
+            $elems.find(".tool-span[name]").click(function () {
                 let name = $(this).attr("name");
                 switch (name) {
                     case "copy":
@@ -15846,8 +16705,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                     case "download":
                         let [url,name] = [$(this).attr("src"),$(this).attr("src-title")+".jpg"];
                         downloadImg(url,name,this);break;
-                    case "magnet":showMagnetTable($(this).parent("div").attr("item-id"),$(this).attr("AVID").replace(/\./g, '-'),$(this).attr("data-href"),this);break;
-                    case "picture":showBigImg($(this).parent("div").attr("item-id"),$(this).attr("AVID"),this);break;
+                    case "magnet":showMagnetTable($(this).closest(".toolbar-b").attr("item-id"),$(this).attr("AVID").replace(/\./g, '-'),$(this).attr("data-href"),this);break;
+                    case "picture":showBigImg($(this).closest(".toolbar-b").attr("item-id"),$(this).attr("AVID"),this);break;
                     default:break;
                 }
             });
@@ -15976,28 +16835,27 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         let css_waterfall = `
 ${currentObj.widthSelector}{width:${waterfallWidth}%;margin:0 ${waterfallWidth>100?(100-waterfallWidth)/2+'%':'auto'};transition:.5s ;}
 #grid-b{display:flex;flex-direction:row;flex-wrap:wrap;}
-#grid-b .item-b{padding:5px;width:${100 / columnNum}%;transition:.5s ;animation: fadeInUp .5s ease-out;}
-#grid-b .box-b{border-radius:5px;background-color:white;border:1px solid rgba(0,0,0,0.2);box-shadow:0 2px 3px 0 rgba(0,0,0,0.1);overflow:hidden}
-#grid-b .box-b a:link{color:black}
-#grid-b .box-b a:visited{color:gray}
-#grid-b .box-b .cover-b{text-align:center}
-#grid-b .box-b .detail-b{padding:7px}
+#grid-b .item-b{padding:8px;width:${100 / columnNum}%;transition:width .2s;}
+#grid-b .box-b{border-radius:10px;background-color:var(--jlc-surface);color:var(--jlc-text);border:1px solid var(--jlc-line);box-shadow:none;overflow:hidden}
+#grid-b .box-b:hover{border-color:#c6b7a8}
+#grid-b .box-b a:link{color:inherit}
+#grid-b .box-b a:visited{color:var(--jlc-muted)}
+#grid-b .box-b .cover-b{text-align:center;background:var(--jlc-soft)}
+#grid-b .box-b .detail-b{padding:12px;line-height:1.5}
 #grid-b .box-b .detail-b a{display:block}
 #grid-b .info-bottom,.info-bottom-two{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
-#grid-b .avatar-box-b{display:flex;flex-direction:column;background-color:white;border-radius:5px;align-items:center;border:1px solid rgba(0,0,0,0.2)}
+#grid-b .avatar-box-b{display:flex;flex-direction:column;background-color:var(--jlc-surface);color:var(--jlc-text);border-radius:10px;align-items:center;border:1px solid var(--jlc-line)}
 #grid-b .avatar-box-b p{margin:0 !important}
 #grid-b date:first-of-type{font-size:18px !important}
-#grid-b .toolbar-b{float:right;padding:2px;white-space:nowrap}
-#grid-b .toolbar-b span{margin-right:2px}
 #grid-b .copy-span{vertical-align:middle;display:inline-block}
-#grid-b span.tool-span{cursor:pointer;opacity:.3}
+#grid-b span.tool-span{cursor:pointer;color:var(--jlc-muted);opacity:1}
 #grid-b span.tool-span:hover{opacity:1}
 #grid-b .item-tag{display:inline-block;white-space:nowrap}
 #grid-b .hidden-b{display:none}
 #grid-b .minHeight-200{min-height:200px}
 #grid-b .cover-b img:not([src]) {visibility: hidden;}
 svg.tool-svg{fill:currentColor;width:22px;height:22px;vertical-align:middle}
-span.span-loading{display:inline-block;animation:span-loading 2s infinite}
+.span-loading{animation:span-loading 2s infinite}
 
 #myModal{overflow-x:hidden;overflow-y:auto;display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1050;background-color:rgba(0,0,0,0.5)}
 #myModal #modal-div{position:relative;width:80%;margin:0 auto;background-color:rgb(6 6 6 / 50%);border-radius:8px;animation:fadeInDown .5s}

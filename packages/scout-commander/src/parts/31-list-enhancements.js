@@ -1,5 +1,18 @@
 // @@creamu-part:list-enhancements
 
+function isScoutVideoDestination(link, url) {
+  if (!link || !url) return false;
+  try { return new URL(link.href, location.href).pathname.replace(/\/$/, '') === new URL(url, location.href).pathname.replace(/\/$/, ''); }
+  catch (_) { return false; }
+}
+
+function getScoutVideoNavigationLink(event, url) {
+  if (event.type === 'click' ? event.button !== 0 : event.type !== 'auxclick' || event.button !== 1) return null;
+  if (event.target.closest('button, input, [data-scout-ui], .scout-pub-addon')) return null;
+  const link = event.target.closest('a[href]');
+  return isScoutVideoDestination(link, url) ? link : null;
+}
+
 function clearListBlockInlinePresentation(el) {
   if (!el || !el.style) return;
   el.style.removeProperty('display');
@@ -142,20 +155,15 @@ function applyVideoOpenMode(listEntries) {
     el.querySelectorAll('a[href]').forEach(a => {
       const href = a.getAttribute('href') || '';
       if (!href || href === '#' || href.startsWith('javascript:')) return;
-      // 只处理看起来像视频的链接
-      if (
-        !/\/video|\/video-|\/videos\//i.test(href) &&
-        !a.closest('.thumb-block, .post, .video-block, [id^="video_"], .mb, .mb[data-id], #vidresults .mb')
-      ) {
-        return;
-      }
+      const meta = parseVideoElement(el);
+      if (!meta || !isScoutVideoDestination(a, meta.url)) return;
       if (newTab) {
         a.setAttribute('target', '_blank');
         a.setAttribute('rel', 'noopener noreferrer');
         if (a.dataset.scoutNewTabBound === '1') return;
         a.dataset.scoutNewTabBound = '1';
         a.addEventListener('click', (e) => {
-          if (!isOpenVideosNewTab()) return;
+          if (!isOpenVideosNewTab() || e.target.closest('button, [data-scout-ui]')) return;
           // 左键：强制新标签（部分站点忽略 target）
           if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
           e.preventDefault();
@@ -193,29 +201,13 @@ function applyClickedEnhancements(listEntries) {
     if (el.dataset.scoutClickBound === '1') return;
     el.dataset.scoutClickBound = '1';
 
-    const mark = () => {
-      markVideoClicked({
-        site,
-        videoId,
-        title: meta.title,
-        url: meta.url,
-        thumb: meta.thumb,
-        uploader: meta.uploader
-      });
+    const mark = (event) => {
+      if (!getScoutVideoNavigationLink(event, meta.url)) return;
+      markVideoClicked({ site, videoId, title: meta.title, url: meta.url, thumb: meta.thumb, uploader: meta.uploader });
       el.classList.add('scout-visited-item');
     };
-
-    // 卡片内链接（含中键）；整卡 pointerdown 兜底
-    el.querySelectorAll('a[href]').forEach(a => {
-      a.addEventListener('pointerdown', mark, { passive: true });
-      a.addEventListener('click', mark, { passive: true });
-      a.addEventListener('auxclick', mark, { passive: true });
-    });
-    el.addEventListener('pointerdown', (e) => {
-      // 避免与屏蔽控件等冲突：仅卡片主体
-      if (e.target.closest('.scout-tag-addon, .scout-pub-addon, button, input')) return;
-      mark();
-    }, { passive: true });
+    el.addEventListener('click', mark, true);
+    el.addEventListener('auxclick', mark, true);
   });
 
   applyVideoOpenMode(entries);

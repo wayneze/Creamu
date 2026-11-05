@@ -96,7 +96,7 @@
                 toolBar: Status.get("toolBar")?'':'hidden-b',
                 copyBtn: Status.get("copyBtn")?'':'hidden-b',
                 fullTitle: Status.get("fullTitle")?'':'titleNowrap',
-                magnet: ['javbus','javdb'].includes(currentWeb)?'':'hidden-b',
+                magnet: ['javbus','javdb'].includes(currentWeb),
                 magnetTip : lang.tool_magnetTip,
                 downloadTip: lang.tool_downloadTip,
                 pictureTip: lang.tool_pictureTip,
@@ -124,18 +124,23 @@
                                     <a  href="${view.href}" target="_blank"><img style="${imgStyle}" class="lazy ${coverStateClass}"  data-src="${view.src}" ></a>
                                 </div>
                                 <div class="detail-b">
-                                    <a name="av-title" href="${view.href}" target="_blank" title="${view.title}" class="${fullTitle}"><span class="tool-span copy-span ${copyBtn}" name="copy">${copy_Svg}</span> <span>${view.title}</span></a>
+                                    <a name="av-title" href="${view.href}" target="_blank" title="${view.title}" class="${fullTitle}"><span class="tool-span copy-span ${copyBtn}" name="copy" title="${lang.copyButton}">${copy_Svg}</span> <span>${view.title}</span></a>
                                     <div class="info-bottom">
                                       <div class="info-bottom-one">
-                                          <a class="avid-link-b" href="${view.href}" target="_blank"><span class="avid-line-b"><span class="tool-span copy-span ${copyBtn}"  name="copy">${copy_Svg}</span><date name="avid">${view.AVID}</date></span>${releaseDateHtml}</a>
+                                          <a class="avid-link-b" href="${view.href}" target="_blank"><span class="avid-line-b"><span class="tool-span copy-span ${copyBtn}" name="copy" title="${lang.copyButton}">${copy_Svg}</span><date name="avid">${view.AVID}</date></span>${releaseDateHtml}</a>
                                       </div>
                                       ${AvItem.score?`<a  href="${view.href}" target="_blank"><div class="score">${AvItem.score}</div></a>`:``}
                                       <div class="info-bottom-two">
                                         <div class="item-tag">${AvItem.itemTag}</div>
                                         <div class="toolbar-b ${toolBar}" item-id="${view.AVID}${Math.random().toString(16).slice(2)}"  >
-                                        <span name="magnet" class="tool-span  ${magnet}" title="${magnetTip}" AVID="${view.AVID}" data-href="${view.href}">${magnet_Svg}</span>
-                                        <span name="download" class="tool-span" title="${downloadTip}" src="${view.src}" src-title="${view.AVID} ${view.title}">${download_Svg}</span>
-                                        <span name="picture" class="tool-span" title="${pictureTip}" AVID="${view.AVID}" >${picture_Svg}</span>
+                                          <details class="jlc-card-more" name="jlc-card-actions">
+                                            <summary>更多</summary>
+                                            <div class="jlc-card-menu">
+                                              <button type="button" name="download" class="tool-span" title="${downloadTip}" src="${view.src}" src-title="${view.AVID} ${view.title}">${downloadTip}</button>
+                                              <button type="button" name="picture" class="tool-span" title="${pictureTip}" AVID="${view.AVID}">${lang.tool_pictureText}</button>
+                                              ${magnet ? `<button type="button" name="magnet" class="tool-span" title="${magnetTip}" AVID="${view.AVID}" data-href="${view.href}">${magnetTip}</button>` : ''}
+                                            </div>
+                                          </details>
                                        </div>
                                      </div>
                                    </div>
@@ -147,7 +152,14 @@
                 elemsHtml = elemsHtml + html;
             }
             let $elems = $(elemsHtml);
-            $elems.find("span[name]").click(function () {
+            $elems.find('.jlc-card-more').on('keydown', function (event) {
+                if (event.key !== 'Escape' || !this.open) return;
+                event.preventDefault();
+                event.stopPropagation();
+                this.open = false;
+                this.querySelector('summary').focus();
+            });
+            $elems.find(".tool-span[name]").click(function () {
                 let name = $(this).attr("name");
                 switch (name) {
                     case "copy":
@@ -158,8 +170,8 @@
                     case "download":
                         let [url,name] = [$(this).attr("src"),$(this).attr("src-title")+".jpg"];
                         downloadImg(url,name,this);break;
-                    case "magnet":showMagnetTable($(this).parent("div").attr("item-id"),$(this).attr("AVID").replace(/\./g, '-'),$(this).attr("data-href"),this);break;
-                    case "picture":showBigImg($(this).parent("div").attr("item-id"),$(this).attr("AVID"),this);break;
+                    case "magnet":showMagnetTable($(this).closest(".toolbar-b").attr("item-id"),$(this).attr("AVID").replace(/\./g, '-'),$(this).attr("data-href"),this);break;
+                    case "picture":showBigImg($(this).closest(".toolbar-b").attr("item-id"),$(this).attr("AVID"),this);break;
                     default:break;
                 }
             });
@@ -288,28 +300,27 @@
         let css_waterfall = `
 ${currentObj.widthSelector}{width:${waterfallWidth}%;margin:0 ${waterfallWidth>100?(100-waterfallWidth)/2+'%':'auto'};transition:.5s ;}
 #grid-b{display:flex;flex-direction:row;flex-wrap:wrap;}
-#grid-b .item-b{padding:5px;width:${100 / columnNum}%;transition:.5s ;animation: fadeInUp .5s ease-out;}
-#grid-b .box-b{border-radius:5px;background-color:white;border:1px solid rgba(0,0,0,0.2);box-shadow:0 2px 3px 0 rgba(0,0,0,0.1);overflow:hidden}
-#grid-b .box-b a:link{color:black}
-#grid-b .box-b a:visited{color:gray}
-#grid-b .box-b .cover-b{text-align:center}
-#grid-b .box-b .detail-b{padding:7px}
+#grid-b .item-b{padding:8px;width:${100 / columnNum}%;transition:width .2s;}
+#grid-b .box-b{border-radius:10px;background-color:var(--jlc-surface);color:var(--jlc-text);border:1px solid var(--jlc-line);box-shadow:none;overflow:hidden}
+#grid-b .box-b:hover{border-color:#c6b7a8}
+#grid-b .box-b a:link{color:inherit}
+#grid-b .box-b a:visited{color:var(--jlc-muted)}
+#grid-b .box-b .cover-b{text-align:center;background:var(--jlc-soft)}
+#grid-b .box-b .detail-b{padding:12px;line-height:1.5}
 #grid-b .box-b .detail-b a{display:block}
 #grid-b .info-bottom,.info-bottom-two{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
-#grid-b .avatar-box-b{display:flex;flex-direction:column;background-color:white;border-radius:5px;align-items:center;border:1px solid rgba(0,0,0,0.2)}
+#grid-b .avatar-box-b{display:flex;flex-direction:column;background-color:var(--jlc-surface);color:var(--jlc-text);border-radius:10px;align-items:center;border:1px solid var(--jlc-line)}
 #grid-b .avatar-box-b p{margin:0 !important}
 #grid-b date:first-of-type{font-size:18px !important}
-#grid-b .toolbar-b{float:right;padding:2px;white-space:nowrap}
-#grid-b .toolbar-b span{margin-right:2px}
 #grid-b .copy-span{vertical-align:middle;display:inline-block}
-#grid-b span.tool-span{cursor:pointer;opacity:.3}
+#grid-b span.tool-span{cursor:pointer;color:var(--jlc-muted);opacity:1}
 #grid-b span.tool-span:hover{opacity:1}
 #grid-b .item-tag{display:inline-block;white-space:nowrap}
 #grid-b .hidden-b{display:none}
 #grid-b .minHeight-200{min-height:200px}
 #grid-b .cover-b img:not([src]) {visibility: hidden;}
 svg.tool-svg{fill:currentColor;width:22px;height:22px;vertical-align:middle}
-span.span-loading{display:inline-block;animation:span-loading 2s infinite}
+.span-loading{animation:span-loading 2s infinite}
 
 #myModal{overflow-x:hidden;overflow-y:auto;display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1050;background-color:rgba(0,0,0,0.5)}
 #myModal #modal-div{position:relative;width:80%;margin:0 auto;background-color:rgb(6 6 6 / 50%);border-radius:8px;animation:fadeInDown .5s}

@@ -12,16 +12,16 @@ function getScoutSiteLayoutThemeCss() {
           background: var(--scout-card-bg, #1e2430) !important;
           border: 1px solid var(--scout-page-border, rgba(255,255,255,.10)) !important;
           border-radius: 12px !important;
-          box-shadow: 0 4px 14px rgba(0,0,0,.28) !important;
+          box-shadow: none !important;
           overflow: hidden !important;
           padding: 6px !important;
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
         }
         html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block {
-          box-shadow: 0 4px 14px rgba(229, 72, 64, 0.12) !important;
+          box-shadow: none !important;
         }
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block {
-          box-shadow: 0 4px 14px rgba(77, 142, 240, 0.12) !important;
+          box-shadow: none !important;
         }
         html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block .thumb-inside,
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .thumb-inside,
@@ -36,7 +36,7 @@ function getScoutSiteLayoutThemeCss() {
           padding: 4px 2px 0 !important;
           box-sizing: border-box !important;
           max-width: 100% !important;
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
         }
         html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block p,
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block p,
@@ -54,7 +54,7 @@ function getScoutSiteLayoutThemeCss() {
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .uploader,
         html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block .uploader a,
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .uploader a {
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
           max-width: 100% !important;
           overflow: hidden !important;
           word-break: break-word !important;
@@ -77,7 +77,7 @@ function getScoutSiteLayoutThemeCss() {
           border: 1px solid var(--scout-page-border, rgba(255,255,255,.10)) !important;
           border-radius: 10px !important;
           box-shadow: 0 2px 10px rgba(0,0,0,.22) !important;
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
           box-sizing: border-box !important;
         }
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbtit,
@@ -86,7 +86,7 @@ function getScoutSiteLayoutThemeCss() {
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbunder a,
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbstats,
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mb-uploader a {
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
           opacity: 1 !important;
         }
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbtit a {
@@ -172,166 +172,10 @@ function getScoutSiteLayoutThemeCss() {
           }
         }
 
-        /* PC：顶部超矮订阅条 */
-        #scout-search-track-bar.scout-track-banner {
-          position: fixed !important;
-          top: 8px !important;
-          left: 50% !important;
-          transform: translateX(-50%) !important;
-          z-index: 999990 !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 6px !important;
-          max-width: min(380px, 72vw) !important;
-          min-height: 0 !important;
-          height: auto !important;
-          padding: 3px 4px 3px 10px !important;
-          border-radius: 999px !important;
-          background: rgba(18, 20, 28, 0.92) !important;
-          border: 1px solid rgba(255,255,255,0.12) !important;
-          box-shadow: 0 4px 12px rgba(0,0,0,.28) !important;
-          color: #e8eaef !important;
-          font-size: 11.5px !important;
-          line-height: 1.2 !important;
-          box-sizing: border-box !important;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-        }
-        #scout-search-track-bar .scout-track-banner-text {
-          flex: 1 1 auto;
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          font-weight: 600;
-        }
-        #scout-search-track-bar .scout-track-banner-btn {
-          flex: 0 0 auto;
-          border: 0;
-          border-radius: 999px;
-          padding: 2px 9px;
-          min-height: 22px;
-          font-size: 11px;
-          font-weight: 650;
-          line-height: 1.2;
-          cursor: pointer;
-          background: var(--scout-accent, #5b8def);
-          color: #fff;
-        }
-        #scout-search-track-bar.scout-track-banner.is-on .scout-track-banner-btn {
-          background: rgba(255,255,255,0.12);
-          color: #e8eaef;
-        }
-        /* 断点条：全局压成单行矮胶囊 */
-        #jlc-tracking-pagebar {
-          position: fixed !important;
-          top: 8px !important;
-          left: 50% !important;
-          transform: translateX(-50%) !important;
-          z-index: 999999 !important;
-          display: flex !important;
-          align-items: center !important;
-          width: min(420px, 94vw) !important;
-          min-height: 0 !important;
-          max-height: 36px !important;
-          padding: 4px 8px !important;
-          border-radius: 999px !important;
-          gap: 6px !important;
-          box-sizing: border-box !important;
-          border: 1px solid rgba(255,255,255,.12) !important;
-          background: rgba(18,20,28,.92) !important;
-          box-shadow: 0 4px 14px rgba(0,0,0,.28) !important;
-          color: #e8eaef !important;
-          font-size: 12px !important;
-        }
-        #jlc-tracking-pagebar .jlc-tracking-pagebar-text {
-          flex: 1 1 auto !important;
-          min-width: 0 !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          white-space: nowrap !important;
-          font-weight: 650 !important;
-          font-size: 11.5px !important;
-          line-height: 1.2 !important;
-        }
-        #jlc-tracking-pagebar .scout-tracking-pagebar-action {
-          flex: 0 0 auto !important;
-          min-height: 22px !important;
-          padding: 2px 8px !important;
-          border-radius: 999px !important;
-          font-size: 11px !important;
-          cursor: pointer !important;
-        }
-        #jlc-tracking-pagebar .jlc-bp-continue {
-          border: 0 !important;
-          background: var(--scout-accent, #5b8def) !important;
-          color: #fff !important;
-          font-weight: 650 !important;
-        }
-        #jlc-tracking-pagebar .scout-bp-dismiss {
-          border: 1px solid rgba(255,255,255,.2) !important;
-          background: transparent !important;
-          color: #c8cdd8 !important;
-        }
-        /* 手机：订阅小圆钮 —— 固定视口右下，在工作台钮上方 */
-        #scout-search-track-bar.scout-track-fab {
-          position: fixed !important;
-          right: 16px !important;
-          bottom: 64px !important;
-          left: auto !important;
-          top: auto !important;
-          transform: none !important;
-          z-index: 999991 !important;
-          width: 40px !important;
-          height: 40px !important;
-          min-width: 40px !important;
-          max-width: 40px !important;
-          padding: 0 !important;
-          margin: 0 !important;
-          border-radius: 50% !important;
-          border: 1px solid rgba(255,255,255,0.14) !important;
-          background: rgba(18, 20, 28, 0.92) !important;
-          box-shadow: 0 4px 14px rgba(0,0,0,.35) !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          cursor: pointer !important;
-          color: #f0f0f0 !important;
-          font-size: 18px !important;
-          line-height: 1 !important;
-          box-sizing: border-box !important;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          -webkit-tap-highlight-color: transparent;
-        }
-        #scout-search-track-bar.scout-track-fab.is-on {
-          border-color: rgba(255, 200, 80, 0.55) !important;
-          box-shadow: 0 4px 16px rgba(255, 180, 40, 0.28) !important;
-        }
-        #scout-search-track-bar.scout-track-fab .scout-track-fab-ico {
-          pointer-events: none;
-        }
-        @media (max-width: 820px) {
-          #jlc-tracking-pagebar {
-            top: 6px !important;
-            bottom: auto !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            width: min(340px, 94vw) !important;
-            max-height: 34px !important;
-            padding: 3px 6px 3px 8px !important;
-            font-size: 11px !important;
-          }
-          /* 手机订阅仍是 40 圆钮，略缩小一点少挡屏 */
-          #scout-search-track-bar.scout-track-fab {
-            width: 36px !important;
-            height: 36px !important;
-            min-width: 36px !important;
-            max-width: 36px !important;
-            font-size: 16px !important;
-            bottom: 60px !important;
-          }
-        }
+        #scout-search-track-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 8px; padding: 10px 12px; border: 1px solid var(--scout-page-border, #cdd0ca); border-radius: 8px; background: var(--scout-page-panel, #eeeee8); color: var(--scout-text-color, #343b36); font: 13px/1.5 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+        .scout-track-banner-text { flex: 1; min-width: 120px; overflow-wrap: anywhere; }
+        .scout-track-banner-text small { display: block; font-size: 10px; color: var(--scout-text-muted, #737970); }
+        #scout-search-track-bar button { min-height: 34px; padding: 5px 9px; border: 1px solid var(--scout-page-border, #cdd0ca); border-radius: 6px; color: inherit; background: transparent; cursor: pointer; font: 12px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif; box-sizing: border-box; }
 
         @media (min-width: 821px) {
           /* PC：内容区 + 列表底色 + 卡面 */
@@ -483,91 +327,14 @@ function getScoutSiteLayoutThemeCss() {
           }
         }
 
-        html.scout-cream-site body.creamu-site-xvideos #video-player-bg,
-        html.scout-cream-site body.creamu-site-xnxx #video-player-bg {
-          background-color: #0b0909 !important;
-          padding: 24px 0 !important;
+        html.scout-cream-site :is(#video-player-bg, #movieplayer-box, .video-wrapper) {
+          background: #101216 !important; padding: 0 !important; box-shadow: none !important;
         }
-        html.scout-cream-site body.creamu-site-xvideos .player-container,
-        html.scout-cream-site body.creamu-site-xnxx .player-container {
-          max-width: 1200px !important;
-          margin: 0 auto !important;
-          border-radius: 16px !important;
-          overflow: hidden !important;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5) !important;
-        }
-        html.scout-cream-site body.creamu-site-eporner .video-wrapper {
-          background-color: #0b0909 !important;
-          padding: 20px !important;
-          border-radius: 16px !important;
-          max-width: 1200px !important;
-          margin: 0 auto !important;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5) !important;
-        }
+        html.scout-cream-site .player-container { max-width: 100% !important; margin: 0 auto !important; box-shadow: none !important; }
+        html.scout-console-docked :is(#main, #content, #movieplayer-left, #video-player-bg, #html5video, #movieplayer-box, .video-wrapper) { min-width: 0 !important; max-width: 100% !important; box-sizing: border-box; }
+        html.scout-console-docked :is(#html5video, #movieplayer-box) video { max-width: 100% !important; }
 
         @media (max-width: 820px) {
-          #jlc-wb .jlc-wb-nav {
-            display: flex !important;
-            gap: 8px !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-            padding: 0 16px 12px !important;
-            white-space: nowrap !important;
-            scrollbar-width: none !important;
-          }
-          #jlc-wb .jlc-wb-nav::-webkit-scrollbar { display: none !important; }
-          #jlc-wb .jlc-wb-nav button {
-            flex: 0 0 auto !important;
-            padding: 8px 16px !important;
-            font-size: 13.5px !important;
-          }
-          /* 手机工作台钮：与订阅同款小圆，贴视口右下（不跟页滚） */
-          #jlc-wb-fab {
-            position: fixed !important;
-            right: 16px !important;
-            bottom: 16px !important;
-            left: auto !important;
-            top: auto !important;
-            opacity: 1 !important;
-            width: 40px !important;
-            height: 40px !important;
-            min-width: 40px !important;
-            border-radius: 50% !important;
-            font-size: 17px !important;
-            z-index: 2147483000 !important;
-            box-shadow: 0 4px 14px rgba(0,0,0,.45) !important;
-            visibility: visible !important;
-            display: flex !important;
-            pointer-events: auto !important;
-          }
-          #jlc-wb-fab:active, #jlc-wb-fab.is-dragging {
-            opacity: 1 !important;
-          }
-          #jlc-wb-fab .jlc-wb-fab-badge {
-            top: -2px !important;
-            right: -2px !important;
-            font-size: 10px !important;
-            min-width: 16px !important;
-            height: 16px !important;
-          }
-          #jlc-wb .jlc-wb-search,
-          #jlc-wb select.jlc-wb-select,
-          #jlc-wb select,
-          #jlc-wb .jlc-wb-btn {
-            min-height: 40px !important;
-            font-size: 14px !important;
-          }
-          .scout-tag-addon {
-            margin-left: 6px !important;
-            gap: 4px !important;
-          }
-          .scout-tag-addon span {
-            padding: 3px 5px !important;
-            font-size: 11px !important;
-            border-radius: 4px !important;
-          }
-          #jlc-wb { height: 70vh !important; }
-
           /*
            * eporner 手机：尽量单列，但不用 absolute 图（易高度塌成 0 挡没）
            * 只清 float + 宽度 100%，图片保持站点自然高度

@@ -9,22 +9,15 @@ if (typeof window !== 'undefined') {
     images: [],
     rawUrls: new Set()
   };
-  window.__creamu_hj_network_log = window.__creamu_hj_network_log || [];
 }
 
 let currentHjSelectedVideoIndex = 0;
 
-/** 海角换帖不刷新页面。地址缓存只增不减时，同一用户的下一帖会接着播上一帖。 */
-function hjPostIdentity() {
-  const href = String((typeof location !== 'undefined' && location.href) || '');
-  const fromUrl = href.match(/\/(?:post|topic|detail|article)\/(\d+)/i);
-  if (fromUrl) return fromUrl[1];
-  return href.split('#')[0];
-}
-
 function resetHjMediaForPost(identity) {
   const cache = window.__creamu_hj_media_cache;
   if (!cache) return;
+  destroyHjPlayer();
+  cache.generation = (cache.generation || 0) + 1;
   cache.videos = [];
   if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
     cache.images.forEach((url) => {
@@ -35,80 +28,20 @@ function resetHjMediaForPost(identity) {
   cache.rawUrls = new Set();
   cache.postIdentity = identity;
   currentHjSelectedVideoIndex = 0;
-  if (typeof window !== 'undefined') window.__creamu_hj_images_pid = '';
   const box = typeof document !== 'undefined' ? document.getElementById('creamu-hj-inline-player-box') : null;
-  if (box) box.removeAttribute('data-video-url');
+  if (box) box.remove();
+  document.getElementById('creamu-hj-inline-slot')?.remove();
   const images = typeof document !== 'undefined' ? document.getElementById('creamu-hj-image-box') : null;
   if (images) {
     images.innerHTML = '';
     if (images.dataset) delete images.dataset.images;
   }
-  hjDebug('换帖，清空 ' + identity);
-}
-
-/**
- * 格式化时间 (秒 -> mm:ss 或 hh:mm:ss)
- */
-function formatHjTime(sec) {
-  const s = Math.max(0, Math.floor(Number(sec) || 0));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const r = s % 60;
-  const pad = (n) => String(n).padStart(2, '0');
-  if (h > 0) return `${h}:${pad(m)}:${pad(r)}`;
-  return `${pad(m)}:${pad(r)}`;
-}
-
-/**
- * 在屏幕中央显示微型手势 HUD 提示
- */
-function showHjSeekHud(text) {
-  if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
-  let hud = document.getElementById('hj-seek-hud');
-  if (!hud) {
-    hud = document.createElement('div');
-    hud.id = 'hj-seek-hud';
-    document.documentElement.appendChild(hud);
-  }
-  hud.textContent = text;
-  hud.classList.add('is-active');
-
-  if (hud._hideTimer) clearTimeout(hud._hideTimer);
-  hud._hideTimer = setTimeout(() => {
-    hud.classList.remove('is-active');
-  }, 800);
-}
-
-/**
- * 动态引入 Hls.js 脚本兜底（防止浏览器将其当成文件下载）
- */
-function ensureHlsJsLoaded(callback) {
-  if (typeof window === 'undefined') return;
-  if (typeof window.Hls === 'function') {
-    if (callback) callback();
-    return;
-  }
-  let script = document.getElementById('creamu-hj-hls-script');
-  if (!script) {
-    script = document.createElement('script');
-    script.id = 'creamu-hj-hls-script';
-    script.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js';
-    script.onload = () => { if (callback) callback(); };
-    (document.head || document.documentElement).appendChild(script);
-  } else if (callback) {
-    script.addEventListener('load', () => { callback(); }, { once: true });
-  }
-}
-
-/** 分片地址经常是相对路径，拼回播放列表所在目录。 */
-function resolveHjMediaUrl(base, raw) {
-  const value = String(raw || '').trim();
-  if (!value || value.startsWith('data:')) return '';
-  try {
-    return new URL(value, base).href;
-  } catch (_) {
-    return '';
-  }
+  cache.status = '';
+  cache.topicRequested = false;
+  cache.topicLoading = false;
+  cache.imageRequests = new Map();
+  window.__creamu_hj_debug = [];
+  hjDebug('当前帖子 ' + (identity || '列表'));
 }
 
 function hjDebug(line) {
@@ -160,13 +93,14 @@ function gmHjBytes(response) {
   });
 }
 
-function gmHjRequest(url, responseType, headers) {
+function gmHjRequest(url, responseType, headers, signal) {
   return new Promise((resolve) => {
     if (typeof GM_xmlhttpRequest !== 'function') {
       resolve(null);
       return;
     }
-    GM_xmlhttpRequest({
+    if (signal?.aborted) { resolve(null); return; }
+    const request = GM_xmlhttpRequest({
       method: 'GET',
       url,
       headers: headers || {},
@@ -174,8 +108,9 @@ function gmHjRequest(url, responseType, headers) {
       timeout: 20000,
       onload: (response) => {
         hjDebug('请求 ' + (response.status || '?') + ' ' + url.slice(0, 90));
-        resolve(response);
+        resolve(response.status && (response.status < 200 || response.status >= 300) ? null : response);
       },
+      onabort: () => resolve(null),
       onerror: () => {
         hjDebug('请求失败 ' + url.slice(0, 90));
         resolve(null);
@@ -185,6 +120,7 @@ function gmHjRequest(url, responseType, headers) {
         resolve(null);
       },
     });
+    signal?.addEventListener('abort', () => { request?.abort(); resolve(null); }, { once: true });
   });
 }
 
@@ -218,6 +154,10 @@ function loadHjSiteKeyModule() {
       if (!ready()) resolve(null);
     }, 4000);
   });
+  const pending = window.__creamu_hj_key_module;
+  pending.then(mod => {
+    if (!mod && window.__creamu_hj_key_module === pending) window.__creamu_hj_key_module = null;
+  });
   return window.__creamu_hj_key_module;
 }
 
@@ -242,17 +182,25 @@ function loadHjM3u8WithGm(video, playlistUrl, onStatus) {
     window.performance = { now: () => Date.now() };
   }
   const start = () => {
+    if (video._hjDisposed) return;
     if (typeof window.Hls !== 'function' || !window.Hls.isSupported()) {
-      hjDebug('Hls 不可用');
-      if (onStatus) onStatus('播放器组件没加载');
+      if (video.canPlayType?.('application/vnd.apple.mpegurl')) video.src = playlistUrl;
+      else if (onStatus) onStatus('当前浏览器无法加载 HLS 播放组件，请刷新后重试。');
       return;
     }
     if (video._hjHls) {
       try { video._hjHls.destroy(); } catch (_) {}
     }
+    let keyMaterial;
+    const getKeyMaterial = () => keyMaterial || (keyMaterial = Promise.all([
+      loadHjSiteKeyModule(), gmHjRequest(String(playlistUrl).replace(/\.m3u8($|\?)/i, '.jpg$1'), 'text'),
+    ]));
     const loader = function () {};
     loader.prototype.load = function (context, config, callbacks) {
+      this.controller = new AbortController();
+      this.aborted = false;
       let url = context.url;
+      const encryptedKey = /\.key(?:[^/]*)($|\?)/i.test(url);
       if (/\.key($|\?)/i.test(url)) {
         let kversion = '';
         try {
@@ -270,15 +218,18 @@ function loadHjM3u8WithGm(video, playlistUrl, onStatus) {
       }
       const fail = (text) => {
         const now = Date.now();
-        callbacks.onError({ code: 0, text }, context, null, this.stats);
+        if (this.aborted) return;
         this.stats.loading.end = now;
+        callbacks.onError({ code: 0, text }, context, null, this.stats);
       };
-      gmHjRequest(url, wantsText ? 'text' : 'arraybuffer', headers).then((response) => {
+      gmHjRequest(url, wantsText ? 'text' : 'arraybuffer', headers, this.controller.signal).then(async response => {
+        if (this.aborted) return;
         if (!response) {
           fail('请求失败');
           return;
         }
         const finish = (data) => {
+        if (this.aborted) return;
         if (data == null || data === '') {
           fail('空响应');
           return;
@@ -297,11 +248,22 @@ function loadHjM3u8WithGm(video, playlistUrl, onStatus) {
         callbacks.onSuccess({ url, data }, this.stats, context, response);
         };
         if (wantsText) finish(String(response.responseText || response.response || ''));
-        else gmHjBytes(response).then(finish);
+        else {
+          let bytes = await gmHjBytes(response);
+          if (encryptedKey) {
+            const [mod, jpg] = await getKeyMaterial();
+            if (this.aborted) return;
+            if (!mod || !jpg) throw new Error('站点解码材料不可用');
+            const binary = atob(String(jpg.responseText || jpg.response || '').trim());
+            const material = Uint8Array.from(binary, char => char.charCodeAt(0));
+            bytes = transformHjAesKey(mod, bytes, material).buffer;
+          }
+          finish(bytes);
+        }
       }).catch((error) => fail(String(error && error.message || error)));
     };
-    loader.prototype.abort = function () {};
-    loader.prototype.destroy = function () {};
+    loader.prototype.abort = function () { this.aborted = true; this.stats.aborted = true; this.controller?.abort(); };
+    loader.prototype.destroy = loader.prototype.abort;
     // Hls 拉分片前把 loader.stats 记到分片上。没有这份对象就会读到 undefined.retry。
     Object.defineProperty(loader.prototype, 'stats', {
       get() {
@@ -330,88 +292,13 @@ function loadHjM3u8WithGm(video, playlistUrl, onStatus) {
     hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
       hjDebug('播放列表已解析');
       if (onStatus) onStatus('');
-      const play = video.play();
-      if (play && typeof play.catch === 'function') play.catch(() => {});
-    });
-    const jpgUrl = String(playlistUrl).replace(/\.m3u8($|\?)/i, '.jpg$1');
-    Promise.all([loadHjSiteKeyModule(), gmHjRequest(jpgUrl, 'text')]).then(([mod, jpgResponse]) => {
-      const jpgText = String((jpgResponse && (jpgResponse.responseText || jpgResponse.response)) || '').trim();
-      if (!mod || !jpgText) {
-        hjDebug('站点密钥模块不可用');
-        return;
-      }
-      let jpgKey = null;
-      try {
-        const bin = atob(jpgText);
-        jpgKey = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i += 1) jpgKey[i] = bin.charCodeAt(i) & 0xff;
-      } catch (_) {
-        hjDebug('jpg 材料不是 base64');
-        return;
-      }
-      let realKey = null;
-      hls.on(window.Hls.Events.KEY_LOADED, (_, data) => {
-        const decryptdata = data && data.frag && data.frag.decryptdata;
-        if (!decryptdata || !decryptdata.key) return;
-        try {
-          if (!realKey) realKey = transformHjAesKey(mod, decryptdata.key, jpgKey);
-          decryptdata.key = realKey;
-          hjDebug('密钥已变换 ' + realKey.length);
-        } catch (error) {
-          hjDebug('密钥变换失败 ' + (error && error.message || error));
-        }
-      });
-      hjDebug('jpg 材料 ' + jpgKey.length);
+
     });
     hls.loadSource(playlistUrl);
     hls.attachMedia(video);
     hjDebug('交给 Hls');
   };
-  if (typeof window.Hls === 'function') start();
-  else ensureHlsJsLoaded(start);
-}
-
-/**
- * 在画面上左右拖动拉进度。拖动距离按画面宽度折成整段时长。
- */
-function enableHjVideoGestureSeek(video, surface) {
-  const target = surface || video;
-  if (!video || !target || target._creamu_hj_gesture_bound) return;
-  target._creamu_hj_gesture_bound = true;
-
-  let tracking = false;
-  let startX = 0;
-  let startTime = 0;
-  const point = (event) => (event.touches && event.touches[0]) || event;
-
-  const onStart = (event) => {
-    if (event.target && event.target.closest && event.target.closest('button, input')) return;
-    if (!Number.isFinite(video.duration) || video.duration <= 0) return;
-    const p = point(event);
-    tracking = true;
-    startX = p.clientX;
-    startTime = video.currentTime || 0;
-  };
-  const onMove = (event) => {
-    if (!tracking) return;
-    const p = point(event);
-    const dx = p.clientX - startX;
-    if (Math.abs(dx) < 6) return;
-    if (event.cancelable) event.preventDefault();
-    const width = Math.max(target.clientWidth || window.innerWidth || 320, 160);
-    const targetTime = Math.max(0, Math.min(video.duration, startTime + (dx / width) * video.duration));
-    video.currentTime = targetTime;
-    showHjSeekHud(formatHjTime(targetTime) + ' / ' + formatHjTime(video.duration));
-  };
-  const onEnd = () => { tracking = false; };
-
-  target.addEventListener('touchstart', onStart, { passive: true });
-  target.addEventListener('touchmove', onMove, { passive: false });
-  target.addEventListener('touchend', onEnd, { passive: true });
-  target.addEventListener('touchcancel', onEnd, { passive: true });
-  target.addEventListener('mousedown', onStart);
-  window.addEventListener('mousemove', onMove);
-  window.addEventListener('mouseup', onEnd);
+  start();
 }
 
 /**
@@ -549,34 +436,16 @@ function hjTopicImageAttachments(topic) {
   });
 }
 
-function ensureHjImageSlot() {
-  const slotted = typeof ensureHjInlineSlot === 'function' ? ensureHjInlineSlot() : null;
-  if (slotted) return slotted;
-  if (typeof document === 'undefined' || typeof document.getElementById !== 'function') return null;
-  const existing = document.getElementById('creamu-hj-inline-slot');
-  if (existing) return existing;
-  const button = Array.from(document.querySelectorAll('button')).find((el) => {
-    return String(el.textContent || '').replace(/\s+/g, '') === '点击展开完整贴文';
-  });
-  const anchor = button && (button.parentElement || button);
-  if (!anchor || !anchor.parentElement || typeof document.createElement !== 'function') return null;
-  const slot = document.createElement('div');
-  slot.id = 'creamu-hj-inline-slot';
-  slot.style.cssText = 'display:block;width:100%;margin:8px 0;';
-  anchor.parentElement.insertBefore(slot, anchor);
-  return slot;
-}
-
 function renderHjUnlockedImages() {
   const cache = window.__creamu_hj_media_cache;
   if (!cache || !cache.images.length || typeof document === 'undefined') return;
-  const slot = ensureHjImageSlot();
+  const slot = ensureHjInlineSlot();
   if (!slot) return;
   let box = document.getElementById('creamu-hj-image-box');
   if (!box) {
     box = document.createElement('div');
     box.id = 'creamu-hj-image-box';
-    box.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px;';
+
     slot.appendChild(box);
   }
   const current = cache.images.join('\n');
@@ -586,8 +455,8 @@ function renderHjUnlockedImages() {
   cache.images.forEach((url) => {
     const img = document.createElement('img');
     img.src = url;
-    img.alt = '';
-    img.style.cssText = 'width:100%;height:auto;border-radius:12px;background:#fffaf6;';
+    img.alt = '帖子图片';
+    img.loading = 'lazy';
     box.appendChild(img);
   });
 }
@@ -596,12 +465,18 @@ async function unlockHjHiddenImages(topic) {
   const cache = window.__creamu_hj_media_cache;
   const attachments = hjTopicImageAttachments(topic);
   if (!cache || !attachments.length) return 0;
+  const generation = cache.generation;
+  const requests = cache.imageRequests || (cache.imageRequests = new Map());
   const before = cache.images.length;
   for (const item of attachments) {
     const remote = tryNormalizeHjMediaUrl(String(item.remoteUrl || item.url || ''));
     if (!remote || cache.rawUrls.has('image:' + remote)) continue;
-    const response = await gmHjRequest(remote, 'arraybuffer');
+    if (!requests.has(remote)) requests.set(remote, gmHjRequest(remote, 'arraybuffer'));
+    const response = await requests.get(remote);
+    requests.delete(remote);
     const buffer = response ? await gmHjBytes(response) : null;
+    if (generation !== cache.generation) return 0;
+    if (cache.rawUrls.has('image:' + remote)) continue;
     if (!buffer) continue;
     const bytes = new Uint8Array(buffer);
     const mime = hjImageMime(bytes);
@@ -678,69 +553,70 @@ function tryNormalizeHjMediaUrl(rawStr) {
  * 拦截与解析接口 API 响应中的媒体数据 (XHR & Fetch Hook)
  */
 function initHjNetworkInterceptor() {
-  if (typeof window === 'undefined' || window.__creamu_hj_interceptor_injected) return;
+  if (window.__creamu_hj_interceptor_injected) return;
   window.__creamu_hj_interceptor_injected = true;
-
-  // 页面自己的请求跑在页面窗口里。油猴的 isolated world 看到的 fetch 不是那一份。
   const pageWindow = (typeof unsafeWindow !== 'undefined' && unsafeWindow) || window;
-
-  const logNet = (url, bodySnippet = '') => {
-    try {
-      const netLog = window.__creamu_hj_network_log || [];
-      if (netLog.length > 50) netLog.shift();
-      netLog.push({ url: String(url), time: new Date().toLocaleTimeString(), snippet: bodySnippet.slice(0, 300) });
-      console.log('[Creamu Hook]', url);
-    } catch (_) {}
+  const requestScope = (raw) => {
+    const identity = currentHjPostId();
+    const cache = window.__creamu_hj_media_cache;
+    if (cache.postIdentity !== identity) resetHjMediaForPost(identity);
+    if (!identity) return null;
+    let url;
+    try { url = new URL(raw, location.href); } catch (_) { return null; }
+    const topic = url.pathname.match(/\/api\/topic\/(\d+)$/);
+    if (topic && topic[1] !== identity) return null;
+    // 只接收当前帖子的详情，推荐列表与广告响应不进入媒体缓存。
+    if (!topic) return null;
+    return { generation: cache.generation, topic: true };
   };
-
-  const handleResponseText = (url, text) => {
-    if (!text || typeof text !== 'string') return;
-    logNet(url, text);
-
-    // 1. 全字符串正则提取
-    parseHjMediaFromString(text);
-
-    // 2. 如果是 JSON，进行结构化递归提取
-    try {
-      const data = JSON.parse(text);
-      parseHjMediaFromData(data);
-    } catch (_) {}
+  const accept = (scope, text) => {
+    if (!scope || scope.generation !== window.__creamu_hj_media_cache.generation) return;
+    if (scope.topic) {
+      const payload = decodeHjTopicPayload(text);
+      if (payload) acceptHjTopicData(payload, scope.generation).catch(() => {});
+    }
   };
-
-  // 1. Hook Fetch
   const originalFetch = pageWindow.fetch;
-  if (typeof originalFetch === 'function') {
-    pageWindow.fetch = async function (...args) {
-      const response = await originalFetch.apply(this, args);
-      try {
-        const url = args[0] ? (typeof args[0] === 'string' ? args[0] : args[0].url) : '';
-        const clone = response.clone();
-        clone.text().then((text) => {
-          handleResponseText(url, text);
-        }).catch(() => {});
-      } catch (_) {}
-      return response;
-    };
-  }
-
-  // 2. Hook XMLHttpRequest
-  const PageXHR = pageWindow.XMLHttpRequest || XMLHttpRequest;
+  if (typeof originalFetch === 'function') window.__creamu_hj_fetch = originalFetch.bind(pageWindow);
+  if (typeof originalFetch === 'function') pageWindow.fetch = async function (...args) {
+    const scope = requestScope(typeof args[0] === 'string' ? args[0] : args[0]?.url);
+    const response = await originalFetch.apply(this, args);
+    if (scope?.topic && response.ok) response.clone().text().then(text => accept(scope, text)).catch(() => {});
+    return response;
+  };
+  const PageXHR = pageWindow.XMLHttpRequest;
+  if (!PageXHR) return;
   const originalOpen = PageXHR.prototype.open;
   const originalSend = PageXHR.prototype.send;
-  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
-    this._hj_url = url;
+  PageXHR.prototype.open = function (method, url, ...rest) {
+    this._hjScope = requestScope(url);
     return originalOpen.apply(this, [method, url, ...rest]);
   };
-  XMLHttpRequest.prototype.send = function (...args) {
-    this.addEventListener('load', function () {
-      try {
-        if (this.responseText) {
-          handleResponseText(this._hj_url || '', this.responseText);
-        }
-      } catch (_) {}
-    });
+  PageXHR.prototype.send = function (...args) {
+    this.addEventListener('load', () => {
+      if (this.status < 200 || this.status >= 300) return;
+      try { accept(this._hjScope, this.responseType === 'json' ? JSON.stringify(this.response) : this.responseText); } catch (_) {}
+    }, { once: true });
     return originalSend.apply(this, args);
   };
+}
+
+async function acceptHjTopicData(payload, generation) {
+  const cache = window.__creamu_hj_media_cache;
+  if (generation !== cache.generation) return;
+  const topic = payload.results?.[0] || payload;
+  if (!topic || (!topic.topicId && !Array.isArray(topic.attachments) && typeof topic.content !== 'string')) {
+    throw new Error('帖子响应不含正文或附件，请确认当前登录状态');
+  }
+  if (topic.topicId && String(topic.topicId) !== cache.postIdentity) return;
+  cache.status = '';
+  const attachments = Array.isArray(topic.attachments) ? topic.attachments : [];
+  parseHjMediaFromData({ attachments: attachments.filter(item => item.category !== 'images' && item.category !== 'image'), content: topic.content, videoUrl: topic.videoUrl });
+  await unlockHjHiddenImages(topic);
+  if (generation !== cache.generation) return;
+  const missing = hjTopicImageAttachments(topic).filter(item => !cache.rawUrls.has('image:' + tryNormalizeHjMediaUrl(String(item.remoteUrl || item.url || '')))).length;
+  cache.status = missing ? missing + ' 张图片读取失败，可重新解析。' : cache.videos.length || cache.images.length ? '' : '当前帖子没有可播放的媒体。';
+  scheduleHjMediaUpdate();
 }
 
 /**
@@ -775,7 +651,7 @@ function parseHjMediaFromString(text) {
   // 3. 精确搜索视频与图片 URL
   const mediaRegexes = [
     // 显式 http(s) URL
-    /https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|mov|flv|jpg|jpeg|png|webp|gif)(?:\?[^\s"'<>\\]*)?/gi,
+    /https?:\/\/[^\s"'<>\\]+?\.(?:m3u8|mp4|mov|flv|jpg|jpeg|png|webp|gif)(?![\w.])(?:\?[^\s"'<>\\]*)?/gi,
     // 包含 hls / video / upload / vod 关键词的媒体路径
     /(?:https?:\/\/[^\s"'<>\\]+|\/?(?:upload|video|hls|vod)\/)[^\s"'<>\\]+?\.(?:m3u8|mp4|mov|flv)(?:\?[^\s"'<>\\]*)?/gi,
     // 海角的播放地址经常没有后缀，只挂在 /hls/、/vod/、/playlist/ 下面
@@ -864,25 +740,25 @@ function parseHjMediaFromData(obj) {
 /**
  * 从全局状态变量及 DOM 节点深度扫描
  */
+const hjScannedGlobals = new WeakSet();
 function parseHjHiddenMediaFromGlobals() {
   const pageWindow = (typeof unsafeWindow !== 'undefined' && unsafeWindow) || window;
   const cache = window.__creamu_hj_media_cache || { videos: [], images: [], rawUrls: new Set() };
   
   const globals = [pageWindow.__INITIAL_STATE__, pageWindow.__NUXT__, pageWindow.detailData, pageWindow.postData, pageWindow.$video, pageWindow.videoInfo, pageWindow.playData, pageWindow.topicData];
   globals.forEach((g) => {
-    if (g) parseHjMediaFromData(g);
+    if (!g || typeof g !== 'object' || hjScannedGlobals.has(g)) return;
+    const id = g.topicId || g.post?.topicId;
+    if (id && String(id) !== cache.postIdentity) return;
+    hjScannedGlobals.add(g);
+    parseHjMediaFromData(g);
   });
 
   if (typeof document !== 'undefined') {
-    // 1. 扫描脚本
-    const scripts = document.querySelectorAll('script:not([src])');
-    scripts.forEach((script) => {
-      parseHjMediaFromString(script.textContent || '');
-    });
-
     // 2. 扫描 video / source 节点
     const videoElements = document.querySelectorAll('video, video source, audio source');
     videoElements.forEach((v) => {
+      if (v.closest('#creamu-hj-inline-slot, .ad-banner, .custom_carousel')) return;
       const src = v.getAttribute('src') || v.src;
       if (src) {
         const normalized = tryNormalizeHjMediaUrl(src);
@@ -893,6 +769,7 @@ function parseHjHiddenMediaFromGlobals() {
     // 3. 扫描 dataset 节点
     const nodes = document.querySelectorAll('[data-src], [data-video], [data-url], [data-original], [data-hls], [data-play-url], [data-m3u8]');
     nodes.forEach((el) => {
+      if (el.closest('#creamu-hj-inline-slot, .ad-banner, .custom_carousel')) return;
       ['data-src', 'data-video', 'data-url', 'data-original', 'data-hls', 'data-play-url', 'data-m3u8'].forEach((attr) => {
         const val = el.getAttribute(attr);
         if (val) {
@@ -909,94 +786,14 @@ function parseHjHiddenMediaFromGlobals() {
   };
 }
 
-/**
- * 校验节点是否属于顶部导航栏、页脚或侧栏
- */
-function isHeaderOrNav(el) {
-  if (!el) return true;
-  let cur = el;
-  while (cur && cur !== document.body && cur !== document.documentElement) {
-    const className = String(cur.className || '').toLowerCase();
-    const id = String(cur.id || '').toLowerCase();
-    const tagName = String(cur.tagName || '').toLowerCase();
-    if (
-      className.includes('nav') || className.includes('header') || className.includes('tabbar') ||
-      className.includes('head') || className.includes('topbar') || className.includes('footer') ||
-      id.includes('nav') || id.includes('header') || id.includes('head') ||
-      tagName === 'header' || tagName === 'nav' || tagName === 'footer'
-    ) {
-      return true;
-    }
-    cur = cur.parentElement;
-  }
-  return false;
-}
-
-/**
- * 手机版帖子的 class 会换，不能只认一组写死的名字。
- * 从付费墙、封面、正文这些真实节点往上收，收到一块够大、又不是导航的容器。
- */
+/** 仅挂载到已确认的两版帖子正文；SPA 正文尚未出现时等待页面刷新。 */
 function findHjPostMediaContainer() {
-  if (typeof document === 'undefined') return null;
-
-  const knownSelectors = [
-    '.topic-detail', '.topic_detail', '.post-detail', '.post_detail',
-    '.detail-content', '.detail_content', '.post-content', '.post_content',
-    '.article-body', '.pay-box', '.attachment-box', '.video-player',
-    '.video-box', '.post-media', '.media-wrapper',
-    '.topic-content', '.topic_content', '.detail-body', '.article-content',
-    '.content-body', '.rich-text', '.ql-editor'
-  ];
-  for (const selector of knownSelectors) {
-    const el = document.querySelector(selector);
-    if (el && isHjPostMount(el)) return el;
-  }
-
-  const seeds = [];
-  document.querySelectorAll('button, a, div, span, p').forEach((el) => {
-    const text = String(el.textContent || '').replace(/\s+/g, '');
-    if (text && text.length <= 24 && /解锁|付费|购买|立即看|金币/.test(text)) seeds.push(el);
-  });
-  document.querySelectorAll('video, img, [class*="cover"], [class*="poster"], [class*="blur"]').forEach((el) => {
-    if (el && el.nodeType === 1) seeds.push(el);
-  });
-
-  // 种子本身常是按钮或封面。播放器要挂在包住它的帖子上，所以从父节点开始收。
-  let best = null;
-  let bestArea = Infinity;
-  const seen = new Set();
-  for (const seed of seeds) {
-    let cur = seed.parentElement;
-    for (let depth = 0; cur && depth < 8; depth += 1) {
-      if (!seen.has(cur) && isHjPostMount(cur)) {
-        seen.add(cur);
-        const rect = cur.getBoundingClientRect();
-        const area = rect.width * rect.height;
-        if (area < bestArea) {
-          best = cur;
-          bestArea = area;
-        }
-        break;
-      }
-      cur = cur.parentElement;
-    }
-  }
-  return best;
-}
-
-function isHjPostMount(el) {
-  if (!el || el === document.body || el === document.documentElement) return false;
-  if (el.id === 'app' || el.id === '__nuxt' || el.id === 'root') return false;
-  if (isHeaderOrNav(el)) return false;
-  const className = String(el.className || '');
-  if (className.includes('creamu-hj')) return false;
-  const rect = el.getBoundingClientRect();
-  return rect.width > 100 && rect.height > 30;
+  return document.querySelector('#details-page .article.ql-editor, .mobile .details .reset-html-box');
 }
 
 /**
  * 播放器贴在帖子正文前面，跟着帖子滚动。
- * 帖子被页面重绘清掉时，由定时器把同一块播放器挪回去，不拆掉重做。
+ * 帖子被页面重绘清掉时，由页面观察器把同一块播放器挪回去，不拆掉重做。
  */
 function ensureHjInlineSlot() {
   const anchor = findHjPostMediaContainer();
@@ -1006,122 +803,11 @@ function ensureHjInlineSlot() {
     slot = document.createElement('div');
     slot.id = 'creamu-hj-inline-slot';
   }
-  slot.style.cssText = 'display:block;width:100%;margin:8px 0;';
+
   if (slot.parentElement !== anchor.parentElement || slot.nextElementSibling !== anchor) {
     anchor.parentElement.insertBefore(slot, anchor);
   }
   return slot;
-}
-
-/**
- * 全局 HTML5 视频播放弹窗 (保底 100% 浮层播放)
- */
-function openHjModalPlayer(videoUrl) {
-  if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
-  if (!videoUrl) return;
-
-  let modal = document.getElementById('creamu-hj-modal-player');
-  if (!modal) {
-    modal = document.createElement('div');
-    modal.id = 'creamu-hj-modal-player';
-    document.body.appendChild(modal);
-  }
-
-  modal.style.cssText = `
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    background: rgba(0, 0, 0, 0.92) !important;
-    z-index: 2147483646 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important;
-    align-items: center !important;
-    box-sizing: border-box !important;
-    padding: 16px !important;
-    backdrop-filter: blur(12px) !important;
-  `;
-
-  modal.innerHTML = `
-    <div style="width: 100%; max-width: 600px; background: #141418; border-radius: 16px; overflow: hidden; border: 1px solid rgba(226,183,184,0.4); box-shadow: 0 12px 36px rgba(0,0,0,0.8);">
-      <div style="padding: 10px 16px; background: #1a1a20; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08);">
-        <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #e1e1e6; font-weight: bold;">
-          <span style="background: #e2b7b8; color: #121214; font-size: 10px; padding: 2px 6px; border-radius: 4px;">Creamu</span>
-          <span>视频解封播放器</span>
-        </div>
-        <button id="creamu-hj-modal-close" style="background: transparent; color: #a0a0b0; border: none; font-size: 20px; cursor: pointer; padding: 0 6px;">✕</button>
-      </div>
-
-      <video id="creamu-hj-modal-video" controls playsinline webkit-playsinline x5-playsinline="true" x5-video-player-type="h5-page" x5-video-player-fullscreen="true" style="width: 100%; max-height: 65vh; background: #000; display: block;">
-        您的浏览器不支持 HTML5 视频播放。
-      </video>
-
-      <div class="creamu-hj-player-toolbar" style="padding: 10px 14px; background: #18181c; display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; gap: 6px;">
-          <button class="creamu-hj-btn" id="creamu-hj-m-rewind">⏪ -10s</button>
-          <button class="creamu-hj-btn" id="creamu-hj-m-forward">⏩ +10s</button>
-        </div>
-        <div style="display: flex; gap: 6px;">
-          <button class="creamu-hj-btn" id="creamu-hj-m-speed">⚡ 1.5x</button>
-          <button class="creamu-hj-btn" id="creamu-hj-m-copy">📋 复制直链</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const videoEl = document.getElementById('creamu-hj-modal-video');
-  const closeBtn = document.getElementById('creamu-hj-modal-close');
-
-  if (closeBtn) {
-    closeBtn.onclick = () => {
-      if (videoEl) videoEl.pause();
-      modal.style.display = 'none';
-    };
-  }
-
-  if ((/\.m3u8($|\?)/i.test(videoUrl) || /\/(hls|vod|m3u8|playlist)\//i.test(videoUrl)) && typeof GM_xmlhttpRequest === 'function') {
-    loadHjM3u8WithGm(videoEl, videoUrl);
-  } else {
-    videoEl.src = videoUrl;
-  }
-
-  enableHjVideoGestureSeek(videoEl);
-
-  const rewindBtn = document.getElementById('creamu-hj-m-rewind');
-  if (rewindBtn) rewindBtn.onclick = () => { videoEl.currentTime = Math.max(0, videoEl.currentTime - 10); };
-
-  const forwardBtn = document.getElementById('creamu-hj-m-forward');
-  if (forwardBtn) forwardBtn.onclick = () => { videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + 10); };
-
-  const speedBtn = document.getElementById('creamu-hj-m-speed');
-  if (speedBtn) {
-    const speeds = [1.0, 1.25, 1.5, 2.0];
-    let sIdx = 2;
-    videoEl.playbackRate = 1.5;
-    speedBtn.onclick = () => {
-      sIdx = (sIdx + 1) % speeds.length;
-      const spd = speeds[sIdx];
-      videoEl.playbackRate = spd;
-      speedBtn.textContent = `⚡ ${spd}x`;
-      showHjSeekHud(`倍速播放: ${spd}x`);
-    };
-  }
-
-  const copyBtn = document.getElementById('creamu-hj-m-copy');
-  if (copyBtn) {
-    copyBtn.onclick = () => {
-      if (typeof GM_setClipboard === 'function') {
-        GM_setClipboard(videoUrl);
-      } else if (navigator.clipboard) {
-        navigator.clipboard.writeText(videoUrl);
-      }
-      alert('已复制视频直链！');
-    };
-  }
-
-  modal.style.display = 'flex';
 }
 
 /**
@@ -1134,7 +820,7 @@ function scheduleHjMediaUpdate() {
     hjUpdateTimer = setTimeout(() => {
       hjUpdateTimer = null;
       embedHjUnlockedMediaInline();
-    }, 400);
+    }, 80);
   } else {
     embedHjUnlockedMediaInline();
   }
@@ -1144,272 +830,110 @@ function scheduleHjMediaUpdate() {
  * 主入口：解析隐藏媒体
  */
 function parseHjHiddenMedia() {
-  initHjNetworkInterceptor();
   const res = parseHjHiddenMediaFromGlobals();
   scheduleHjMediaUpdate();
-  setupHjMobileObserver();
+
   return res;
 }
 
-/**
- * 监听移动端 DOM 变动 (防死循环 + 忽略 Creamu 自身节点)
- */
-function setupHjMobileObserver() {
-  if (typeof window === 'undefined' || typeof document === 'undefined' || window.__creamu_hj_observer_active) return;
-  window.__creamu_hj_observer_active = true;
-
-  // 小窗建好后不再监听整页。海角页面自己一直在改 DOM，整页监听会把播放器反复拆掉重做。
-  if (typeof setInterval !== 'function' || typeof document.getElementById !== 'function') return;
-  setInterval(() => {
-    const cache = window.__creamu_hj_media_cache;
-    const identity = hjPostIdentity();
-    if (cache && cache.postIdentity && cache.postIdentity !== identity) {
-      resetHjMediaForPost(identity);
-    }
-    if (cache && !cache.postIdentity) cache.postIdentity = identity;
-    if (!cache || !cache.videos || !cache.videos.length) {
-      parseHjHiddenMediaFromGlobals();
-      if (cache && cache.images && cache.images.length) renderHjUnlockedImages();
-      return;
-    }
-    if (cache.images && cache.images.length) renderHjUnlockedImages();
-    const slot = document.getElementById('creamu-hj-inline-slot');
-    const box = document.getElementById('creamu-hj-inline-player-box');
-    if (slot && slot.parentElement === document.body && box && slot.contains(box)) return;
-    embedHjUnlockedMediaInline();
-  }, 1500);
+let hjPlayer = null;
+function destroyHjPlayer() {
+  if (!hjPlayer) return;
+  const { art, video } = hjPlayer;
+  if (video) video._hjDisposed = true;
+  if (video?._hjHls) { video._hjHls.destroy(); video._hjHls = null; }
+  if (art) art.destroy(false);
+  else if (video) { video.pause(); video.removeAttribute('src'); video.load(); }
+  hjPlayer = null;
 }
 
-/**
- * 顶层状态诊断提示条。默认不挂到页面上，解析结果只进内嵌播放器。
- */
-function renderHjUnlockedMediaBar() {
-  return;
-  if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
-  const cache = window.__creamu_hj_media_cache || { videos: [], images: [] };
-
-  const root = document.documentElement || document.body;
-  if (!root) return;
-
-  let bar = document.getElementById('creamu-hj-media-bar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'creamu-hj-media-bar';
-    root.appendChild(bar);
-  }
-
-  bar.style.cssText = `
-    position: fixed !important;
-    top: 10px !important;
-    left: 10px !important;
-    right: 10px !important;
-    z-index: 2147483647 !important;
-    box-sizing: border-box !important;
-    pointer-events: auto !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    display: block !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
-  `;
-
-  const videoCount = cache.videos.length;
-  const imageCount = cache.images.length;
-  const logCount = (window.__creamu_hj_network_log || []).length;
-  
-  const playBtnHtml = videoCount > 0 ? `<button id="creamu-hj-play-now-btn" style="background:#e2b7b8 !important; color:#121214 !important; font-weight:bold !important; border:none !important; padding:4px 9px !important; border-radius:6px !important; font-size:11px !important; cursor:pointer !important;">▶ 播放 (${videoCount})</button>` : '';
-
-  bar.innerHTML = `
-    <div style="display:flex !important; align-items:center !important; justify-content:space-between !important; gap:8px !important; padding:8px 12px !important; background:rgba(28,28,34,0.96) !important; border:1px solid rgba(226,183,184,0.5) !important; border-radius:12px !important; color:#e1e1e6 !important; font-size:12px !important; box-shadow:0 6px 20px rgba(0,0,0,0.6) !important; backdrop-filter:blur(10px) !important;">
-      <div style="display:flex !important; align-items:center !important; gap:6px !important;">
-        <span style="background:#e2b7b8 !important; color:#121214 !important; font-weight:bold !important; font-size:10px !important; padding:2px 5px !important; border-radius:4px !important;">Creamu</span>
-        <span>已捕获: <strong style="color:#e2b7b8 !important;">${videoCount}</strong> 视频</span>
-      </div>
-      <div style="display:flex !important; gap:4px !important; align-items:center !important;">
-        ${playBtnHtml}
-        <button id="creamu-hj-log-btn" style="background:#2a2a34 !important; color:#e2b7b8 !important; border:1px solid rgba(226,183,184,0.3) !important; padding:4px 8px !important; border-radius:6px !important; font-size:11px !important; cursor:pointer !important;">📋 日志 (${logCount})</button>
-        <button id="creamu-hj-close-btn" style="background:transparent !important; color:#a0a0b0 !important; border:none !important; font-size:15px !important; padding:0 4px !important; cursor:pointer !important;">✕</button>
-      </div>
-    </div>
-  `;
-
-  const closeBtn = document.getElementById('creamu-hj-close-btn');
-  if (closeBtn) {
-    closeBtn.onclick = () => { bar.style.display = 'none'; };
-  }
-
-  const playNowBtn = document.getElementById('creamu-hj-play-now-btn');
-  if (playNowBtn) {
-    playNowBtn.onclick = () => {
-      if (cache.videos.length > 0) {
-        openHjModalPlayer(cache.videos[0]);
-      }
-    };
-  }
-
-  const logBtn = document.getElementById('creamu-hj-log-btn');
-  if (logBtn) {
-    logBtn.onclick = () => {
-      const logs = window.__creamu_hj_network_log || [];
-      const netUrls = logs.map((l) => `${l.time} -> ${l.url}`).join('\n');
-      const vUrls = cache.videos.join('\n');
-      const imgUrls = cache.images.join('\n');
-      alert(`【Creamu 诊断日志】\n\n已拦截网络请求(${logs.length}个):\n${netUrls.slice(0, 400) || '无'}\n\n当前提取视频链接:\n${vUrls || '未提取到视频链接'}\n\n当前提取图片链接:\n${imgUrls.slice(0, 200) || '无'}`);
-    };
-  }
-}
-
-/**
- * 核心升级：直接把 HLS.js HTML5 视频播放器【内嵌到帖子正文中】！
- */
-/** ArtPlayer 负责画面、进度拖动、全屏和倍速。解码仍走带站点密钥的 Hls。 */
 function mountHjArtPlayer(videoUrl) {
   const mount = document.getElementById('creamu-hj-art-mount');
-  if (!mount || typeof Artplayer !== 'function') return null;
-  if (mount._hjArt) {
-    try { mount._hjArt.destroy(false); } catch (_) {}
+  if (!mount) return null;
+  const hls = /\.m3u8($|\?)/i.test(videoUrl) || /\/(hls|vod|m3u8|playlist)\//i.test(videoUrl);
+  const onStatus = text => {
+    if (hjPlayer?.url !== videoUrl) return;
+    const el = document.getElementById('creamu-hj-play-status');
+    if (el) el.textContent = text;
+  };
+  let art = null, video;
+  hjPlayer = { art: null, video: null, url: videoUrl };
+  if (typeof Artplayer === 'function') {
+    art = new Artplayer({
+      container: mount, url: videoUrl, type: hls ? 'm3u8' : 'mp4', autoplay: false,
+      playsInline: true, fullscreen: true, fullscreenWeb: true, pip: true,
+      playbackRate: true, setting: true, gesture: true, theme: '#78947c', lang: 'zh-cn',
+      moreVideoAttr: { playsInline: true, 'webkit-playsinline': 'true' },
+      customType: { m3u8: (el, url) => loadHjM3u8WithGm(el, url, onStatus) },
+    });
+    video = art.video || art.template?.$video;
+  } else {
+    video = document.createElement('video');
+    video.controls = true; video.playsInline = true; video.preload = 'metadata';
+    mount.appendChild(video);
+    if (hls) loadHjM3u8WithGm(video, videoUrl, onStatus);
+    else video.src = videoUrl;
   }
-  const art = new Artplayer({
-    container: mount,
-    url: videoUrl,
-    type: 'm3u8',
-    autoplay: true,
-    playsInline: true,
-    fullscreen: true,
-    fullscreenWeb: true,
-    pip: true,
-    playbackRate: true,
-    setting: true,
-    flip: true,
-    aspectRatio: true,
-    gesture: true,
-    theme: '#e2b7b8',
-    lang: 'zh-cn',
-    moreVideoAttr: { playsInline: true, 'webkit-playsinline': 'true' },
-    customType: {
-      m3u8(video, url) {
-        if (typeof window.Hls === 'function' && window.Hls.isSupported()) loadHjM3u8WithGm(video, url);
-        else video.src = url;
-      },
-    },
-  });
-  mount._hjArt = art;
-  return art.video || art.template && art.template.$video;
+  hjPlayer = { art, video, url: videoUrl };
+  video?.addEventListener('error', () => onStatus('播放失败，可重试解析或复制地址检查。'));
+  video?.addEventListener('playing', () => onStatus(''));
+  return video;
 }
 
 function embedHjUnlockedMediaInline() {
-  if (typeof document === 'undefined' || typeof document.createElement !== 'function') return;
   const cache = window.__creamu_hj_media_cache;
-  if (!cache || cache.videos.length === 0) return;
-
-  const videoIndex = Math.min(currentHjSelectedVideoIndex, cache.videos.length - 1);
-  const videoUrl = cache.videos[videoIndex];
-  if (!videoUrl) return;
-
-  // 只要解析到视频就开小窗，不再依赖帖子节点。
+  if (!cache || (!cache.videos.length && !cache.postIdentity)) return;
   const container = ensureHjInlineSlot();
   if (!container) return;
-
-  let playerBox = document.getElementById('creamu-hj-inline-player-box');
-  if (!playerBox) {
-    playerBox = document.createElement('div');
-    playerBox.id = 'creamu-hj-inline-player-box';
-    playerBox.className = 'creamu-hj-inline-player-box';
+  let box = document.getElementById('creamu-hj-inline-player-box');
+  if (!box) {
+    box = document.createElement('section');
+    box.id = 'creamu-hj-inline-player-box';
+    box.className = 'creamu-hj-media';
+    box.innerHTML = `<div class="creamu-hj-media-head"><strong>帖子媒体</strong><small id="creamu-hj-media-count"></small><div class="creamu-hj-switcher"></div></div>
+      <div id="creamu-hj-art-mount"></div><div id="creamu-hj-play-status" role="status"></div>
+      <div class="creamu-hj-player-toolbar"><button class="creamu-hj-btn" id="creamu-hj-retry" type="button">重新解析</button><button class="creamu-hj-btn" id="creamu-hj-copy" type="button">复制地址</button></div>
+      <details id="creamu-hj-debug-details"><summary>播放诊断</summary><pre id="creamu-hj-debug"></pre><button class="creamu-hj-btn" id="creamu-hj-debug-copy" type="button">复制诊断</button></details>`;
+    container.insertBefore(box, container.firstChild);
+    box.querySelector('#creamu-hj-retry').onclick = () => loadHjCurrentTopic(true);
+    box.querySelector('#creamu-hj-copy').onclick = event => {
+      const url = hjPlayer?.url;
+      if (!url) return;
+      if (typeof GM_setClipboard === 'function') GM_setClipboard(url);
+      event.currentTarget.textContent = '已复制';
+    };
+    box.querySelector('#creamu-hj-debug-copy').onclick = copyHjDebug;
   }
-
-  // 1. 动态迁移：如果 playerBox 不在当前最新查找到的 container 中，迁移！
-  if (playerBox.parentElement !== container) {
-    if (container.firstChild) {
-      container.insertBefore(playerBox, container.firstChild);
-    } else {
-      container.appendChild(playerBox);
-    }
-  }
-
-  // 2. 防重复渲染校验：URL 相同且已经在目标容器中才跳过 HTML 构建
-  if (playerBox.getAttribute('data-video-url') === videoUrl && playerBox.parentElement === container) {
-    return;
-  }
-
-  playerBox.setAttribute('data-video-url', videoUrl);
-
-  playerBox.style.cssText = `
-    width: 100% !important;
-    margin: 12px 0 !important;
-    background: #000 !important;
-    border-radius: 12px !important;
-    overflow: hidden !important;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.5) !important;
-    border: 1px solid rgba(226,183,184,0.4) !important;
-    position: relative !important;
-    z-index: 99999 !important;
-  `;
-
-  // 构建多视频切换按钮
-  let switcherHtml = '';
-  if (cache.videos.length > 1) {
-    switcherHtml = `<div style="display:flex; gap:6px; padding:6px 12px; background:#121216; overflow-x:auto; border-bottom:1px solid rgba(255,255,255,0.08);">`;
-    cache.videos.forEach((v, idx) => {
-      const activeStyle = idx === videoIndex ? 'background:#e2b7b8; color:#121214; font-weight:bold;' : 'background:#2a2a34; color:#e1e1e6;';
-      switcherHtml += `<button class="creamu-hj-vswitch-btn" data-idx="${idx}" style="${activeStyle} border:none; padding:4px 10px; border-radius:6px; font-size:11px; cursor:pointer; whitespace:nowrap;">视频 ${idx + 1}</button>`;
+  const index = Math.min(currentHjSelectedVideoIndex, Math.max(0, cache.videos.length - 1));
+  const url = cache.videos[index] || '';
+  const signature = cache.videos.join('\n') + ':' + index;
+  const switcher = box.querySelector('.creamu-hj-switcher');
+  if (switcher.dataset.signature !== signature) {
+    switcher.dataset.signature = signature;
+    switcher.replaceChildren();
+    if (cache.videos.length > 1) cache.videos.forEach((_, i) => {
+      const button = document.createElement('button');
+      button.className = 'creamu-hj-btn creamu-hj-vswitch-btn'; button.type = 'button';
+      button.textContent = '视频 ' + (i + 1); button.setAttribute('aria-pressed', String(i === index));
+      button.onclick = () => { currentHjSelectedVideoIndex = i; embedHjUnlockedMediaInline(); };
+      switcher.appendChild(button);
     });
-    switcherHtml += `</div>`;
   }
-
-  if (playerBox.getAttribute('data-video-url') === videoUrl && document.getElementById('creamu-hj-art-mount')) {
-    return;
+  box.querySelector('#creamu-hj-media-count').textContent = cache.videos.length ? cache.videos.length + ' 段视频' : '当前帖子';
+  box.querySelector('#creamu-hj-copy').disabled = !url;
+  box.querySelector('#creamu-hj-retry').disabled = !!cache.topicLoading;
+  box.querySelector('#creamu-hj-play-status').textContent = cache.status || '';
+  if (url && (hjPlayer?.url !== url || !hjPlayer.video?.isConnected)) {
+    destroyHjPlayer();
+    box.querySelector('#creamu-hj-art-mount').replaceChildren();
+    try {
+      mountHjArtPlayer(url);
+    } catch (error) {
+      box.querySelector('#creamu-hj-play-status').textContent = '播放器初始化失败，请重新解析。';
+      hjDebug(String(error.message || error));
+    }
+    box.setAttribute('data-video-url', url);
+    hjDebug('选用视频 ' + (index + 1));
   }
-  playerBox.innerHTML = `
-    ${switcherHtml}
-    <div id="creamu-hj-art-mount" style="width:100%; aspect-ratio:16/9; background:#000;"></div>
-    <div id="creamu-hj-play-status" style="display:none; padding:4px 8px; background:#2a1618; color:#ffb4af; font-size:11px;"></div>
-    <button class="creamu-hj-btn" id="creamu-hj-debug-toggle" type="button">调试</button>
-    <pre id="creamu-hj-debug" style="display:none; margin:0; padding:6px 8px; white-space:pre-wrap; word-break:break-all; color:#b7b7c4; font-size:11px; max-height:180px; overflow:auto; background:#101014;"></pre>
-  `;
-
-  // 绑定多视频切换
-  const switchBtns = playerBox.querySelectorAll('.creamu-hj-vswitch-btn');
-  switchBtns.forEach((btn) => {
-    btn.onclick = () => {
-      const idx = parseInt(btn.getAttribute('data-idx') || '0', 10);
-      currentHjSelectedVideoIndex = idx;
-      playerBox.removeAttribute('data-video-url');
-      embedHjUnlockedMediaInline();
-    };
-  });
-
-  const videoEl = mountHjArtPlayer(videoUrl);
-  if (!videoEl) return;
-  const statusEl = document.getElementById('creamu-hj-play-status');
-  const showPlayStatus = (text) => {
-    if (!statusEl) return;
-    statusEl.style.display = text ? 'block' : 'none';
-    statusEl.textContent = text || '';
-  };
-  videoEl.addEventListener('error', () => {
-    const code = videoEl.error && videoEl.error.code;
-    hjDebug('播放器错误 code=' + code + ' src=' + String(videoEl.currentSrc || videoEl.src).slice(0, 80));
-    showPlayStatus('播放器报错 code=' + code);
-  });
-  videoEl.addEventListener('playing', () => showPlayStatus(''));
-  hjDebug('选用 ' + videoUrl);
-
-  const debugToggle = document.getElementById('creamu-hj-debug-toggle');
-  const debugBox = document.getElementById('creamu-hj-debug');
-  if (debugBox) debugBox.textContent = (window.__creamu_hj_debug || []).join('\n');
-  if (debugToggle && debugBox) {
-    debugToggle.onclick = () => {
-      if (debugBox.style.display === 'none') {
-        debugBox.style.display = 'block';
-        debugBox.textContent = (window.__creamu_hj_debug || []).join('\n');
-        debugToggle.textContent = '复制调试';
-        return;
-      }
-      copyHjDebug();
-      debugToggle.textContent = '已复制';
-    };
-  }
-  hjDebug('地址 ' + cache.videos.length + ' 条');
+  renderHjUnlockedImages();
 }
-
-// 启动运行
-parseHjHiddenMedia();

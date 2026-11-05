@@ -234,6 +234,17 @@ test('exact-filter URLs keep one validated recipe in the current search hash', (
   );
   const parsed = ctx.parseScoutExactFilterLocation(target);
   assert.ok(parsed);
+  assert.equal(parsed.mode, 'exact');
+  const browsingUrl = ctx.buildScoutExactFilterUrl('https://www.xvideos.com/?k=documentary', recipe, 'browse');
+  assert.equal(ctx.parseScoutExactFilterLocation(new URL(browsingUrl)).mode, 'browse');
+  const browsing = ctx.addTrack({
+    site: 'xvideos', query: 'documentary', url: 'https://www.xvideos.com/?k=documentary', recipe,
+  });
+  const otherRecipe = ctx.normalizeScoutSearchRecipe({ ...recipe, id: 'other', conditions: [{ text: 'documentary', role: 'required' }, { text: 'other', role: 'excluded' }] });
+  const other = ctx.addTrack({ site: 'xvideos', query: 'documentary', recipe: otherRecipe });
+  Object.assign(ctx.location, { href: browsingUrl, hash: new URL(browsingUrl).hash });
+  assert.equal(ctx.findTrackBySiteQuery('xvideos', 'documentary').id, browsing.id, 'the URL recipe owns its breakpoint even when search queries match');
+  assert.notEqual(browsing.id, other.id);
   assert.equal(parsed.scope, 'xvideos:documentary city walk');
   assert.deepEqual(
     Array.from(parsed.recipe.conditions, (condition) => [

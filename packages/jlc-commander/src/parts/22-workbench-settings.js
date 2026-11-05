@@ -16,8 +16,8 @@
             return ''
                 + '<div class="legacy-row">'
                 + '  <div class="jlc-wb-range-head"><span>' + escapeHtml(item.label) + '</span><b class="jlc-wb-range-value" data-jlc-wb-range-value="' + escapeHtml(item.key) + '">' + value + '</b></div>'
-                + '  <div class="legacy-range"><input type="range" data-jlc-wb-range="' + escapeHtml(item.key) + '" min="' + item.min + '" max="' + item.max + '" step="' + step + '" value="' + value + '"></div>'
-                + (item.key === 'uiBtnScale' ? '<div class="legacy-note">只缩放工作台按钮与悬浮球，列表封面/文字不变。笔记本可试 80–90。</div>' : '')
+                + '  <div class="legacy-range"><input type="range" aria-label="' + escapeHtml(item.label) + '" data-jlc-wb-range="' + escapeHtml(item.key) + '" min="' + item.min + '" max="' + item.max + '" step="' + step + '" value="' + value + '"></div>'
+                + (item.key === 'uiBtnScale' ? '<div class="legacy-note">调整控制台按钮与悬浮入口的大小。</div>' : '')
                 + '</div>';
         };
 
@@ -25,17 +25,20 @@
         container.innerHTML = ''
             + '<h3>列表功能</h3>'
             + toggles.map(item => ''
-                + '<div class="legacy-row legacy-toggle' + (item.disabled ? ' disabled' : '') + '">'
+                + '<label class="legacy-row legacy-toggle' + (item.disabled ? ' disabled' : '') + '">'
                 + '  <span>' + escapeHtml(item.label) + '</span>'
                 + '  <input type="checkbox" data-jlc-wb-toggle="' + escapeHtml(item.key) + '"' + (Status.get(item.key) ? ' checked' : '') + (item.disabled ? ' disabled' : '') + '>'
-                + '</div>').join('')
+                + '</label>').join('')
             + '<h3 class="jlc-wb-section-title">布局</h3>'
             + layoutRanges.map(renderRangeRow).join('')
+            + '<h3 class="jlc-wb-section-title">已隐藏标签</h3>'
+            + '<div class="legacy-note">按完整名称对所有影片生效，只隐藏悬浮标签，不改变偏好命中。点击下方标签恢复显示。</div>'
+            + '<div id="jlc-wb-hidden-meta-tags" class="jlc-hidden-meta-tags"></div>'
             + '<h3 class="jlc-wb-section-title">工作台</h3>'
             + uiRanges.map(renderRangeRow).join('')
             + '<div class="legacy-row">'
             + '  <div class="jlc-wb-note-summary">默认打开方式</div>'
-            + '  <select id="jlc-wb-view-open-mode" class="jlc-wb-select">'
+            + '  <select aria-label="默认打开方式" id="jlc-wb-view-open-mode" class="jlc-wb-select">'
             + '    <option value="tab"' + (openMode === 'tab' ? ' selected' : '') + '>新标签打开</option>'
             + '    <option value="same"' + (openMode === 'same' ? ' selected' : '') + '>本页打开</option>'
             + '  </select>'
@@ -72,7 +75,30 @@
             config.open_mode = next;
             GM_setValue('jlc_config_stable', config);
             persistWorkbenchSession({ openMode: next });
-            updateWorkbenchOpenModeChip();
+        });
+        renderWorkbenchHiddenMetaTags();
+    }
+
+    function renderWorkbenchHiddenMetaTags() {
+        const container = document.getElementById('jlc-wb-hidden-meta-tags');
+        if (!container) return;
+        container.replaceChildren();
+        const tags = uniqueTextList(config.hidden_meta_tags);
+        if (!tags.length) {
+            const empty = document.createElement('p');
+            empty.className = 'legacy-note';
+            empty.textContent = '暂无隐藏标签。右键或长按封面标签可打开标签菜单。';
+            container.append(empty);
+            return;
+        }
+        tags.forEach(tag => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'jlc-wb-btn ghost';
+            button.textContent = tag + ' · 恢复';
+            button.setAttribute('aria-label', '恢复显示标签：' + tag);
+            button.onclick = () => setMetaTagHidden(tag, false);
+            container.append(button);
         });
     }
 
@@ -88,6 +114,7 @@
         if (url) url.value = config.emby_url || '';
         if (mt) mt.value = config.metatube_url || '';
         if (fav) fav.value = (config.fav_tags || []).join(', ');
+        renderWorkbenchHiddenMetaTags();
         const hiddenSummary = shell.querySelector('#jlc-wb-hidden-summary');
         if (hiddenSummary) {
             try {
@@ -142,16 +169,6 @@
             const input = shell.querySelector('[data-jlc-wb-resource="' + k + '"]');
             if (input) input.checked = config[k] !== false;
         });
-        const hint = shell.querySelector('#jlc-wb-config-hint');
-        if (hint) {
-            if (isLikelyFreshDefaultConfig(config)) {
-                hint.hidden = false;
-                hint.textContent = '当前像是空配置（默认心动标签、无 Emby）。若以前用过旧版脚本，这通常是因为新脚本有独立存储：请到旧脚本导出备份，再在 设置 → 备份 里导入。';
-            } else {
-                hint.hidden = true;
-                hint.textContent = '';
-            }
-        }
         updateWorkbenchConfigDiag();
     }
 
@@ -161,6 +178,8 @@
         const next = normalizeWorkbenchSettingsTab(tabId);
         shell.querySelectorAll('[data-jlc-settings-tab]').forEach(btn => {
             btn.classList.toggle('active', btn.getAttribute('data-jlc-settings-tab') === next);
+            if (btn.getAttribute('data-jlc-settings-tab') === next) btn.setAttribute('aria-current', 'page');
+            else btn.removeAttribute('aria-current');
         });
         shell.querySelectorAll('[data-jlc-settings-panel]').forEach(panel => {
             panel.classList.toggle('is-active', panel.getAttribute('data-jlc-settings-panel') === next);
@@ -192,7 +211,7 @@
             const keyTyped = keyEl?.value.trim() || '';
             const mtVal = shell.querySelector('#jlc-wb-i-mt')?.value.trim().replace(/\/$/, '') || '';
             const favRaw = shell.querySelector('#jlc-wb-i-fav')?.value;
-            const favList = String(favRaw ?? '').split(',').map(s => s.trim()).filter(Boolean);
+            const favList = uniqueTextList(asTextList(favRaw));
 
             config.emby_url = urlVal;
             // 密钥：留空且已有保存值 => 不改；用户输入了才覆盖

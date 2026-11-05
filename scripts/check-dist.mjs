@@ -3,18 +3,12 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assembleUserscript } from './build-userscript.mjs';
 
-const packages = [
-  'exh-commander',
-  'jlc-commander',
-  'scout-commander',
-  'hj-commander',
-];
-
 const root = process.cwd();
+const { workspaces } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const failures = [];
 
-for (const directory of packages) {
-  const packageBuild = path.join(root, 'packages', directory, 'scripts', 'build.mjs');
+for (const directory of workspaces) {
+  const packageBuild = path.join(root, directory, 'scripts', 'build.mjs');
   const moduleUrl = pathToFileURL(packageBuild).href;
   const expected = assembleUserscript(moduleUrl);
   const actualPath = expected.outputFile;

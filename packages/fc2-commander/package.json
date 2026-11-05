@@ -1,0 +1,15 @@
+{
+  "name": "@creamu/fc2-commander",
+  "version": "0.5.1",
+  "private": true,
+  "description": "Creamu · FC2 Live — 直播发现、主播收藏与观看布局",
+  "author": "wayneze",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "artplayer": "5.4.0",
+    "hls.js": "1.7.4"
+  }
+}

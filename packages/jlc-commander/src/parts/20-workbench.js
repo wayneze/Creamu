@@ -44,12 +44,175 @@
         const shell = document.getElementById('jlc-wb');
         if (shell) shell.style.setProperty('--jlc-btn-scale', scale);
         const fab = document.getElementById('jlc-wb-fab');
-        if (fab) fab.style.setProperty('--jlc-btn-scale', scale);
+        if (fab) {
+            fab.style.setProperty('--jlc-btn-scale', scale);
+            applyWorkbenchFabPosition(fab);
+        }
         return pct;
     }
 
     function getJlcWorkbenchCss() {
         return `
+        :where(#jlc-wb, #jlc-wb-fab, #jlc-wb-dialog, #jlc-tracking-pagebar) {
+            --creamu-wb-bg: var(--jlc-bg);
+            --creamu-wb-surface: var(--jlc-surface);
+            --creamu-wb-surface-soft: var(--jlc-bg);
+            --creamu-wb-surface-muted: var(--jlc-soft);
+            --creamu-wb-surface-raised: var(--jlc-surface);
+            --creamu-wb-text: var(--jlc-text);
+            --creamu-wb-text-strong: var(--jlc-text);
+            --creamu-wb-title: var(--jlc-text);
+            --creamu-wb-text-muted: var(--jlc-muted);
+            --creamu-wb-text-subtle: var(--jlc-muted);
+            --creamu-wb-border: var(--jlc-line);
+            --creamu-wb-border-strong: #c6b7a8;
+            --creamu-wb-card-border: var(--jlc-line);
+            --creamu-wb-card-hover-border: #c6b7a8;
+            --creamu-wb-secondary-ink: var(--jlc-muted);
+            --creamu-wb-inset-surface: var(--jlc-soft);
+            --creamu-wb-divider: var(--jlc-line);
+            --creamu-wb-accent: var(--jlc-accent);
+            --creamu-wb-accent-light: var(--jlc-accent);
+            --creamu-wb-accent-dark: var(--jlc-accent);
+            --creamu-wb-accent-hover: #784326;
+            --creamu-wb-accent-ring: #ddc0a6;
+            --creamu-wb-on-accent: #fff;
+            --creamu-wb-control-radius: 8px;
+            --creamu-wb-panel-radius: 16px;
+            --creamu-wb-card-radius: 10px;
+            --creamu-wb-control-elevation: none;
+            --creamu-wb-card-elevation: none;
+            --creamu-wb-card-hover-elevation: 0 3px 12px #34261a0a;
+            --creamu-wb-focus-elevation: 0 0 0 2px #ddc0a6;
+            --creamu-wb-focus-surface: #fcf6ef;
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            color-scheme: light;
+        }
+        #jlc-wb-fab {
+            width: auto; min-width: 112px; height: 44px; padding: 0 14px 0 9px; gap: 9px;
+            border: 1px solid var(--jlc-line) !important; border-radius: 12px;
+            background: var(--jlc-surface) !important; color: var(--jlc-text) !important;
+            box-shadow: 0 4px 20px #34261a18 !important; font-size: 13px; font-weight: 600;
+            bottom: max(20px, env(safe-area-inset-bottom)); right: 20px;
+        }
+        #jlc-wb-fab:active, #jlc-wb-fab.is-dragging { transform: none; }
+        .jlc-brand-mark {
+            display: inline-grid; place-items: center; flex-shrink: 0;
+            width: 30px; height: 30px; border-radius: 9px 9px 9px 3px;
+            background: var(--jlc-accent); color: white; font: bold 23px/1 Georgia, serif;
+        }
+        #jlc-wb-fab .jlc-wb-fab-badge {
+            top: -6px; right: -6px; min-width: 19px; height: 19px;
+            background: var(--jlc-accent); border: 2px solid var(--jlc-surface);
+            font-size: 10px; box-shadow: none;
+        }
+        #jlc-wb-fab.is-panel-open { visibility: hidden; pointer-events: none; }
+        #jlc-wb {
+            min-width: 0; background: var(--jlc-bg); color: var(--jlc-text);
+            box-shadow: 0 18px 60px #34261a26, 0 2px 8px #34261a0d;
+            font-size: 14px; text-align: left;
+        }
+        #jlc-wb button, #jlc-wb input, #jlc-wb select, #jlc-wb textarea { font-family: inherit; }
+        #jlc-wb :is(button, input, select, textarea):focus-visible,
+        #jlc-wb-fab:focus-visible, #jlc-wb-dialog :focus-visible {
+            outline: 2px solid var(--jlc-accent); outline-offset: 3px;
+        }
+        #jlc-wb input::placeholder, #jlc-wb textarea::placeholder { color: var(--jlc-muted); opacity: 1; }
+        #jlc-wb .jlc-wb-header { padding: 20px 20px 16px; gap: 12px; background: var(--jlc-surface); }
+        #jlc-wb .jlc-wb-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        #jlc-wb .jlc-wb-title { font-size: 18px; line-height: 1.3; font-weight: 600; letter-spacing: 0; }
+        #jlc-wb .jlc-wb-subtitle { font-size: 11px; letter-spacing: .6px; margin-top: 5px; }
+        #jlc-wb .jlc-wb-header-actions { flex-wrap: nowrap; gap: 6px; }
+        #jlc-wb .jlc-wb-icon-btn { width: 36px; height: 36px; border-radius: 8px; }
+        #jlc-wb .jlc-wb-header-actions .jlc-wb-btn { padding: 8px 10px; }
+        #jlc-wb.is-docked {
+            top: 0 !important; bottom: 0 !important; right: 0 !important; left: auto !important;
+            width: var(--jlc-dock-width) !important; height: 100dvh !important;
+            border-radius: 0; border-top: 0; border-bottom: 0; border-right: 0;
+            box-shadow: -8px 0 28px #34261a08;
+        }
+        #jlc-wb.is-docked .jlc-wb-header { cursor: default; }
+        #jlc-wb.is-docked .jlc-wb-resize-w, #jlc-wb.is-docked .jlc-wb-resize-h, #jlc-wb.is-docked .jlc-wb-resize-corner { display: none; }
+        #jlc-wb.is-docked .jlc-wb-filter-row { grid-template-columns: 1fr 1fr; }
+        #jlc-wb .jlc-wb-open-btn {
+            background: var(--jlc-soft); color: var(--jlc-accent); border: 1px solid var(--jlc-line);
+        }
+        #jlc-wb .jlc-wb-nav {
+            padding: 0 20px; gap: 24px; background: var(--jlc-surface);
+            border-bottom: 1px solid var(--jlc-line);
+        }
+        #jlc-wb .jlc-wb-nav button {
+            flex: 0 1 auto; padding: 12px 2px; border-radius: 0; font-size: 14px;
+            background: transparent; color: var(--jlc-muted); border-bottom: 2px solid transparent;
+        }
+        #jlc-wb .jlc-wb-nav button.active {
+            background: transparent; color: var(--jlc-accent); border-bottom-color: var(--jlc-accent); box-shadow: none;
+        }
+        #jlc-wb .jlc-wb-tracking-actions {
+            flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+            flex-direction: row; flex-wrap: wrap; gap: 8px; padding: 16px 16px 12px;
+        }
+        #jlc-wb .jlc-wb-tracking-actions > div { display: flex; gap: 6px; }
+        #jlc-wb .jlc-wb-footer-summary { max-width: none; font-size: 12px; }
+        #jlc-wb .jlc-wb-tracking-actions .jlc-wb-btn { padding: 8px 10px; font-size: 12px; }
+        #jlc-wb .jlc-wb-toolbar { padding: 0 16px 14px; gap: 10px; border-bottom: 1px solid var(--jlc-line); }
+        #jlc-wb .jlc-wb-toolbar-row { gap: 6px; }
+        #jlc-wb .jlc-wb-filter-row { display: grid; grid-template-columns: auto auto 1fr 1fr; }
+        #jlc-wb .jlc-wb-search { padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+        #jlc-wb .jlc-wb-chip, #jlc-wb select.jlc-wb-select { padding: 8px; font-size: 12px; min-width: 0; }
+        #jlc-wb .jlc-wb-chip.is-on {
+            background: #f1e4d6; border-color: #d7bfa7; color: #784326;
+        }
+        #jlc-wb .jlc-wb-list-scroll { padding: 4px 16px 32px; }
+        #jlc-wb .jlc-wb-group { margin-bottom: 12px; }
+        #jlc-wb .jlc-wb-group-toggle { font-size: 12px; padding: 12px 0 8px; }
+        #jlc-wb .jlc-wb-group-body { gap: 8px; }
+        #jlc-wb .jlc-wb-item-title { font-weight: 600; font-size: 14px; }
+        #jlc-wb .jlc-wb-open-btn {
+            min-width: 52px; padding: 8px 10px; border-radius: 7px; font-weight: 600;
+        }
+        #jlc-wb .jlc-wb-more-btn { width: 36px; height: 28px; }
+        #jlc-wb .jlc-site-pill.is-last { background: transparent; border-color: transparent; color: var(--jlc-muted); font-weight: 400; }
+        #jlc-wb .jlc-wb-settings-panel { width: 100%; border-left: 0; background: var(--jlc-bg); }
+        #jlc-wb .jlc-wb-settings-head { padding: 18px 20px; background: var(--jlc-surface); }
+        #jlc-wb .jlc-wb-settings-nav { background: var(--jlc-surface); gap: 8px; }
+        #jlc-wb .jlc-wb-settings-nav button { flex: 1; padding: 9px 6px; border-radius: 8px; }
+        #jlc-wb .jlc-wb-settings-footer { flex-direction: row; background: var(--jlc-surface); }
+        #jlc-wb .jlc-wb-settings-footer .jlc-wb-btn { width: auto; flex: 1; }
+        #jlc-wb .legacy-row.legacy-toggle {
+            border: 0; border-bottom: 1px solid var(--jlc-line); border-radius: 0;
+            background: transparent; padding: 12px 0; margin: 0; letter-spacing: 0;
+            display: flex; cursor: pointer;
+        }
+        #jlc-wb .jlc-wb-settings h3 { font-size: 14px; color: var(--jlc-text); letter-spacing: 0; }
+        #jlc-wb .jlc-wb-empty { margin-top: 12px; border-color: var(--jlc-line); background: var(--jlc-surface); }
+        #jlc-wb-dialog .jlc-wb-btn {
+            border: 1px solid var(--jlc-line); border-radius: 8px; padding: 10px 16px;
+            background: var(--jlc-bg); color: var(--jlc-text); cursor: pointer;
+        }
+        #jlc-wb-dialog .jlc-wb-btn.primary { background: var(--jlc-accent); border-color: transparent; color: white; }
+        @media (max-width: 820px) {
+            #jlc-wb { height: min(90dvh, 840px) !important; padding-bottom: env(safe-area-inset-bottom); }
+            #jlc-wb .jlc-wb-resize-w, #jlc-wb .jlc-wb-resize-h, #jlc-wb .jlc-wb-resize-corner { display: none; }
+            #jlc-wb-fab { width: auto; height: 44px; }
+            #jlc-wb .jlc-wb-header { padding: 16px; }
+            #jlc-wb .jlc-wb-nav { padding: 0 16px; }
+            #jlc-wb-layout-toggle { display: none; }
+        }
+        @media (max-width: 440px) {
+            #jlc-wb .jlc-wb-filter-row { grid-template-columns: 1fr 1fr; }
+            #jlc-wb .jlc-wb-tracking-actions { align-items: flex-start; }
+            #jlc-wb .jlc-wb-item-row { gap: 8px; }
+            #jlc-wb .jlc-wb-cover { width: 42px; height: 52px; border-radius: 8px; }
+            #jlc-wb .jlc-wb-item { padding: 10px; }
+        }
+        @media (pointer: coarse) {
+            #jlc-wb input:not([type=checkbox]):not([type=range]), #jlc-wb textarea, #jlc-wb select { font-size: 16px; }
+            #jlc-wb .jlc-wb-more-btn, #jlc-wb .jlc-wb-icon-btn { min-width: 40px; min-height: 40px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #jlc-wb *, #jlc-wb-fab { transition: none !important; animation: none !important; }
+        }
         #jlc-wb .jlc-wb-tag-editor {
             display: flex; flex-direction: column; gap: 8px;
         }
@@ -60,7 +223,6 @@
             display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 999px;
             background: var(--creamu-wb-surface-raised); border: 1px solid var(--creamu-wb-border-strong);
             color: var(--creamu-wb-text-strong); font-size: 12.5px; font-weight: 650;
-            box-shadow: 0 2px 0 var(--creamu-wb-divider);
         }
         #jlc-wb .jlc-wb-tag button {
             appearance: none; border: 0; background: transparent; color: #b09070;
@@ -70,7 +232,6 @@
         #jlc-wb .jlc-wb-tag-input {
             width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--creamu-wb-border);
             background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14px;
-            box-shadow: 0 2px 0 var(--creamu-wb-divider);
         }
         #jlc-wb .jlc-wb-tag-input:focus { outline: none; border-color: var(--creamu-wb-accent); }
         #jlc-wb .jlc-wb-settings-section #jlc-wb-view-root {
@@ -78,24 +239,20 @@
         }
         #jlc-wb #jlc-wb-config-diag {
             margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; line-height: 1.6;
-            background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
+            background: var(--creamu-wb-surface); border: 1px solid var(--jlc-line);
             color: var(--creamu-wb-text-strong);
-        }
-        #jlc-wb #jlc-wb-config-hint {
-            margin: 0; padding: 10px 12px; line-height: 1.5;
-            background: #fff7ea; border-bottom: 1px solid #f0d7a0; color: #9a6700;
         }
         #jlc-wb .jlc-wb-tracking-alert { color: #9a6700; font-size: 12px; }
         #jlc-wb .jlc-wb-virtual-note { color: #4f769c; font-size: 11px; }
         #jlc-tracking-pagebar.jlc-wb-pagebar {
-            background: rgba(255,253,248,.97); border: 1px solid var(--creamu-wb-border);
-            color: var(--creamu-wb-text); box-shadow: 0 10px 24px rgba(90,60,30,.12);
+            background: var(--jlc-surface); border: 1px solid var(--creamu-wb-border);
+            color: var(--creamu-wb-text); box-shadow: none;
         }
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-title {
             color: var(--creamu-wb-text);
         }
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagehint {
-            color: #a89078 !important; font-weight: 550; font-size: 12px;
+            color: var(--jlc-muted) !important; font-weight: 550; font-size: 12px;
         }
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-meta {
             color: var(--creamu-wb-text-muted);
@@ -103,16 +260,13 @@
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button {
             appearance: none; border: 1px solid var(--creamu-wb-border-strong);
             background: var(--creamu-wb-surface-soft); color: var(--creamu-wb-text-strong);
-            border-radius: 999px; padding: 7px 12px; cursor: pointer; font-size: 13px; font-weight: 650;
+            border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
             zoom: var(--jlc-btn-scale, 1);
         }
         #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.primary {
             background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent);
         }
-        #jlc-tracking-pagebar.jlc-wb-pagebar .jlc-tracking-pagebar-actions button.jlc-bp-continue {
-            background: linear-gradient(135deg, #ff5f56, #e54840); border: 0; color: var(--creamu-wb-on-accent);
-            font-weight: 800; box-shadow: 0 3px 0 #b8322b, 0 8px 18px rgba(255,95,86,.22);
-        }`;
+        `;
     }
 
     function initWorkbenchV3Styles() {
@@ -310,6 +464,7 @@
         const badge = fab.querySelector('.jlc-wb-fab-badge');
         const count = Number(updateCount || 0) || 0;
         fab.classList.toggle('has-updates', count > 0);
+        fab.setAttribute('aria-label', '打开 Creamu 控制台' + (count > 0 ? '，' + count + ' 项有更新' : ''));
         if (badge) badge.textContent = count > 99 ? '99+' : String(count);
     }
 
@@ -335,7 +490,11 @@
         if (!shell) return;
         const drawer = shell.querySelector('.jlc-wb-settings');
         if (!drawer) return;
+        const wasOpen = drawer.classList.contains('is-open');
         drawer.classList.toggle('is-open', !!open);
+        shell.querySelector('#jlc-wb-settings-btn')?.setAttribute('aria-expanded', String(!!open));
+        shell.querySelectorAll(':scope > .jlc-wb-header, :scope > .jlc-wb-nav, :scope > .jlc-wb-body')
+            .forEach(region => { region.inert = !!open; });
         const nextSection = normalizeWorkbenchSettingsTab(
             section || getWorkbenchSession().settingsSection || 'resource'
         );
@@ -346,6 +505,8 @@
         if (open && typeof activateWorkbenchSettingsTab === 'function') {
             activateWorkbenchSettingsTab(nextSection);
         }
+        if (open && !wasOpen) drawer.querySelector('#jlc-wb-settings-close')?.focus();
+        else if (!open && wasOpen && isWorkbenchOpen()) shell.querySelector('#jlc-wb-settings-btn')?.focus();
     }
 
     async function activateWorkbenchNav(nav = 'tracking', options = {}) {
@@ -355,6 +516,8 @@
         captureWorkbenchScroll();
         shell.querySelectorAll('.jlc-wb-nav button').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.nav === next);
+            if (btn.dataset.nav === next) btn.setAttribute('aria-current', 'page');
+            else btn.removeAttribute('aria-current');
         });
         shell.querySelectorAll('[data-jlc-wb-page]').forEach(page => {
             page.hidden = page.dataset.jlcWbPage !== next;
@@ -388,7 +551,8 @@
             let data = Array.isArray(Status.get(key)) ? Status.get(key).slice() : [];
             host.innerHTML = ''
                 + '<div class="jlc-wb-tag-list"></div>'
-                + '<input type="text" class="jlc-wb-tag-input" autocomplete="off" placeholder="'
+                + '<input type="text" class="jlc-wb-tag-input" autocomplete="off" aria-label="'
+                + (key === 'hiddenWord' ? '添加屏蔽标题词' : '添加屏蔽番号') + '" placeholder="'
                 + escapeHtml(host.getAttribute('data-placeholder') || '回车添加') + '">';
             const listEl = host.querySelector('.jlc-wb-tag-list');
             const input = host.querySelector('.jlc-wb-tag-input');
@@ -432,13 +596,7 @@
         const fav = document.getElementById('jlc-wb-i-fav');
         if (fav && fav.dataset.bound !== '1') {
             fav.dataset.bound = '1';
-            const saveFav = () => {
-                const list = String(fav.value || '').split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-                config.fav_tags = list;
-                try { GM_setValue('jlc_config_stable', config); } catch (_) { /* ignore */ }
-                try { if (typeof ensureCreamuSync === 'function') ensureCreamuSync()?.markLocalDirty(); } catch (_) { /* ignore */ }
-                try { if (typeof refreshCommanderDecorations === 'function') refreshCommanderDecorations(); } catch (_) { /* ignore */ }
-            };
+            const saveFav = () => setFavoriteTags(fav.value);
             fav.addEventListener('change', saveFav);
             fav.addEventListener('blur', saveFav);
         }
@@ -451,14 +609,29 @@
         captureWorkbenchScroll();
         shell.classList.remove('is-open');
         document.getElementById('jlc-wb-fab')?.classList.remove('is-panel-open');
+        document.getElementById('jlc-wb-fab')?.setAttribute('aria-expanded', 'false');
         persistWorkbenchSession({ panelOpen: false, settingsOpen: false });
+        applyWorkbenchShellGeometry({}, { skipPersist: true });
         setWorkbenchSettingsOpen(false);
+        document.getElementById('jlc-wb-fab')?.focus({ preventScroll: true });
     }
 
     function applyWorkbenchShellGeometry(patch = {}, options = {}) {
         const shell = getWorkbenchEl();
         if (!shell) return null;
         const session = getWorkbenchSession();
+        const docked = session.panelMode === 'dock' && window.innerWidth >= 1180;
+        shell.classList.toggle('is-docked', docked);
+        document.documentElement.classList.toggle('jlc-console-docked', docked && isWorkbenchOpen());
+        const dockWidth = Math.min(520, Math.max(380, window.innerWidth * .32));
+        document.documentElement.style.setProperty('--jlc-dock-width', dockWidth + 'px');
+        const layoutToggle = shell.querySelector('#jlc-wb-layout-toggle');
+        if (layoutToggle) {
+            layoutToggle.textContent = session.panelMode === 'dock' ? '浮窗' : '并排';
+            layoutToggle.setAttribute('aria-label', session.panelMode === 'dock' ? '切换为自由浮窗' : '切换为并排停靠');
+            layoutToggle.disabled = window.innerWidth < 1180;
+            layoutToggle.title = window.innerWidth < 1180 ? '窗口宽度达到 1180 像素后可并排' : '切换并排停靠与自由浮窗';
+        }
         const def = getCreamuDefaultWorkbenchRect(window);
         // 宽高只信任 session / 显式 patch，禁止用 live getBoundingClientRect 反写（会越拖越胀）
         const nextWidth = patch.width != null
@@ -504,18 +677,24 @@
         applyWorkbenchShellGeometry(patch);
     }
 
+    function writeWorkbenchFabPosition(fab, point) {
+        // Dragging and saved positions use viewport pixels; CSS zoom also scales left/top.
+        const zoom = Number.parseFloat(getComputedStyle(fab).zoom) || 1;
+        fab.style.left = point.left / zoom + 'px';
+        fab.style.top = point.top / zoom + 'px';
+        fab.style.right = 'auto';
+        fab.style.bottom = 'auto';
+    }
+
     function applyWorkbenchFabPosition(fab, session = getWorkbenchSession()) {
         if (!fab) return;
+        if (session.fabLeft == null || session.fabTop == null) return;
         const left = Number(session.fabLeft);
         const top = Number(session.fabTop);
         if (!Number.isFinite(left) || !Number.isFinite(top)) return;
-        const w = fab.offsetWidth || 34;
-        const h = fab.offsetHeight || 34;
-        const point = clampCreamuWorkbenchPoint({ left, top }, { width: w, height: h }, window);
-        fab.style.left = point.left + 'px';
-        fab.style.top = point.top + 'px';
-        fab.style.right = 'auto';
-        fab.style.bottom = 'auto';
+        const rect = fab.getBoundingClientRect();
+        const point = clampCreamuWorkbenchPoint({ left, top }, rect, window);
+        writeWorkbenchFabPosition(fab, point);
     }
 
     function bindWorkbenchFabDrag(fab) {
@@ -525,12 +704,7 @@
             boundKey: 'jlcFabDragBound',
             threshold: 5,
             thresholdMode: 'axis',
-            applyPosition: (point) => {
-                fab.style.left = point.left + 'px';
-                fab.style.top = point.top + 'px';
-                fab.style.right = 'auto';
-                fab.style.bottom = 'auto';
-            },
+            applyPosition: (point) => writeWorkbenchFabPosition(fab, point),
             savePosition: (point) => {
                 persistWorkbenchSession({
                     fabLeft: Math.round(point.left),
@@ -557,7 +731,7 @@
     function bindWorkbenchDrag(shell) {
         bindCreamuWorkbenchDrag(shell, {
             boundKey: 'jlcPanelDragBound',
-            isDragDisabled: () => window.innerWidth <= 820,
+            isDragDisabled: () => window.innerWidth <= 820 || shell.classList.contains('is-docked'),
             shouldIgnoreDrag: (event) => !!event.target?.closest?.('.jlc-wb-header-actions'),
             getStartRect: () => getWorkbenchInteractionRect(shell),
             applyRect: (rect) => applyWorkbenchShellGeometry(rect, { skipPersist: true }),
@@ -570,7 +744,7 @@
         bindCreamuWorkbenchResize(shell, {
             boundKey: 'jlcPanelResizeBound',
             handleBoundPrefix: 'jlcResizeHandle',
-            isDragDisabled: () => window.innerWidth <= 820,
+            isDragDisabled: () => window.innerWidth <= 820 || shell.classList.contains('is-docked'),
             getStartRect: () => getWorkbenchInteractionRect(shell),
             applyRect: (rect) => applyWorkbenchShellGeometry(rect, { skipPersist: true }),
             onEnd: (rect) => applyWorkbenchShellGeometry(rect),

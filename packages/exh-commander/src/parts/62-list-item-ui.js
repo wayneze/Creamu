@@ -6,8 +6,9 @@
       return;
     }
     const host =
+      el.querySelector('.exc-badge-container .exc-meta-overlay') ||
       preferredHost ||
-      el.querySelector('.exc-cover-host, .glthumb, .gl1e, .gl3t, a[href*="/g/"]') ||
+      el.querySelector('.exc-cover-host, .glthumb, .gl1e, .gl3t, .glname') ||
       el;
     if (!marker) {
       marker = document.createElement('span');
@@ -23,27 +24,25 @@
       el.classList.remove('is-exc-breakpoint', 'is-exc-bp-proxy', 'is-exc-bp-locating');
       if (typeof syncListLastSeenMarker === 'function') syncListLastSeenMarker(el, false);
       const btn = el.querySelector && el.querySelector('[data-exc-act="breakpoint"]');
-      if (btn) btn.classList.remove('is-on', 'is-bp');
+      if (btn) {
+        btn.classList.remove('is-on', 'is-bp');
+        btn.textContent = '设为断点';
+      }
     });
   }
 
-  function insertTrackingBreakpointDivider(beforeEl, text) {
-    if (!beforeEl || !beforeEl.parentNode) return null;
-    const existing = document.querySelector('.exc-tracking-divider');
-    if (existing) existing.remove();
-    const tagName = beforeEl.tagName === 'TR' ? 'tr' : 'div';
-    const divider = document.createElement(tagName);
+  function insertTrackingBreakpointDivider(row, text, after) {
+    if (!row || !row.parentNode || row.tagName !== 'TR') return null;
+    const divider = document.createElement('tr');
     divider.className = 'exc-tracking-divider';
-    if (tagName === 'tr') {
-      const cell = document.createElement('td');
-      const span = Math.max(1, beforeEl.children ? beforeEl.children.length : 1);
-      cell.colSpan = span;
-      cell.textContent = text;
-      divider.appendChild(cell);
-    } else {
-      divider.textContent = text;
-    }
-    beforeEl.parentNode.insertBefore(divider, beforeEl);
+    const cell = document.createElement('td');
+    cell.colSpan = Math.max(1, row.children.length);
+    const label = document.createElement('div');
+    label.className = 'exc-tracking-divider-label';
+    label.textContent = text;
+    cell.appendChild(label);
+    divider.appendChild(cell);
+    row.parentNode.insertBefore(divider, after ? row.nextSibling : row);
     return divider;
   }
 
@@ -61,7 +60,10 @@
     if (opts.locating) hit.el.classList.add('is-exc-bp-locating');
     if (hit.proxy) hit.el.classList.add('is-exc-bp-proxy');
     const btn = hit.el.querySelector && hit.el.querySelector('[data-exc-act="breakpoint"]');
-    if (btn && hit.kind === 'exact') btn.classList.add('is-on', 'is-bp');
+    if (btn && hit.kind === 'exact') {
+      btn.classList.add('is-on', 'is-bp');
+      btn.textContent = '当前断点';
+    }
     syncListLastSeenMarker(hit.el, true);
     const label =
       hit.kind === 'exact'
@@ -69,26 +71,10 @@
         : hit.kind === 'older'
           ? '断点已下架，停在后面这部'
           : '断点已下架，停在前面这部';
-    if (hit.kind === 'newer' && !hit.el.nextElementSibling && hit.el.parentNode) {
-      const existing = document.querySelector('.exc-tracking-divider');
-      if (existing) existing.remove();
-      const tagName = hit.el.tagName === 'TR' ? 'tr' : 'div';
-      const divider = document.createElement(tagName);
-      divider.className = 'exc-tracking-divider';
-      if (tagName === 'tr') {
-        const cell = document.createElement('td');
-        cell.colSpan = Math.max(1, hit.el.children ? hit.el.children.length : 1);
-        cell.textContent = label;
-        divider.appendChild(cell);
-      } else {
-        divider.textContent = label;
-      }
-      hit.el.parentNode.appendChild(divider);
-    } else {
-      const dividerHost =
-        hit.kind === 'newer' && hit.el.nextElementSibling ? hit.el.nextElementSibling : hit.el;
-      insertTrackingBreakpointDivider(dividerHost, label);
-    }
+    // 网格用红框和封面标记定位，不插入整行分隔而打断紧凑排列。
+    const marker = hit.el.querySelector('.exc-last-seen-mark');
+    if (marker) marker.title = label;
+    insertTrackingBreakpointDivider(hit.el, label, hit.kind === 'newer');
     return hit;
   }
 
@@ -129,7 +115,7 @@
     if (!streamBox) {
       streamBox = document.createElement('div');
       streamBox.className = 'exc-tag-stream';
-      el.appendChild(streamBox);
+      (el.querySelector('.exc-cover-host, .glname') || el).appendChild(streamBox);
     }
     if (config.list_show_tag_stream === false || typeof pickHighlightTags !== 'function') {
       streamBox.innerHTML = '';
@@ -177,7 +163,7 @@
       }
     }
 
-    if (streamTags.length === 0) {
+    if (streamTags.length === 0 && !el.querySelector('.cs, .cn')) {
       const cat = (edition && edition.category) || (partial && partial.category);
       if (cat && !/^(misc|other)$/i.test(cat)) {
         streamTags.push({ t: cat, cls: 'stream', title: '分类: ' + cat });
@@ -266,40 +252,33 @@
     );
     if (inLib) el.classList.add('is-exc-lib');
 
-    // 封面 host：点过/库内描边仍打在图上
-    let coverHost =
-      el.querySelector('.glthumb') ||
-      el.querySelector('td.gl1e') ||
-      el.querySelector('.gl3t');
-    if (!(coverHost && coverHost.querySelector && coverHost.querySelector('img'))) {
+    // 封面承载状态与标签；紧凑表格把标记放在标题所在单元格，避免非法 tr 子节点。
+    const compactRow = el.matches('tr') && !!el.querySelector('.gl2c, .gl2m');
+    let coverHost = compactRow ? null :
+      el.querySelector('.glthumb') || el.querySelector('td.gl1e') || el.querySelector('.gl3t');
+    if (!compactRow && !(coverHost && coverHost.querySelector && coverHost.querySelector('img'))) {
       const img = el.querySelector('img');
       if (img) {
         coverHost = img.closest('a[href*="/g/"], .glthumb, td.gl1e, .gl3t') || img;
       }
     }
     if (coverHost === el) coverHost = null;
+    if (coverHost?.matches('a, img')) coverHost = coverHost.parentElement;
+    if (coverHost === el) coverHost = null;
     if (coverHost && coverHost.nodeType === 1) {
       coverHost.classList.add('exc-cover-host');
       const cs = window.getComputedStyle(coverHost);
       if (cs.position === 'static') coverHost.style.position = 'relative';
     }
+    applyListCardLayout(el);
     bindListHoverPreview(el, partial);
 
-    // 徽章左上 + 标签流左下，都挂卡片框
-    const badgeHost = el;
+    const badgeHost = coverHost || el.querySelector('.glname') || el.lastElementChild || el;
     if (badgeHost && badgeHost.nodeType === 1) {
-      badgeHost.classList.add('exc-card-badge-host');
+      badgeHost.classList.toggle('exc-inline-meta', !coverHost);
       const cs = window.getComputedStyle(badgeHost);
       if (cs.position === 'static') badgeHost.style.position = 'relative';
     }
-    try {
-      if (coverHost) {
-        coverHost
-          .querySelectorAll(':scope > .exc-badge-container, :scope > .exc-tag-stream')
-          .forEach((n) => n.remove());
-      }
-    } catch (_) { /* ignore */ }
-
     const ensureBox = (cls) => {
       let box = badgeHost && badgeHost.querySelector(':scope > .' + cls);
       if (badgeHost && !box) {
@@ -424,11 +403,12 @@
 
     renderListItemTagStream(el, edition, partial);
 
-    let tools = coverHost && coverHost.querySelector(':scope > .exc-tool-bar');
-    if (coverHost && !tools) {
+    const toolsHost = el.tagName === 'TR' ? el.querySelector('.glname') || el.lastElementChild : el;
+    let tools = toolsHost.querySelector(':scope > .exc-tool-bar');
+    if (!tools) {
       tools = document.createElement('div');
       tools.className = 'exc-tool-bar';
-      coverHost.appendChild(tools);
+      toolsHost.appendChild(tools);
     }
     if (tools) {
       const blockOn = work && work.blocked;
@@ -514,20 +494,36 @@
         } catch (_) { /* ignore */ }
       }
       syncListLastSeenMarker(el, isBpWork, coverHost);
-      // 作品级断点按钮：封面右下角「断」——不是顶栏整页断点
+      // 常用断点直达，其余操作用原生 popover，避免被封面或列表裁切。
       const bpBtn =
         pageCtx && pageCtx.trackable
           ? '<button type="button" class="exc-tool-btn' +
             (isBpWork ? ' is-on is-bp' : '') +
-            '" data-exc-act="breakpoint" title="设为追更断点（本作品）">断</button>'
+            '" data-exc-act="breakpoint" title="设为追更断点（本作品）">' +
+            (isBpWork ? '当前断点' : '设为断点') + '</button>'
           : '';
+      const menuId = 'exc-card-menu-' + edition.gid;
       tools.innerHTML =
         bpBtn +
-        '<button type="button" class="exc-tool-btn" data-exc-act="best" title="最佳版">↗</button>' +
-        '<button type="button" class="exc-tool-btn" data-exc-act="bind" title="绑定 LRR">📦</button>' +
+        '<button type="button" class="exc-tool-btn exc-more-btn" popovertarget="' + menuId + '" aria-expanded="false">更多 ···</button>' +
+        '<div class="exc-card-menu" id="' + menuId + '" popover="auto" aria-label="作品操作">' +
+        '<button type="button" class="exc-tool-btn" data-exc-act="best" autofocus>打开最佳版</button>' +
+        '<button type="button" class="exc-tool-btn" data-exc-act="bind">绑定 LRR</button>' +
         '<button type="button" class="exc-tool-btn' +
         (blockOn ? ' is-block is-on' : '') +
-        '" data-exc-act="drop" title="抛弃/屏蔽此单本">✕</button>';
+        '" data-exc-act="drop">' + (blockOn ? '取消屏蔽' : '抛弃 / 屏蔽') + '</button></div>';
+      const menu = tools.querySelector('.exc-card-menu');
+      const more = tools.querySelector('.exc-more-btn');
+      menu.addEventListener('toggle', () => {
+        const open = menu.matches(':popover-open');
+        more.setAttribute('aria-expanded', String(open));
+        if (!open) return;
+        const anchor = more.getBoundingClientRect();
+        const rect = menu.getBoundingClientRect();
+        menu.style.left = Math.max(8, Math.min(window.innerWidth - rect.width - 8, anchor.right - rect.width)) + 'px';
+        menu.style.top = Math.max(8, anchor.bottom + rect.height + 8 <= window.innerHeight
+          ? anchor.bottom + 4 : anchor.top - rect.height - 4) + 'px';
+      });
 
       tools.onclick = async (ev) => {
         const btn = ev.target && ev.target.closest && ev.target.closest('[data-exc-act]');
@@ -535,6 +531,7 @@
         ev.preventDefault();
         ev.stopPropagation();
         const act = btn.getAttribute('data-exc-act');
+        if (menu.matches(':popover-open')) menu.hidePopover();
         try {
           if (act === 'breakpoint') {
             const ctx = parseExhPageContext(location.href);

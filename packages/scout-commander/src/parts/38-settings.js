@@ -3,6 +3,12 @@ function setScoutSettingsOpen(open, tab) {
   const drawer = document.getElementById('jlc-wb-settings');
   if (!drawer) return;
   drawer.classList.toggle('is-open', !!open);
+  const wb = document.getElementById('jlc-wb');
+  wb.querySelector('.jlc-wb-body').inert = !!open;
+  wb.querySelector('.jlc-wb-nav').inert = !!open;
+  wb.querySelector('#scout-workbench-context').inert = !!open;
+  if (open) { scoutDrawerExpanded = true; applyScoutWorkbenchGeometry(wb); }
+  (open ? drawer.querySelector('#jlc-wb-settings-close') : wb.querySelector('#scout-wb-settings-btn'))?.focus();
   if (open) {
     renderScoutSettingsSection(tab || 'overview');
   }
@@ -49,13 +55,12 @@ function renderSettingsPage(section) {
       <h3>站点界面</h3>
       <div class="legacy-row">
         <label class="legacy-toggle">
-          <span>站点奶油主题</span>
+          <span>站点协调主题</span>
           <input type="checkbox" id="scout-cfg-cream-site" ${cfg.cream_site_theme !== false ? 'checked' : ''}>
         </label>
       </div>
       <div class="legacy-note scout-settings-note is-compact">
-        开启后重绘三站底色、顶栏、列表卡片（非统一奶油）。<br>
-        <b>xvideos 暖红 · xnxx 冷蓝 · eporner 叶绿</b>。卡片用站点色，不用白底。关闭=原生样式。
+        XVideos 使用柔和浅色；XNXX、Eporner 保留深色。控制台与当前站点协调，关闭后恢复原站页面。
       </div>
       <h3 class="scout-settings-subheading">浏览</h3>
       <div class="legacy-row">
@@ -64,7 +69,7 @@ function renderSettingsPage(section) {
           <input type="checkbox" id="scout-cfg-open-new-tab" ${cfg.open_videos_new_tab !== false ? 'checked' : ''}>
         </label>
       </div>
-      <div class="legacy-note scout-settings-note">开启后列表点影片在新标签打开，不离开当前搜索页。组合搜索同样用新标签。</div>
+      <div class="legacy-note scout-settings-note">开启后列表点影片在新标签打开，不离开当前搜索页。控制台搜索在桌面打开新标签，手机在当前页面继续。</div>
       <div class="legacy-row scout-settings-spaced-row">
         <label class="legacy-toggle">
           <span>关闭站点自动预览</span>
@@ -73,7 +78,7 @@ function renderSettingsPage(section) {
       </div>
       <div class="legacy-note scout-settings-note is-compact">
         关闭站点列表自动播放预览，减轻下滑卡顿。<br>
-        点缩略图的手动预览仍可用。
+        封面上的“预览”按钮仍可用，点封面始终进入详情。
       </div>
     `;
   } else if (sec === 'overview') {

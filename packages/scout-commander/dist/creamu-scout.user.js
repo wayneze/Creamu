@@ -2,7 +2,7 @@
 // @name         Creamu · Scout
 // @name:zh-CN   Creamu · Scout
 // @namespace    https://github.com/wayneze/Creamu
-// @version      0.1.6
+// @version      0.2.2
 // @description  Creamu：欧美发现工作台；组合模板；词库采集；屏蔽；搜索追更断点；导入导出
 // @author       wayneze
 // @match        *://*.xvideos.com/*
@@ -137,7 +137,7 @@ function tagTextFromAnchor(a) {
       const c = a.cloneNode(true);
       if (c.querySelectorAll) {
         c.querySelectorAll(
-          '.scout-tag-addon, .scout-tag-heart, .scout-pub-addon, button, input'
+          '.scout-tag-heart, .scout-pub-addon, button, input'
         ).forEach((n) => n.remove());
       }
       return sanitizeLexiconText(c.textContent || '');
@@ -1390,13 +1390,22 @@ function findTrackBySiteQuery(site, query) {
   const key = normalizeSearchQueryKey(query);
   if (!siteNorm || !key) return null;
   const tracks = getTracks();
+  const recipe = getScoutCurrentSearchRecipe();
+  const fingerprint = recipe ? scoutSearchRecipeFingerprint(recipe) : '';
   return (
     tracks.find(
       (t) =>
         t.site === siteNorm &&
-        normalizeSearchQueryKey(t.query) === key
+        normalizeSearchQueryKey(t.query) === key &&
+        (!fingerprint || t.recipe_fingerprint === fingerprint)
     ) || null
   );
+}
+
+function getScoutCurrentSearchRecipe() {
+  if (typeof location === 'undefined' || typeof parseScoutExactFilterLocation !== 'function') return null;
+  const parsed = parseScoutExactFilterLocation(location);
+  return parsed?.mode === 'browse' && parsed.scope === getScoutExactFilterSearchScope(location.href) ? parsed.recipe : null;
 }
 
 function addTrack({ site, query, label, url, recipe, recipe_id, probe_queries }) {
@@ -1588,13 +1597,13 @@ function addTracksForScoutRecipe(recipe, label, preparedPlan) {
     const probes = plan && Array.isArray(plan.probes)
       ? plan.probes.filter((probe) => probe.site === site)
       : [];
-    const primary = probes[0];
-    if (!primary || !primary.query) return;
+    const query = buildScoutBrowsingQuery(normalized, site);
+    if (!query) return;
     created.push(addTrack({
       site,
-      query: primary.query,
+      query,
       label: label || normalized.label || describeScoutSearchRecipe(normalized),
-      url: primary.url,
+      url: buildSearchUrl(site, query),
       recipe: normalized,
       recipe_id: normalized.id,
       probe_queries: probes
@@ -2028,11 +2037,12 @@ function normalizeScoutExactFilterRecipe(input) {
   return normalized;
 }
 
-function buildScoutExactFilterUrl(url, recipe) {
+function buildScoutExactFilterUrl(url, recipe, mode = 'exact') {
   const normalized = normalizeScoutExactFilterRecipe(recipe);
   if (!normalized) return String(url || '');
   const payload = {
     version: 1,
+    mode: mode === 'browse' ? 'browse' : 'exact',
     scope: getScoutExactFilterSearchScope(url),
     sites: normalized.sites,
     conditions: normalized.conditions.map((condition) => ({
@@ -2102,6 +2112,7 @@ function parseScoutExactFilterLocation(locationLike) {
   return {
     recipe,
     scope: compactText(payload.scope),
+    mode: payload.mode === 'browse' ? 'browse' : 'exact',
   };
 }
 
@@ -2441,6 +2452,14 @@ function buildScoutSearchProbeSets(recipe, site, maxProbes, availableTerms) {
     }));
   });
   return probes;
+}
+
+function buildScoutBrowsingQuery(recipe, site) {
+  const normalized = normalizeScoutSearchRecipe(recipe);
+  const required = normalized.conditions.filter(condition => condition.role === 'required');
+  const selected = required.length ? required : normalized.conditions.filter(condition => condition.role === 'preference');
+  const terms = getLexiconTerms();
+  return compileScoutSiteQuery(site, selected.map(condition => ({ ...condition, text: getScoutConditionVariants(condition, site, terms)[0] || condition.text })));
 }
 
 function buildScoutSearchPlan(recipe, options) {
@@ -3773,7 +3792,7 @@ function getCreamuWorkbenchCss(options = {}) {
             height: min(78vh, 800px); max-height: none; min-width: 360px; min-height: 280px;
             display: none; flex-direction: column; z-index: 999998; overflow: hidden;
             box-sizing: border-box;
-            background: var(--creamu-wb-bg); color: var(--creamu-wb-text); border-radius: 22px; border: 1px solid var(--creamu-wb-border);
+            background: var(--creamu-wb-bg); color: var(--creamu-wb-text); border-radius: var(--creamu-wb-panel-radius, 22px); border: 1px solid var(--creamu-wb-border);
             box-shadow: 0 18px 50px rgba(90,60,30,.22); font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
             font-size: 14.5px;
         }
@@ -3789,21 +3808,21 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-header .jlc-wb-header-actions,
         #jlc-wb .jlc-wb-header .jlc-wb-header-actions * { cursor: pointer; }
         #jlc-wb .jlc-wb-title { font-weight: 800; font-size: 18px; color: var(--creamu-wb-title); letter-spacing: .2px; }
-        #jlc-wb .jlc-wb-subtitle { font-size: 12px; color: #a08468; margin-top: 3px; }
+        #jlc-wb .jlc-wb-subtitle { font-size: 12px; color: var(--creamu-wb-secondary-ink, #a08468); margin-top: 3px; }
         #jlc-wb .jlc-wb-header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 
         #jlc-wb .jlc-wb-icon-btn, #jlc-wb .jlc-wb-chip, #jlc-wb .jlc-wb-btn {
             appearance: none; border: 1px solid var(--creamu-wb-border-strong); background: var(--creamu-wb-surface-soft); color: var(--creamu-wb-text-strong);
-            border-radius: 999px; cursor: pointer; font-size: 13px; line-height: 1.25; font-weight: 650;
+            border-radius: var(--creamu-wb-control-radius, 999px); cursor: pointer; font-size: 13px; line-height: 1.25; font-weight: 650;
         }
         #jlc-wb .jlc-wb-icon-btn {
             width: 34px; height: 34px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
-            background: var(--creamu-wb-surface-raised); font-size: 15px; box-shadow: 0 2px 0 var(--creamu-wb-control-shadow);
+            background: var(--creamu-wb-surface-raised); font-size: 15px; box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-control-shadow));
         }
-        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: var(--creamu-wb-surface-raised); box-shadow: 0 2px 0 var(--creamu-wb-control-shadow); }
-        #jlc-wb .jlc-wb-chip.is-on { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark); }
-        #jlc-wb .jlc-wb-btn { padding: 9px 13px; border-radius: 12px; box-shadow: 0 2px 0 #e0cdae; }
-        #jlc-wb .jlc-wb-btn.primary { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark); }
+        #jlc-wb .jlc-wb-chip { padding: 7px 12px; background: var(--creamu-wb-surface-raised); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-control-shadow)); }
+        #jlc-wb .jlc-wb-chip.is-on { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-accent-dark)); }
+        #jlc-wb .jlc-wb-btn { padding: 9px 13px; border-radius: 12px; box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 #e0cdae); }
+        #jlc-wb .jlc-wb-btn.primary { background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-accent-dark)); }
         #jlc-wb .jlc-wb-btn.ghost { background: var(--creamu-wb-surface-soft); }
         #jlc-wb .jlc-wb-btn.danger { background: #f3d5d0; border-color: #e8b8b0; color: #8a3a32; box-shadow: none; }
         #jlc-wb .jlc-wb-btn:hover, #jlc-wb .jlc-wb-icon-btn:hover, #jlc-wb .jlc-wb-chip:hover {
@@ -3821,7 +3840,7 @@ function getCreamuWorkbenchCss(options = {}) {
             font-size: 14px; font-weight: 700; transition: .18s; border-radius: 12px;
         }
         #jlc-wb .jlc-wb-nav button.active {
-            color: var(--creamu-wb-on-accent); background: var(--creamu-wb-accent); box-shadow: 0 2px 0 var(--creamu-wb-accent-dark);
+            color: var(--creamu-wb-on-accent); background: var(--creamu-wb-accent); box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 var(--creamu-wb-accent-dark));
         }
 
         #jlc-wb .jlc-wb-body {
@@ -3876,7 +3895,7 @@ function getCreamuWorkbenchCss(options = {}) {
 
         #jlc-wb .jlc-wb-search {
             flex: 1 1 180px; min-width: 0; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--creamu-wb-border);
-            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14.5px; box-shadow: 0 2px 0 #eadcc6;
+            background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 14.5px; box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 #eadcc6);
         }
         #jlc-wb .jlc-wb-search:focus { outline: none; border-color: var(--creamu-wb-accent); background: var(--creamu-wb-surface-raised); }
         #jlc-wb select.jlc-wb-select,
@@ -3892,7 +3911,7 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb select.jlc-wb-select {
             padding: 9px 11px; border-radius: 12px; border: 1px solid var(--creamu-wb-border); background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text); font-size: 13.5px;
-            box-shadow: 0 2px 0 #eadcc6;
+            box-shadow: var(--creamu-wb-control-elevation, 0 2px 0 #eadcc6);
         }
 
         #jlc-wb .jlc-wb-group {
@@ -3900,7 +3919,7 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-group-toggle {
             width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
-            background: transparent; color: #7a5a3c; border: 0; padding: 10px 6px 10px;
+            background: transparent; color: var(--creamu-wb-secondary-ink, #7a5a3c); border: 0; padding: 10px 6px 10px;
             cursor: pointer; font-size: 13.5px; font-weight: 750;
             border-radius: 0; margin: 0 0 2px; line-height: 1.35;
             min-height: 36px;
@@ -3916,19 +3935,19 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-group.collapsed .jlc-wb-group-body { display: none; }
 
         #jlc-wb .jlc-wb-item {
-            position: relative; border-radius: 18px; padding: 12px 12px 12px 12px;
-            background: var(--creamu-wb-surface); border: 1px solid #efe0cc; overflow: visible;
+            position: relative; border-radius: var(--creamu-wb-card-radius, 18px); padding: 12px;
+            background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-card-border, #efe0cc); overflow: visible;
             cursor: pointer; transition: border-color .12s ease, background .12s ease, box-shadow .12s ease, transform .12s ease;
-            box-shadow: 0 3px 0 #ead7bb;
+            box-shadow: var(--creamu-wb-card-elevation, 0 3px 0 #ead7bb);
         }
         #jlc-wb .jlc-wb-item:hover {
-            border-color: #e0c9a8; background: var(--creamu-wb-surface-raised);
-            box-shadow: 0 6px 16px rgba(120,80,30,.12); z-index: 3;
+            border-color: var(--creamu-wb-card-hover-border, #e0c9a8); background: var(--creamu-wb-surface-raised);
+            box-shadow: var(--creamu-wb-card-hover-elevation, 0 6px 16px rgba(120,80,30,.12)); z-index: 3;
         }
         #jlc-wb .jlc-wb-item::before { display: none; }
         #jlc-wb .jlc-wb-item.is-focus {
-            border-color: var(--creamu-wb-accent); box-shadow: 0 0 0 2px var(--creamu-wb-accent-ring), 0 4px 0 #e0c9a8;
-            background: #fff8ee;
+            border-color: var(--creamu-wb-accent); box-shadow: var(--creamu-wb-focus-elevation, 0 0 0 2px var(--creamu-wb-accent-ring), 0 4px 0 #e0c9a8);
+            background: var(--creamu-wb-focus-surface, #fff8ee);
         }
         #jlc-wb .jlc-wb-item.is-current { border-color: #8eb6e8; }
         /* 菜单打开时抬高整卡，避免被下方 Open 按钮盖住 */
@@ -4000,7 +4019,7 @@ function getCreamuWorkbenchCss(options = {}) {
             min-width: 0;
         }
         #jlc-wb .jlc-wb-item-meta-line.is-avid {
-            color: #7a6048; font-weight: 650;
+            color: var(--creamu-wb-secondary-ink, #7a6048); font-weight: 650;
         }
         #jlc-wb .jlc-wb-item-pills {
             display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
@@ -4013,12 +4032,12 @@ function getCreamuWorkbenchCss(options = {}) {
             appearance: none; border: 0; cursor: pointer;
             min-width: 64px; padding: 8px 14px; border-radius: 999px;
             background: linear-gradient(var(--creamu-wb-accent-light), var(--creamu-wb-accent)); color: var(--creamu-wb-on-accent); font-weight: 800; font-size: 13px;
-            box-shadow: 0 3px 0 var(--creamu-wb-accent-dark); transition: transform .12s ease, filter .12s ease;
+            box-shadow: var(--creamu-wb-control-elevation, 0 3px 0 var(--creamu-wb-accent-dark)); transition: transform .12s ease, filter .12s ease;
         }
         #jlc-wb .jlc-wb-open-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
-        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--creamu-wb-accent-dark); }
+        #jlc-wb .jlc-wb-open-btn:active { transform: translateY(1px); box-shadow: var(--creamu-wb-control-elevation, 0 1px 0 var(--creamu-wb-accent-dark)); }
         #jlc-wb .jlc-wb-more-btn {
-            appearance: none; border: 0; background: transparent; color: #b09070;
+            appearance: none; border: 0; background: transparent; color: var(--creamu-wb-secondary-ink, #b09070);
             width: 28px; height: 22px; border-radius: 8px; cursor: pointer; font-size: 16px; line-height: 1;
             font-weight: 800; letter-spacing: 1px;
         }
@@ -4040,14 +4059,14 @@ function getCreamuWorkbenchCss(options = {}) {
             padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--creamu-wb-text-strong);
             font-size: 13px; font-weight: 650;
         }
-        #jlc-wb .jlc-wb-item-menu button:hover { background: #f3e9d8; }
+        #jlc-wb .jlc-wb-item-menu button:hover { background: var(--creamu-wb-inset-surface, #f3e9d8); }
         #jlc-wb .jlc-wb-item-menu button.is-danger { color: var(--creamu-wb-danger); }
 
         #jlc-wb .jlc-status-pill, #jlc-wb .jlc-site-pill {
             display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px;
             font-size: 11.5px; font-weight: 700; border: 1px solid transparent;
         }
-        #jlc-wb .jlc-site-pill { background: #f3e9d8; color: var(--creamu-wb-text-subtle); border-color: #eadcc6; }
+        #jlc-wb .jlc-site-pill { background: var(--creamu-wb-inset-surface, #f3e9d8); color: var(--creamu-wb-text-subtle); border-color: var(--creamu-wb-divider); }
         #jlc-wb .jlc-site-pill.is-current { background: #e7f1ff; color: #175cd3; border-color: #c2dbff; }
         /* 上次：默认琥珀；按打开时效加深/减弱 */
         #jlc-wb .jlc-site-pill.is-last { background: #fff4db; color: #9a6700; border-color: #f0d7a0; }
@@ -4065,10 +4084,10 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-item-meta-line .jlc-wb-pagehint,
         #jlc-wb .jlc-wb-pagehint {
-            color: #a89078; font-weight: 550;
+            color: var(--creamu-wb-secondary-ink, #a89078); font-weight: 550;
         }
         #jlc-wb .jlc-wb-item-meta-line.is-sub {
-            color: #a89078; font-weight: 550;
+            color: var(--creamu-wb-secondary-ink, #a89078); font-weight: 550;
         }
         #jlc-wb .jlc-status-pill.tone-gray { background: var(--creamu-wb-surface-muted); color: var(--creamu-wb-text-subtle); }
         #jlc-wb .jlc-status-pill.tone-green { background: #e2f5e4; color: #2f6b3a; }
@@ -4081,8 +4100,8 @@ function getCreamuWorkbenchCss(options = {}) {
         }
 
         #jlc-wb .jlc-wb-view-block {
-            background: var(--creamu-wb-surface); border: 1px solid #efe0cc; border-radius: 16px; padding: 14px; margin-bottom: 14px;
-            box-shadow: 0 3px 0 #ead7bb;
+            background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-card-border, #efe0cc); border-radius: var(--creamu-wb-card-radius, 16px); padding: 14px; margin-bottom: 14px;
+            box-shadow: var(--creamu-wb-card-elevation, 0 3px 0 #ead7bb);
         }
         #jlc-wb .jlc-wb-view-title {
             font-size: 12px; color: var(--creamu-wb-accent); font-weight: 750; letter-spacing: .5px; margin: 0 0 12px;
@@ -4138,7 +4157,7 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .jlc-wb-settings.is-open { display: block; }
         #jlc-wb .jlc-wb-settings-panel {
             position: absolute; top: 0; right: 0; width: min(100%, 430px); height: 100%;
-            display: flex; flex-direction: column; background: var(--creamu-wb-bg); border-left: 1px solid #e4d4bc;
+            display: flex; flex-direction: column; background: var(--creamu-wb-bg); border-left: 1px solid var(--creamu-wb-border);
         }
         #jlc-wb .jlc-wb-settings-head {
             flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center;
@@ -4146,11 +4165,11 @@ function getCreamuWorkbenchCss(options = {}) {
         }
         #jlc-wb .jlc-wb-settings-nav {
             flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 14px;
-            border-bottom: 1px solid var(--creamu-wb-divider); background: #f3e9d8;
+            border-bottom: 1px solid var(--creamu-wb-divider); background: var(--creamu-wb-inset-surface, #f3e9d8);
         }
         #jlc-wb .jlc-wb-settings-nav button {
             appearance: none; border: 1px solid var(--creamu-wb-border-strong); background: var(--creamu-wb-surface-raised); color: var(--creamu-wb-text-subtle);
-            border-radius: 999px; padding: 8px 12px; cursor: pointer; font-size: 13.5px; font-weight: 700;
+            border-radius: var(--creamu-wb-control-radius, 999px); padding: 8px 12px; cursor: pointer; font-size: 13.5px; font-weight: 700;
         }
         #jlc-wb .jlc-wb-settings-nav button.active {
             background: var(--creamu-wb-accent); border-color: transparent; color: var(--creamu-wb-on-accent);
@@ -4213,7 +4232,7 @@ function getCreamuWorkbenchCss(options = {}) {
             border-color: var(--creamu-wb-accent); outline: none; background: var(--creamu-wb-surface-raised);
         }
         #jlc-wb .stat-box {
-            display: flex; justify-content: space-around; background: var(--creamu-wb-surface); border: 1px solid #efe0cc;
+            display: flex; justify-content: space-around; background: var(--creamu-wb-surface); border: 1px solid var(--creamu-wb-card-border, #efe0cc);
             border-radius: 14px; padding: 14px; margin-bottom: 14px;
         }
         #jlc-wb .stat-item { text-align: center; }
@@ -4221,10 +4240,10 @@ function getCreamuWorkbenchCss(options = {}) {
         #jlc-wb .stat-item span { font-size: 11px; color: var(--creamu-wb-text-muted); }
         #jlc-wb .person-item {
             background: var(--creamu-wb-surface); padding: 12px 14px; border-radius: 12px; margin-bottom: 8px;
-            display: flex; justify-content: space-between; align-items: center; border: 1px solid #efe0cc; font-size: 14px;
+            display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--creamu-wb-card-border, #efe0cc); font-size: 14px;
             color: var(--creamu-wb-text);
         }
-        #jlc-wb .person-item:hover { border-color: #e0c9a8; background: var(--creamu-wb-surface-raised); }
+        #jlc-wb .person-item:hover { border-color: var(--creamu-wb-card-hover-border, #e0c9a8); background: var(--creamu-wb-surface-raised); }
         #jlc-wb .person-item span.remove { color: var(--creamu-wb-accent); cursor: pointer; font-size: 18px; padding: 0 8px; }
 
         #jlc-wb .jlc-wb-resize-w {
@@ -4583,8 +4602,7 @@ function bindCreamuFabDrag(fab, options = {}) {
     }
     if (!moved) return;
     callCreamuPreventDefault(event);
-    const width = fab.offsetWidth || 34;
-    const height = fab.offsetHeight || 34;
+    const { width, height } = getCreamuInteractionRect(fab);
     const next = clampCreamuWorkbenchPoint(
       { left: origin.left + dx, top: origin.top + dy },
       { width, height },
@@ -4617,6 +4635,9 @@ function bindCreamuFabDrag(fab, options = {}) {
 
   const onDown = (event) => {
     if (!isCreamuPrimaryPointer(event) || isDragDisabled(event) || shouldIgnoreDrag(event)) return;
+    // Own the gesture before the browser can start a native link/image drag underneath the FAB.
+    callCreamuPreventDefault(event);
+    fab.focus?.({ preventScroll: true });
     active = true;
     moved = false;
     startPoint = getCreamuClientPoint(event);
@@ -5415,6 +5436,23 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
   }
 // 20-sites.js
 
+function getScoutPageTagSelector(site) {
+  if (site === 'xvideos' || site === 'xnxx') {
+    return (
+      '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
+      '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a'
+    );
+  }
+  if (site === 'eporner') {
+    return (
+      '#video-info-tags .vit-category a, #video-info-tags .vit-pornstar a, ' +
+      '#video-info-tags a[href^="/tag/"], #video-info-tags a[href^="/cat/"], #video-tags a, .tag-container a'
+    );
+  }
+  return '';
+}
+
+
 /**
  * 列表卡选标题链接（跳过仅缩略图的空 <a>，避免标签流整卡跳过）。
  */
@@ -5712,8 +5750,7 @@ const SITE_ADAPTERS = {
       const tags = [];
       const seen = new Set();
       doc.querySelectorAll(
-        '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
-        '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a'
+        getScoutPageTagSelector('xvideos')
       ).forEach((a) => {
         const txt =
           typeof tagTextFromAnchor === 'function'
@@ -5829,15 +5866,14 @@ const SITE_ADAPTERS = {
     scrapeVideoMeta(sourceDocument, pageUrl) {
       const doc = sourceDocument || document;
       const href = pageUrl || location.href;
-      const titleEl = doc.querySelector('h2.page-title') || doc.querySelector('.video-metadata .title') || doc.querySelector('title');
+      const titleEl = doc.querySelector('#video-content-metadata .video-title strong') || doc.querySelector('#video-content-metadata .video-title') || doc.querySelector('h2.page-title') || doc.querySelector('.video-metadata .title') || doc.querySelector('title');
       let title = titleEl ? titleEl.textContent.trim() : '';
       title = title.replace(/\s*\d+\s*min\s*/gi, ' ').replace(/\s*\d+p\s*/gi, ' ').replace(/\s+/g, ' ').trim();
       
       const tags = [];
       const seen = new Set();
       doc.querySelectorAll(
-        '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
-        '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a, .tags a'
+        getScoutPageTagSelector('xnxx')
       ).forEach((a) => {
         const txt =
           typeof tagTextFromAnchor === 'function'
@@ -5977,8 +6013,7 @@ const SITE_ADAPTERS = {
       const seen = new Set();
       doc
         .querySelectorAll(
-          'a[href^="/tag/"], a[href^="/cat/"], .vit-pornstar a, .vit-category a, ' +
-            '#video-tags a, .tag-container a, a.tag'
+          getScoutPageTagSelector('eporner')
         )
         .forEach((a) => {
           const txt =
@@ -6005,7 +6040,7 @@ const SITE_ADAPTERS = {
       const thumb = pickDetailThumbUrl(doc, href);
 
       const uploaderEl = doc.querySelector(
-        'a[href*="/profile/"][title="Uploader"], a[href*="/profile/"], ' +
+        '#video-info-tags .vit-uploader a, a[href*="/profile/"][title="Uploader"], ' +
           '.publisher-name, a[href*="/channel/"], .post-channel a'
       );
       const uploader = uploaderEl ? uploaderEl.textContent.trim() : '';
@@ -6706,11 +6741,11 @@ function getScoutWorkbenchThemeCss() {
         :root {
           --scout-theme-color: #d4883a;
           --scout-theme-dark: #b56e28;
-          --scout-theme-light: #fffdf8;
+          --scout-theme-light: #f0f1eb;
           --scout-theme-shadow: rgba(212, 136, 58, 0.22);
           --scout-bg-clean: #fafafa;
           --scout-card-bg: #ffffff;
-          --scout-text-color: #4a3728;
+          --scout-text-color: #343b36;
         }
         /* 三站分色：工作台 + 列表卡片（卡片禁止纯白，避免三站长一样） */
         body.creamu-site-xvideos {
@@ -6741,16 +6776,44 @@ function getScoutWorkbenchThemeCss() {
           --scout-text-color: #12301c;
         }
 
-        :where(#jlc-wb, #jlc-wb-fab, #jlc-wb-dialog, #jlc-tracking-pagebar) {
+        :where(#jlc-wb, #jlc-wb-fab, #scout-collect-dialog) {
+          --scout-ui-bg: var(--scout-page-bg, #e6e8e2);
+          --scout-ui-surface: var(--scout-page-panel, #f0f1eb);
+          --scout-ui-muted: var(--scout-card, #e1e4da);
+          --scout-ui-text: var(--scout-text-color, #343b36);
+          --scout-ui-subtle: var(--scout-text-muted, #727b70);
+          --scout-ui-line: var(--scout-page-border, #cbd0c5);
+          --creamu-wb-bg: var(--scout-ui-bg);
+          --creamu-wb-surface: var(--scout-ui-surface);
+          --creamu-wb-surface-soft: var(--scout-ui-bg);
+          --creamu-wb-surface-muted: var(--scout-ui-muted);
+          --creamu-wb-surface-raised: var(--scout-ui-surface);
+          --creamu-wb-inset-surface: var(--scout-ui-muted);
+          --creamu-wb-text: var(--scout-ui-text);
+          --creamu-wb-text-strong: var(--scout-ui-text);
+          --creamu-wb-title: var(--scout-ui-text);
+          --creamu-wb-text-muted: var(--scout-ui-subtle);
+          --creamu-wb-text-subtle: var(--scout-ui-subtle);
+          --creamu-wb-secondary-ink: var(--scout-ui-subtle);
+          --creamu-wb-border: var(--scout-ui-line);
+          --creamu-wb-border-strong: var(--scout-ui-line);
+          --creamu-wb-divider: var(--scout-ui-line);
+          --creamu-wb-card-border: var(--scout-ui-line);
+          --creamu-wb-card-hover-border: var(--scout-link, #7c8e72);
           --creamu-wb-accent: var(--scout-theme-color);
-          --creamu-wb-accent-hover: var(--scout-theme-color);
+          --creamu-wb-accent-hover: var(--scout-theme-dark);
           --creamu-wb-accent-light: var(--scout-theme-color);
           --creamu-wb-accent-dark: var(--scout-theme-dark);
-          --creamu-wb-accent-shadow: var(--scout-theme-shadow);
-          --creamu-wb-accent-shadow-soft: var(--scout-theme-shadow);
           --creamu-wb-accent-ring: var(--scout-theme-shadow);
-          --creamu-wb-accent-overlay: color-mix(in srgb, var(--scout-theme-color) 28%, transparent);
-          --creamu-wb-accent-overlay-soft: color-mix(in srgb, var(--scout-theme-color) 18%, transparent);
+          --creamu-wb-accent-overlay: color-mix(in srgb, var(--scout-theme-color) 25%, transparent);
+          --creamu-wb-accent-overlay-soft: color-mix(in srgb, var(--scout-theme-color) 10%, transparent);
+          --creamu-wb-control-radius: 7px;
+          --creamu-wb-panel-radius: 14px;
+          --creamu-wb-card-radius: 8px;
+          --creamu-wb-control-elevation: none;
+          --creamu-wb-card-elevation: none;
+          --creamu-wb-card-hover-elevation: none;
+          color-scheme: var(--scout-color-scheme, light);
         }
 
         /*
@@ -6795,24 +6858,41 @@ function getScoutWorkbenchThemeCss() {
           pointer-events: none !important;
         }
 
-        /* 奶油工作台及 FAB 响应色（覆盖 shared 的固定橙） */
-        #jlc-wb-fab {
-          position: fixed !important;
-          z-index: 2147483000 !important;
-          background: linear-gradient(var(--creamu-wb-accent), var(--creamu-wb-accent-dark)) !important;
-          background-color: var(--creamu-wb-accent) !important;
-          box-shadow: 0 4px 0 var(--creamu-wb-accent-dark), 0 10px 20px var(--creamu-wb-accent-shadow) !important;
-          visibility: visible !important;
-          opacity: 1 !important;
-          pointer-events: auto !important;
-          display: flex !important;
+        html.scout-console-docked body { padding-right: calc(var(--scout-dock-width) + 16px) !important; box-sizing: border-box; min-width: 0 !important; }
+        html.scout-player-fullscreen :is(#jlc-wb-fab, #jlc-wb, #scout-search-track-bar) { display: none !important; }
+        #jlc-wb-fab { width: auto; min-width: 92px; height: 40px; padding: 0 10px 0 7px; gap: 7px; border-radius: 10px; border: 1px solid var(--scout-ui-line) !important; background: var(--scout-ui-surface) !important; color: var(--scout-ui-text) !important; box-shadow: 0 4px 20px #0002 !important; z-index: 1000002; font: 600 13px/1 'Segoe UI', sans-serif; }
+        #jlc-wb-fab.is-panel-open { display: none; }
+        .scout-brand-mark { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px 6px 6px 2px; background: var(--scout-theme-color); color: white; font: bold 18px/1 Georgia, serif; }
+        /* Eporner 的原生导航位于 1000000；控制台及入口必须在其上方。 */
+        #jlc-wb { min-width: 0; min-height: 0; text-align: left; outline: none; box-shadow: 0 12px 40px #0003; z-index: 1000001; }
+        #jlc-wb [hidden] { display: none !important; }
+        #jlc-wb :is(button, input, select, textarea) { font-family: inherit; line-height: 1.4; }
+        #jlc-wb :is(input, select, textarea) { scroll-margin-block: 8px; }
+        /* 按用途区分尺寸；窄屏不再把图标、标签和次级操作统一放大。 */
+        #jlc-wb .jlc-wb-btn { min-height: 32px; padding: 6px 10px; border-radius: 7px; }
+        #jlc-wb .jlc-wb-icon-btn { width: 32px; height: 32px; flex-shrink: 0; }
+        #jlc-wb .jlc-wb-chip { min-height: 30px; padding: 4px 9px; font-size: 12px; }
+        #jlc-wb .jlc-wb-search, #jlc-wb select.jlc-wb-select { min-height: 38px; padding: 6px 9px; border-radius: 7px; }
+        #jlc-wb :focus-visible, #jlc-wb-fab:focus-visible { outline: 2px solid var(--scout-theme-color); outline-offset: 2px; }
+        #jlc-wb .jlc-wb-header { padding: 12px 14px 8px; background: var(--scout-ui-surface); }
+        #jlc-wb .jlc-wb-title { font-size: 18px; font-weight: 650; }
+        #jlc-wb .jlc-wb-subtitle { font-size: 10px; }
+        #jlc-wb .jlc-wb-header-actions { gap: 6px; flex-wrap: nowrap; }
+        #jlc-wb .jlc-wb-header-actions .jlc-wb-btn { padding: 5px 8px; font-size: 11px; }
+        #jlc-wb .jlc-wb-nav { flex-wrap: wrap; gap: 0; padding: 0 12px; background: var(--scout-ui-surface); border-bottom: 1px solid var(--scout-ui-line); overflow: visible; }
+        #jlc-wb .jlc-wb-nav > button { flex: 1; min-height: 38px; padding: 6px 8px; background: transparent; border-radius: 0; border-bottom: 2px solid transparent; font-size: 13px; }
+        #jlc-wb .jlc-wb-nav button.active { color: var(--scout-link, var(--scout-theme-color)); border-bottom-color: var(--scout-theme-color); box-shadow: none; background: transparent; }
+        #jlc-wb .scout-secondary-nav { display: flex; width: 100%; gap: 6px; padding: 6px 0; border-top: 1px solid var(--scout-ui-line); }
+        #jlc-wb .scout-secondary-nav button { flex: 1; min-height: 32px; padding: 5px 8px; border-radius: 6px; }
+        #jlc-wb.is-docked { border-radius: 0; border-width: 0 0 0 1px; }
+        #jlc-wb.is-mobile { border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+        #jlc-wb:is(.is-mobile, .is-docked) :is(.jlc-wb-resize-w, .jlc-wb-resize-h, .jlc-wb-resize-corner) { display: none; }
+        #jlc-wb:is(.is-mobile, .is-docked) .jlc-wb-header { cursor: default; }
+        #jlc-wb .jlc-wb-settings-panel { width: 100%; background: var(--scout-ui-bg); }
+        @media (max-width: 820px) {
+          #jlc-wb input, #jlc-wb select, #scout-collect-dialog input, #scout-collect-dialog select { font-size: 16px !important; }
         }
-        #jlc-wb-fab:active, #jlc-wb-fab.is-dragging {
-          box-shadow: 0 2px 0 var(--creamu-wb-accent-dark), 0 4px 10px var(--creamu-wb-accent-shadow-soft) !important;
-        }
-        #scout-search-track-bar.scout-track-fab {
-          z-index: 2147483001 !important;
-        }
+        @media (prefers-reduced-motion: reduce) { #jlc-wb *, #jlc-wb-fab { transition: none !important; animation: none !important; } }
 
         /*
          * Scout 页面布局：shared 的 [data-jlc-wb-page] > * 会把所有子节点
@@ -6843,642 +6923,87 @@ function getScoutWorkbenchThemeCss() {
           height: 100%;
         }
 
-        /* 搜索页 */
-        #jlc-wb [data-jlc-wb-page="combo"] {
-          display: flex !important;
-          flex-direction: column !important;
-          min-width: 0 !important;
-          width: 100% !important;
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-        }
-        #jlc-wb .jlc-wb-list-scroll.scout-combo-scroll {
-          padding: 4px 14px 36px !important;
-          overflow-x: hidden !important;
-        }
-        #jlc-wb .scout-search-builder-head,
-        #jlc-wb .scout-search-results-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          min-width: 0;
-          padding: 8px 0 10px;
-        }
-        #jlc-wb .scout-search-builder-head > div:first-child,
-        #jlc-wb .scout-search-results-head > div:first-child {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          min-width: 0;
-        }
-        #jlc-wb .scout-search-builder-head strong,
-        #jlc-wb .scout-search-results-head strong {
-          color: #4a3728;
-          font-size: 14px;
-          letter-spacing: 0;
-        }
-        #jlc-wb .scout-search-builder-head span,
-        #jlc-wb .scout-search-results-head span {
-          overflow: hidden;
-          color: #876b52;
-          font-size: 11.5px;
-          line-height: 1.35;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        #jlc-wb .scout-search-role-switch,
-        #jlc-wb .scout-search-priority-switch {
-          display: inline-grid;
-          grid-auto-flow: column;
-          grid-auto-columns: minmax(44px, 1fr);
-          flex: 0 0 auto;
-          overflow: hidden;
-          border: 1px solid #dcc8aa;
-          border-radius: 7px;
-          background: #f4eadb;
-        }
-        #jlc-wb .scout-search-role-switch button,
-        #jlc-wb .scout-search-priority-switch button {
-          min-width: 0;
-          min-height: 30px;
-          padding: 5px 9px;
-          border: 0;
-          border-right: 1px solid #dcc8aa;
-          border-radius: 0;
-          background: transparent;
-          color: #72583f;
-          cursor: pointer;
-          font-size: 12px;
-          font-weight: 700;
-          letter-spacing: 0;
-        }
-        #jlc-wb .scout-search-role-switch button:last-child,
-        #jlc-wb .scout-search-priority-switch button:last-child {
-          border-right: 0;
-        }
-        #jlc-wb .scout-search-role-switch button.is-active,
-        #jlc-wb .scout-search-priority-switch button.is-active {
-          background: var(--scout-theme-color);
-          color: #fff;
-        }
-        #jlc-wb .scout-search-add-row {
-          display: flex;
-          align-items: stretch;
-          gap: 7px;
-          padding-bottom: 12px;
-        }
-        #jlc-wb .scout-search-add-row > .jlc-wb-search {
-          min-height: 36px;
-          padding: 7px 10px;
-          border-radius: 7px;
-          font-size: 13px;
-        }
-        #jlc-wb .scout-search-priority-switch[hidden] {
-          display: none !important;
-        }
-        #jlc-wb .scout-search-add-row > .jlc-wb-btn {
-          min-width: 60px;
-          min-height: 36px;
-          padding: 7px 11px;
-          border-radius: 7px;
-        }
-        #jlc-wb .scout-search-builder-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
-          border-top: 1px solid #eadac3;
-          border-bottom: 1px solid #eadac3;
-        }
-        #jlc-wb .scout-search-condition-column,
-        #jlc-wb .scout-search-pool-column {
-          min-width: 0;
-          padding: 12px 0;
-        }
-        #jlc-wb .scout-search-pool-column {
-          padding-left: 14px;
-          border-left: 1px solid #eadac3;
-        }
-        #jlc-wb .scout-search-condition-group + .scout-search-condition-group,
-        #jlc-wb .scout-search-related,
-        #jlc-wb .scout-search-current-tags {
-          margin-top: 12px;
-        }
-        #jlc-wb .scout-search-section-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          min-height: 24px;
-          margin-bottom: 5px;
-          color: #5d4632;
-          font-size: 12px;
-        }
-        #jlc-wb .scout-search-section-head strong {
-          font-size: 12px;
-          letter-spacing: 0;
-        }
-        #jlc-wb .scout-search-section-head span {
-          color: #9a7d60;
-          font-size: 11px;
-        }
-        #jlc-wb .scout-search-condition-list {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-        }
-        #jlc-wb .scout-search-condition {
-          display: grid;
-          grid-template-columns: minmax(72px, 1fr) 68px 64px 28px;
-          align-items: center;
-          gap: 5px;
-          min-height: 34px;
-          padding: 4px 5px 4px 8px;
-          border-left: 3px solid #9d8b76;
-          border-radius: 0 6px 6px 0;
-          background: #f8f1e7;
-        }
-        #jlc-wb .scout-search-condition.is-required { border-left-color: #2e70a8; }
-        #jlc-wb .scout-search-condition.is-preference { border-left-color: #2f8450; }
-        #jlc-wb .scout-search-condition.is-excluded { border-left-color: #b44940; }
-        #jlc-wb .scout-search-condition-text {
-          overflow: hidden;
-          min-width: 0;
-          color: #4a3728;
-          font-size: 12px;
-          font-weight: 650;
-          line-height: 1.3;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        #jlc-wb .scout-search-condition .jlc-wb-select {
-          width: 100%;
-          min-width: 0;
-          height: 28px;
-          padding: 3px 4px;
-          border-radius: 5px;
-          font-size: 11px;
-          box-shadow: none;
-        }
-        #jlc-wb .scout-search-condition-priority[hidden] {
-          visibility: hidden;
-        }
-        #jlc-wb .scout-search-condition-remove {
-          width: 28px;
-          height: 28px;
-          border-radius: 6px;
-          box-shadow: none;
-          color: #a23e35;
-          font-size: 15px;
-        }
-        #jlc-wb .scout-search-condition-empty,
-        #jlc-wb .scout-search-pool-empty {
-          min-height: 32px;
-          padding: 8px;
-          color: #a18468;
-          font-size: 11.5px;
-        }
-        #jlc-wb .scout-search-pool-toolbar {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) 92px;
-          gap: 6px;
-          margin-bottom: 8px;
-        }
-        #jlc-wb .scout-search-pool-toolbar .jlc-wb-search,
-        #jlc-wb .scout-search-pool-toolbar .jlc-wb-select {
-          width: 100%;
-          min-width: 0;
-          height: 32px;
-          padding: 5px 8px;
-          border-radius: 6px;
-          font-size: 11.5px;
-        }
-        #jlc-wb .scout-search-pool,
-        #jlc-wb .scout-search-related-list,
-        #jlc-wb .scout-search-current-tag-list {
-          display: flex;
-          flex-wrap: wrap;
-          align-content: flex-start;
-          gap: 5px;
-          max-height: 152px;
-          overflow-x: hidden;
-          overflow-y: auto;
-        }
-        #jlc-wb .scout-search-pool-term,
-        #jlc-wb .scout-search-related-add,
-        #jlc-wb .scout-search-current-tag {
-          max-width: 100%;
-          min-height: 28px;
-          overflow: hidden;
-          padding: 5px 8px;
-          border-radius: 6px;
-          font-size: 11.5px;
-          letter-spacing: 0;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        #jlc-wb .scout-search-related-item {
-          display: inline-flex;
-          align-items: center;
-          min-width: 0;
-        }
-        #jlc-wb .scout-search-related-add {
-          border-radius: 6px 0 0 6px;
-        }
-        #jlc-wb .scout-search-related-dismiss {
-          align-self: stretch;
-          width: 24px;
-          padding: 0;
-          border: 1px solid #ddc9ac;
-          border-left: 0;
-          border-radius: 0 6px 6px 0;
-          background: #f4eadb;
-          color: #9a544d;
-          cursor: pointer;
-          font-size: 13px;
-        }
-        #jlc-wb .scout-search-site-plan {
-          padding: 12px 0;
-          border-bottom: 1px solid #eadac3;
-        }
-        #jlc-wb .scout-search-site-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 6px;
-        }
-        #jlc-wb .scout-combo-site {
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-          min-height: 30px;
-          padding: 4px 8px;
-          border: 1px solid #ddc9ac;
-          border-radius: 6px;
-          background: #fffaf3;
-          color: #67503b;
-          cursor: pointer;
-          font-size: 11.5px;
-          font-weight: 650;
-          letter-spacing: 0;
-        }
-        #jlc-wb .scout-combo-site input {
-          width: 14px;
-          height: 14px;
-          margin: 0;
-          accent-color: var(--scout-theme-color);
-        }
-        #jlc-wb .scout-combo-site:has(input:checked) {
-          border-color: var(--scout-theme-color);
-          background: color-mix(in srgb, var(--scout-theme-light) 75%, white);
-          color: var(--scout-theme-dark);
-        }
-        #jlc-wb .scout-search-plan {
-          margin-top: 8px;
-          color: #72583f;
-          font-size: 11.5px;
-        }
-        #jlc-wb .scout-search-plan summary,
-        #jlc-wb .scout-search-errors summary {
-          cursor: pointer;
-          font-weight: 700;
-        }
-        #jlc-wb .scout-search-plan-list {
-          display: flex;
-          flex-direction: column;
-          gap: 7px;
-          margin-top: 7px;
-        }
-        #jlc-wb .scout-search-plan-site {
-          display: grid;
-          grid-template-columns: 34px minmax(0, 1fr);
-          align-items: start;
-          gap: 7px;
-        }
-        #jlc-wb .scout-search-plan-probes {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 4px 8px;
-          min-width: 0;
-        }
-        #jlc-wb .scout-search-plan-probes a {
-          overflow: hidden;
-          max-width: 100%;
-          color: #476b91;
-          text-decoration: none;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        #jlc-wb .scout-search-results-section {
-          padding-top: 8px;
-        }
-        #jlc-wb .scout-search-errors {
-          margin-bottom: 8px;
-          padding: 7px 9px;
-          border-left: 3px solid #b44940;
-          background: #f8e9e7;
-          color: #7e3731;
-          font-size: 11px;
-          line-height: 1.45;
-        }
-        #jlc-wb .scout-search-errors[hidden] { display: none !important; }
-        #jlc-wb .scout-search-assessments {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-        #jlc-wb .scout-search-assessment-site {
-          overflow: hidden;
-          border: 1px solid #ead8bd;
-          border-radius: 8px;
-          background: #fffdf9;
-          box-shadow: 0 2px 0 #ead7bb;
-        }
-        #jlc-wb .scout-search-assessment-site-head {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          min-width: 0;
-          padding: 8px 10px;
-          border-bottom: 1px solid #ead8bd;
-          background: #fff8ed;
-        }
-        #jlc-wb .scout-search-assessment-site-head > div {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          min-width: 0;
-        }
-        #jlc-wb .scout-search-assessment-site-actions {
-          display: flex;
-          align-items: center;
-          justify-content: flex-end;
-          gap: 5px;
-          flex: 0 0 auto;
-        }
-        #jlc-wb .scout-search-assessment-site-actions .scout-search-exact-open {
-          border-color: #2f8450;
-          background: #2f8450;
-          color: #fff;
-          font-weight: 800;
-        }
-        #jlc-wb .scout-search-assessment-site-state {
-          overflow: hidden;
-          color: #846c55;
-          font-size: 11px;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        #jlc-wb .scout-search-assessment-metrics {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          border-bottom: 1px solid #eee1ce;
-        }
-        #jlc-wb .scout-search-assessment-metrics > div {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          min-width: 0;
-          padding: 10px;
-          border-right: 1px solid #eee1ce;
-        }
-        #jlc-wb .scout-search-assessment-metrics > div:last-child { border-right: 0; }
-        #jlc-wb .scout-search-assessment-metrics span,
-        #jlc-wb .scout-search-assessment-metrics small {
-          overflow: hidden;
-          color: #8b7259;
-          font-size: 10px;
-          line-height: 1.3;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        #jlc-wb .scout-search-assessment-metrics b {
-          overflow-wrap: anywhere;
-          color: #443327;
-          font-size: 18px;
-          line-height: 1.2;
-        }
-        #jlc-wb .scout-search-assessment-terms,
-        #jlc-wb .scout-search-assessment-variants {
-          padding: 8px 10px 10px;
-        }
-        #jlc-wb .scout-search-assessment-variants { border-top: 1px solid #eee1ce; }
-        #jlc-wb .scout-search-condition-stats {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 5px;
-        }
-        #jlc-wb .scout-search-condition-stat {
-          display: inline-flex;
-          align-items: center;
-          gap: 5px;
-          min-width: 0;
-          padding: 3px 6px;
-          border: 1px solid #dfd0bc;
-          border-radius: 5px;
-          background: #f7f1e8;
-          color: #6c5540;
-          font-size: 10.5px;
-        }
-        #jlc-wb .scout-search-condition-stat.is-complete {
-          border-color: #9fc8ad;
-          background: #e8f3eb;
-          color: #28683f;
-        }
-        #jlc-wb .scout-search-condition-stat.is-warning {
-          border-color: #d8a39e;
-          background: #f7e7e5;
-          color: #8a3933;
-        }
-        #jlc-wb .scout-search-condition-stat span {
-          overflow: hidden;
-          max-width: 150px;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        #jlc-wb .scout-search-assessment-pending {
-          color: #8c735b;
-          font-size: 11px;
-        }
-        #jlc-wb .scout-search-assessment-variants {
-          display: flex;
-          flex-direction: column;
-          gap: 5px;
-        }
-        #jlc-wb .scout-search-assessment-variant {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(74px, auto) 72px;
-          align-items: center;
-          gap: 8px;
-          min-width: 0;
-          padding: 6px 0;
-          border-top: 1px solid #f0e5d4;
-        }
-        #jlc-wb .scout-search-assessment-variant-copy,
-        #jlc-wb .scout-search-assessment-variant-count {
-          display: flex;
-          flex-direction: column;
-          gap: 1px;
-          min-width: 0;
-        }
-        #jlc-wb .scout-search-assessment-variant-copy strong {
-          color: #4c392b;
-          font-size: 11.5px;
-        }
-        #jlc-wb .scout-search-assessment-variant-copy span,
-        #jlc-wb .scout-search-assessment-variant-count span {
-          overflow: hidden;
-          color: #8a7159;
-          font-size: 10px;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        #jlc-wb .scout-search-assessment-variant-count b {
-          color: #4a3728;
-          font-size: 12.5px;
-        }
-        #jlc-wb .scout-search-assessment-variant-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 4px;
-        }
-        #jlc-wb .scout-search-assessment-variant-actions .jlc-wb-btn,
-        #jlc-wb .scout-search-assessment-variant-actions .jlc-wb-open-btn,
-        #jlc-wb .scout-search-assessment-site-head .jlc-wb-open-btn {
-          min-width: 30px;
-          min-height: 28px;
-          padding: 4px 7px;
-          border-radius: 6px;
-          font-size: 10.5px;
-          box-sizing: border-box;
-        }
-        #jlc-wb #scout-search-results-empty {
-          padding: 26px 8px;
-        }
-        #jlc-wb #scout-search-results-empty[hidden] { display: none !important; }
-        #jlc-wb [data-jlc-wb-page="combo"] > .scout-combo-dock {
-          flex: 0 0 auto !important;
-          width: 100% !important;
-          max-width: 100% !important;
-          min-width: 0 !important;
-          margin: 0 !important;
-          display: flex !important;
-          flex-direction: column !important;
-          gap: 7px !important;
-          padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
-          box-sizing: border-box !important;
-          border-top: 1px solid #ead7bb !important;
-          background: #fffaf3 !important;
-          box-shadow: 0 -4px 12px rgba(80, 50, 20, 0.06) !important;
-        }
-        #jlc-wb .scout-search-savebar,
-        #jlc-wb .scout-combo-dock-actions {
-          display: flex;
-          align-items: stretch;
-          gap: 6px;
-          width: 100% !important;
-          max-width: 100% !important;
-          min-width: 0 !important;
-          box-sizing: border-box !important;
-        }
-        #jlc-wb .scout-search-savebar[hidden] { display: none !important; }
-        #jlc-wb .scout-search-savebar .jlc-wb-search {
-          flex: 1 1 auto;
-          min-width: 0;
-          min-height: 34px;
-          padding: 6px 9px;
-          border-radius: 7px;
-          font-size: 12px;
-        }
-        #jlc-wb .scout-search-savebar .jlc-wb-btn,
-        #jlc-wb .scout-search-savebar .jlc-wb-icon-btn {
-          min-height: 34px;
-          border-radius: 7px;
-        }
-        #jlc-wb .scout-combo-dock-actions .jlc-wb-btn {
-          flex: 1 1 0;
-          width: auto !important;
-          min-width: 0 !important;
-          max-width: none !important;
-          justify-content: center !important;
-          min-height: 35px !important;
-          padding: 6px 8px !important;
-          font-size: 12.5px !important;
-          box-sizing: border-box !important;
-        }
-        #jlc-wb #scout-combo-search-btn {
-          flex: 1.35 1 0 !important;
-        }
-        #jlc-wb #scout-combo-clear-btn {
-          flex: 0.75 1 0 !important;
-        }
-        @media (max-width: 620px) {
-          #jlc-wb .scout-search-builder-head,
-          #jlc-wb .scout-search-results-head {
-            align-items: stretch;
-            flex-direction: column;
-          }
-          #jlc-wb .scout-search-role-switch {
-            width: 100%;
-          }
-          #jlc-wb .scout-search-builder-grid {
-            grid-template-columns: minmax(0, 1fr);
-          }
-          #jlc-wb .scout-search-pool-column {
-            padding-left: 0;
-            border-top: 1px solid #eadac3;
-            border-left: 0;
-          }
-          #jlc-wb .scout-search-assessment-variant {
-            grid-template-columns: minmax(0, 1fr) minmax(68px, auto) 72px;
-          }
-        }
-        @media (max-width: 420px) {
-          #jlc-wb .jlc-wb-list-scroll.scout-combo-scroll {
-            padding-right: 10px !important;
-            padding-left: 10px !important;
-          }
-          #jlc-wb .scout-search-add-row {
-            flex-wrap: wrap;
-          }
-          #jlc-wb .scout-search-add-row > .jlc-wb-search {
-            flex-basis: calc(100% - 72px);
-          }
-          #jlc-wb .scout-search-priority-switch {
-            order: 3;
-            width: 100%;
-          }
-          #jlc-wb .scout-search-condition {
-            grid-template-columns: minmax(64px, 1fr) 64px 58px 28px;
-          }
-          #jlc-wb .scout-search-assessment-metrics > div {
-            padding: 8px 6px;
-          }
-          #jlc-wb .scout-search-assessment-metrics b {
-            font-size: 15px;
-          }
-          #jlc-wb .scout-search-assessment-variant {
-            grid-template-columns: minmax(0, 1fr) 76px;
-          }
-          #jlc-wb .scout-search-assessment-variant-copy {
-            grid-column: 1 / -1;
-          }
-          #jlc-wb .scout-search-assessment-variant-actions {
-            grid-column: 2;
-          }
-          #jlc-wb .scout-search-savebar {
-            flex-wrap: wrap;
-          }
-          #jlc-wb .scout-search-savebar .jlc-wb-search {
-            flex-basis: calc(100% - 90px);
-          }
-        }
+        #jlc-wb [data-jlc-wb-page="combo"] { min-width: 0; width: 100%; box-sizing: border-box; }
+        #jlc-wb .scout-combo-scroll { padding: 12px 14px 20px; }
+        #jlc-wb details { border-top: 1px solid var(--scout-ui-line); margin-top: 14px; padding-top: 7px; }
+        #jlc-wb summary { cursor: pointer; padding: 9px 0; color: var(--scout-ui-subtle); font-size: 12px; }
+        .scout-search-context { padding: 10px 12px; margin-bottom: 14px; border-radius: 8px; background: var(--scout-ui-muted); }
+        .scout-search-context > small { display: block; color: var(--scout-ui-subtle); font-size: 10px; }
+        .scout-search-context > strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 3px 0 9px; font-size: 13px; }
+        .scout-context-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+        #jlc-wb .scout-context-actions button { padding: 6px 8px; font-size: 11px; }
+        #scout-workbench-context { flex: 0 0 auto; padding: 12px 14px; border-bottom: 1px solid var(--scout-ui-line); background: var(--scout-ui-surface); }
+        .scout-current-work-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .scout-current-work-cover { width: 64px; height: 44px; flex: none; object-fit: cover; border-radius: 5px; }
+        .scout-current-work-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .scout-current-work-copy :is(small, span) { color: var(--scout-ui-subtle); font-size: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        .scout-current-work-copy strong { font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        #jlc-wb #scout-workbench-context button { padding: 5px 9px; font-size: 11px; flex-shrink: 0; }
+        .scout-current-work-actions { display: flex; gap: 6px; margin-top: 9px; }
+        #jlc-wb #scout-workbench-context [aria-pressed="true"] { border-color: var(--scout-theme-color); }
+        @media (max-width: 820px) {
+          #scout-workbench-context { padding: 9px 14px; }
+          .scout-current-work-cover { width: 48px; height: 36px; }
+          .scout-current-work-copy strong { -webkit-line-clamp: 1; }
+          #jlc-wb.is-keyboard-open :is(.scout-current-work-actions, .scout-current-work-cover, .scout-current-work-copy > span) { display: none; }
+        }
+        #jlc-wb .scout-search-builder-head { display: flex; flex-direction: column; gap: 10px; margin: 0 0 10px; padding: 0; border: 0; background: transparent; }
+        .scout-search-builder-head strong { font-size: 16px; font-weight: 600; }
+        .scout-search-builder-head > div:first-child > span { display: none; }
+        .scout-search-role-switch { display: flex; gap: 6px; }
+        .scout-search-role-switch button, .scout-search-priority-switch button { padding: 5px 9px; min-height: 32px; border: 1px solid var(--scout-ui-line); border-radius: 6px; background: transparent; color: var(--scout-ui-subtle); font-size: 12px; cursor: pointer; }
+        .scout-search-role-switch button.is-active, .scout-search-priority-switch button.is-active { border-color: var(--scout-theme-color); color: var(--scout-ui-text); background: var(--creamu-wb-accent-overlay-soft); }
+        .scout-search-add-row { display: flex; gap: 7px; align-items: center; }
+        .scout-search-add-row > input { flex: 1; min-width: 0; }
+        .scout-search-priority-switch, .scout-search-condition-priority { display: none; }
+        .scout-show-priority .scout-search-priority-switch:not([hidden]) { display: flex; gap: 4px; }
+        .scout-show-priority .scout-search-condition-priority:not([hidden]) { display: block; }
+        .scout-search-builder-grid { display: block; margin-top: 12px; }
+        .scout-search-condition-column { display: flex; flex-direction: column; gap: 6px; }
+        .scout-search-condition { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 6px 4px 10px; border: 1px solid var(--scout-ui-line); border-left: 3px solid var(--scout-theme-color); border-radius: 6px; background: var(--scout-ui-surface); }
+        .scout-search-condition.is-excluded { border-left-color: #bb6e66; }
+        .scout-search-condition.is-preference { border-left-color: #b29b60; }
+        .scout-search-condition-text { flex: 1; overflow-wrap: anywhere; min-width: 0; font-size: 13px; }
+        #jlc-wb .scout-search-condition select { width: auto; max-width: 100px; padding: 5px; font-size: 11px; }
+        #jlc-wb .scout-search-condition-remove { flex: none; width: 32px; }
+        .scout-search-pool-toolbar { display: flex; gap: 6px; margin: 8px 0; }
+        .scout-search-pool-toolbar input { flex: 1; min-width: 0; }
+        .scout-search-pool-toolbar select { max-width: 100px; }
+        .scout-search-pool, .scout-search-current-tag-list, .scout-search-related-list { display: flex; flex-wrap: wrap; gap: 6px; }
+        .scout-search-pool { max-height: 240px; overflow: auto; }
+        .scout-search-section-head { display: flex; gap: 8px; align-items: center; margin: 12px 0 8px; font-size: 11px; color: var(--scout-ui-subtle); }
+        .scout-search-related-item { display: inline-flex; align-items: center; }
+        .scout-search-related-dismiss { border: 0; background: transparent; color: var(--scout-ui-subtle); cursor: pointer; padding: 10px; }
+        .scout-search-site-row { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 0; }
+        .scout-combo-site { display: flex; gap: 5px; align-items: center; min-height: 36px; font-size: 12px; }
+        .scout-search-plan-probes { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; padding: 8px 0; }
+        .scout-priority-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+        .scout-search-results-head > div { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 14px; }
+        .scout-search-results-head span, .scout-search-assessment-pending { color: var(--scout-ui-subtle); font-size: 11px; }
+        .scout-search-assessments { display: flex; flex-direction: column; gap: 12px; }
+        .scout-search-assessment-site { padding: 12px; border: 1px solid var(--scout-ui-line); border-radius: 8px; background: var(--scout-ui-surface); min-width: 0; }
+        .scout-search-assessment-site-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+        .scout-search-assessment-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 10px 0; }
+        .scout-search-assessment-metrics > div { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 6px; background: var(--scout-ui-muted); }
+        .scout-search-assessment-metrics b { font-size: 20px; }
+        .scout-search-assessment-metrics :is(span,small) { color: var(--scout-ui-subtle); font-size: 10px; overflow-wrap: anywhere; }
+        .scout-search-condition-stats { display: flex; flex-wrap: wrap; gap: 5px; font-size: 11px; }
+        .scout-search-condition-stat { padding: 3px 6px; background: var(--scout-ui-muted); border-radius: 4px; }
+        .scout-search-assessment-variant { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--scout-ui-line); margin-top: 10px; padding-top: 10px; }
+        .scout-search-assessment-variant-copy { flex: 1 1 100%; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+        .scout-search-assessment-variant-copy span, .scout-search-assessment-variant-count span { color: var(--scout-ui-subtle); font-size: 11px; }
+        .scout-search-assessment-variant-count { flex: 1; display: flex; flex-direction: column; }
+        .scout-search-assessment-variant-actions { display: flex; gap: 6px; }
+        #jlc-wb .scout-combo-dock { padding: 10px 12px; background: var(--scout-ui-surface); border-top: 1px solid var(--scout-ui-line); }
+        .scout-combo-dock-actions, .scout-search-savebar { display: flex; gap: 7px; width: 100%; }
+        .scout-search-savebar { margin-bottom: 8px; }
+        .scout-search-savebar input { flex: 1; min-width: 0; }
+        #jlc-wb .scout-combo-dock-actions .jlc-wb-btn { flex: 1; padding: 8px 5px; min-width: 0; min-height: 40px; font-size: 12px; }
+        #jlc-wb #scout-combo-search-btn { flex: 1.25; }
 
-        /*
-         * 工作台表单：强制奶油浅色，避免 cream 页主题全局 input 暗色
-         * （html.scout-cream-site input { background: var(--scout-card) !important }）
-         */
+        /* 表单与控制台共用站点配色，避免原站通用 input 样式覆盖。 */
         #jlc-wb {
-          color-scheme: light;
+          color-scheme: var(--scout-color-scheme, light);
         }
         #jlc-wb input[type="text"],
         #jlc-wb input[type="search"],
@@ -7491,11 +7016,11 @@ function getScoutWorkbenchThemeCss() {
         #jlc-wb select,
         #jlc-wb .jlc-wb-search,
         #jlc-wb select.jlc-wb-select {
-          background: #fffaf3 !important;
-          color: #4a3728 !important;
-          border: 1px solid #e4d4bc !important;
-          box-shadow: 0 1px 0 #efe0cc !important;
-          color-scheme: light !important;
+          background: var(--scout-ui-surface) !important;
+          color: var(--scout-ui-text) !important;
+          border: 1px solid var(--scout-ui-line) !important;
+          box-shadow: 0 1px 0 var(--scout-ui-line) !important;
+          color-scheme: var(--scout-color-scheme, light) !important;
           caret-color: var(--scout-theme-dark, #b56e28) !important;
         }
         #jlc-wb input[type="text"]::placeholder,
@@ -7504,7 +7029,7 @@ function getScoutWorkbenchThemeCss() {
         #jlc-wb input:not([type])::placeholder,
         #jlc-wb textarea::placeholder,
         #jlc-wb .jlc-wb-search::placeholder {
-          color: #a89078 !important;
+          color: var(--scout-ui-subtle) !important;
           opacity: 1 !important;
         }
         #jlc-wb input[type="text"]:focus,
@@ -7517,7 +7042,7 @@ function getScoutWorkbenchThemeCss() {
         #jlc-wb .jlc-wb-search:focus {
           border-color: var(--scout-theme-color) !important;
           outline: none !important;
-          background: #fff !important;
+          background: var(--scout-ui-surface) !important;
           box-shadow: 0 0 0 2px color-mix(in srgb, var(--scout-theme-color) 25%, transparent) !important;
         }
 
@@ -7528,7 +7053,7 @@ function getScoutWorkbenchThemeCss() {
         }
         #jlc-wb .scout-wb-chip.is-retired {
           background: #ffe5e5;
-          color: #b42318;
+          color: var(--scout-ui-text);
         }
         #jlc-wb .jlc-wb-list-scroll.scout-wb-list {
           padding-top: 14px;
@@ -7580,7 +7105,7 @@ function getScoutWorkbenchThemeCss() {
 
         /* 词库 */
         #jlc-wb .scout-lexicon-missing {
-          color: #b09070;
+          color: var(--scout-ui-subtle);
           font-style: italic;
         }
         #jlc-wb .jlc-status-pill.scout-lexicon-confirmed {
@@ -7593,7 +7118,7 @@ function getScoutWorkbenchThemeCss() {
           margin-right: 4px;
         }
         #jlc-wb .jlc-wb-item-meta-line.scout-lexicon-meta {
-          color: #9a7d60;
+          color: var(--scout-ui-subtle);
           font-size: 11.5px;
         }
         #jlc-wb .scout-lexicon-edit {
@@ -7603,7 +7128,7 @@ function getScoutWorkbenchThemeCss() {
           width: 100%;
           margin-top: 8px;
           padding-top: 8px;
-          border-top: 1px dashed #efe0cc;
+          border-top: 1px dashed var(--scout-ui-line);
         }
         #jlc-wb .scout-lexicon-edit-row {
           display: flex;
@@ -7612,7 +7137,7 @@ function getScoutWorkbenchThemeCss() {
         }
         #jlc-wb .scout-lexicon-edit-label {
           width: 54px;
-          color: #7a5a3c;
+          color: var(--scout-ui-subtle);
           font-size: 12px;
         }
         #jlc-wb .jlc-wb-item-edit input.scout-lexicon-edit-input {
@@ -7684,10 +7209,10 @@ function getScoutWorkbenchThemeCss() {
 
         /* 熟人与作品 */
         #jlc-wb .scout-publisher-name.is-loved {
-          color: #2f6b3a;
+          color: var(--scout-ui-text);
         }
         #jlc-wb .scout-publisher-name.is-blocked {
-          color: #b42318;
+          color: var(--scout-ui-text);
         }
         #jlc-wb .jlc-status-pill.scout-publisher-status {
           padding: 1px 6px;
@@ -7696,12 +7221,12 @@ function getScoutWorkbenchThemeCss() {
         }
         #jlc-wb .scout-publisher-site {
           margin-left: 4px;
-          color: #9a7d60;
+          color: var(--scout-ui-subtle);
           font-size: 11px;
         }
         #jlc-wb .scout-publisher-note {
           margin-top: 2px;
-          color: #9a7d60;
+          color: var(--scout-ui-subtle);
           font-size: 11px;
         }
         #jlc-wb .scout-publisher-actions {
@@ -7718,15 +7243,15 @@ function getScoutWorkbenchThemeCss() {
           height: 54px;
           border-radius: 10px;
           overflow: hidden;
-          background: #efe4d2;
+          background: var(--scout-ui-muted);
         }
         #jlc-wb .jlc-wb-item-meta-line.scout-work-meta {
-          color: #9a7d60;
+          color: var(--scout-ui-subtle);
           font-size: 11.5px;
         }
         #jlc-wb .jlc-wb-item-meta-line.scout-work-tags {
           margin-top: 2px;
-          color: #a89078;
+          color: var(--scout-ui-subtle);
           font-size: 11px;
         }
         #jlc-wb .scout-lex-flow-work {
@@ -7766,7 +7291,7 @@ function getScoutWorkbenchThemeCss() {
           font-size: 12px;
         }
         #jlc-wb .jlc-wb-item-meta-line.scout-track-updated {
-          color: #a89078;
+          color: var(--scout-ui-subtle);
           font-size: 11px;
         }
         #jlc-wb .jlc-wb-open-btn.scout-track-open-btn {
@@ -7788,7 +7313,7 @@ function getScoutWorkbenchThemeCss() {
           width: 100%;
           margin-top: 6px;
           padding-top: 8px;
-          border-top: 1px dashed #efe0cc;
+          border-top: 1px dashed var(--scout-ui-line);
         }
         #jlc-wb .scout-track-edit-actions .jlc-wb-btn {
           padding: 4px 10px;
@@ -7809,8 +7334,8 @@ function getScoutWorkbenchThemeCss() {
           color: #b54708;
         }
         #jlc-wb .scout-toggle-match-btn {
-          background: #efe4d2;
-          color: #6b4a2e;
+          background: var(--scout-ui-muted);
+          color: var(--scout-ui-text);
         }
         #jlc-wb .scout-toggle-scope-btn {
           background: #e7f1ff;
@@ -7831,16 +7356,16 @@ function getScoutWorkbenchThemeCss() {
           gap: 4px;
         }
         #jlc-wb .scout-block-name {
-          color: #b42318;
+          color: var(--scout-ui-text);
         }
         #jlc-wb .scout-block-reason {
           margin-top: 4px;
-          color: #9a7d60;
+          color: var(--scout-ui-subtle);
           font-size: 11px;
         }
         #jlc-wb .person-item span.remove.scout-block-remove {
           flex: 0 0 auto;
-          color: #b42318;
+          color: var(--scout-ui-text);
           font-size: 16px;
           font-weight: bold;
         }
@@ -7856,7 +7381,7 @@ function getScoutWorkbenchThemeCss() {
           margin-top: 4px;
         }
         #jlc-wb .scout-block-option-title {
-          color: #7a5a3c;
+          color: var(--scout-ui-subtle);
           font-size: 12px;
           font-weight: bold;
         }
@@ -7905,7 +7430,7 @@ function getScoutWorkbenchThemeCss() {
         }
         #jlc-wb .stat-item span.scout-settings-stat-copy {
           display: block;
-          color: #9a7d60;
+          color: var(--scout-ui-subtle);
           font-size: 12px;
           line-height: 1.45;
           letter-spacing: 0;
@@ -7933,7 +7458,7 @@ function getScoutWorkbenchThemeCss() {
         #jlc-wb .jlc-wb-settings textarea.scout-settings-textarea {
           width: 100%;
           padding: 8px;
-          border: 1px solid #e4d4bc;
+          border: 1px solid var(--scout-ui-line);
           border-radius: 12px;
           font-family: monospace;
           font-size: 11.5px;
@@ -7985,87 +7510,21 @@ function getScoutWorkbenchThemeCss() {
           flex: 1;
         }
 
-        /* 采集弹层 */
-        #scout-collect-dialog {
-          position: fixed;
-          inset: 0;
-          z-index: 1000002;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(90, 60, 30, 0.35);
-          padding: 20px;
-        }
-        #scout-collect-dialog .scout-collect-card {
-          width: min(400px, 92vw);
-          background: #fffdf8;
-          border: 1px solid #e4d4bc;
-          border-radius: 18px;
-          padding: 18px;
-          box-shadow: 0 18px 50px rgba(90, 60, 30, 0.22);
-          color: #4a3728;
-        }
-        #scout-collect-dialog h4 {
-          margin: 0 0 6px;
-          font-size: 16px;
-          color: #4a3728;
-        }
-        #scout-collect-dialog .scout-collect-term {
-          margin: 0 0 12px;
-          font-size: 15px;
-          font-weight: 750;
-          color: var(--scout-theme-color);
-          word-break: break-word;
-        }
-        #scout-collect-dialog label {
-          display: block;
-          font-size: 12px;
-          color: #9a7d60;
-          margin-top: 10px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        #scout-collect-dialog label.scout-collect-loved {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          margin-top: 14px;
-          text-transform: none;
-          letter-spacing: 0;
-          font-size: 13.5px;
-          color: #4a3728;
-          cursor: pointer;
-        }
-        #scout-collect-dialog input[type="text"],
-        #scout-collect-dialog select {
-          width: 100%;
-          padding: 10px 12px;
-          margin-top: 6px;
-          border-radius: 12px;
-          border: 1px solid #e4d4bc !important;
-          background: #fffaf3 !important;
-          color: #4a3728 !important;
-          font-size: 14px;
-          box-sizing: border-box;
-          color-scheme: light !important;
-        }
-        #scout-collect-dialog input[type="text"]:focus,
-        #scout-collect-dialog select:focus {
-          border-color: var(--scout-theme-color) !important;
-          outline: none;
-          background: #fff !important;
-        }
-        #scout-collect-dialog input[type="checkbox"] {
-          width: 16px;
-          height: 16px;
-          accent-color: var(--scout-theme-color);
-        }
-        #scout-collect-dialog .scout-collect-actions {
-          display: flex;
-          gap: 8px;
-          justify-content: flex-end;
-          margin-top: 16px;
-        }
+        #scout-collect-dialog { width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 0; border: 1px solid var(--scout-ui-line); border-radius: 14px; background: var(--scout-ui-surface); color: var(--scout-ui-text); box-shadow: 0 16px 50px #0004; font: 14px/1.5 'Segoe UI', 'Microsoft YaHei', sans-serif; text-align: left; }
+        #scout-collect-dialog::backdrop { background: #0006; }
+        .scout-collect-card { padding: 18px; }
+        .scout-dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+        #scout-collect-dialog button { min-height: 34px; padding: 6px 10px; border: 1px solid var(--scout-ui-line); border-radius: 7px; background: var(--scout-ui-muted); color: var(--scout-ui-text); cursor: pointer; font: 13px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif; box-sizing: border-box; }
+        #scout-collect-dialog .scout-dialog-head button { width: 32px; height: 32px; min-height: 0; flex: none; padding: 0; }
+        #scout-collect-dialog button.primary { background: var(--scout-theme-color); color: white; border-color: transparent; }
+        #scout-collect-dialog :is(input,select) { width: 100%; min-height: 38px; padding: 6px 8px; margin: 5px 0 12px; border: 1px solid var(--scout-ui-line); border-radius: 6px; background: var(--scout-ui-muted); color: var(--scout-ui-text); box-sizing: border-box; font: inherit; }
+        #scout-collect-dialog label { display: block; font-size: 11px; color: var(--scout-ui-subtle); }
+        .scout-tag-search-actions, .scout-collect-actions { display: flex; gap: 7px; }
+        .scout-tag-search-actions button, .scout-collect-actions button { flex: 1; }
+        .scout-dialog-note { color: var(--scout-ui-subtle); font-size: 11px; margin: 8px 0 14px; }
+        #scout-collect-dialog details { border-top: 1px solid var(--scout-ui-line); padding-top: 8px; margin-top: 14px; }
+        #scout-collect-dialog summary { cursor: pointer; padding: 7px 0; font-size: 12px; }
+        @media (max-width: 820px) { #scout-collect-dialog { width: 100%; max-width: 100%; margin: auto 0 0; max-height: 90dvh; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); } }
 
         /* 追更：同 query 折叠组 + 三站展开行 */
         .scout-track-group-sites {
@@ -8074,8 +7533,8 @@ function getScoutWorkbenchThemeCss() {
           gap: 6px;
           margin: 0 10px 10px;
           padding: 8px 10px;
-          border-top: 1px dashed #efe0cc;
-          background: rgba(255, 250, 240, 0.55);
+          border-top: 1px dashed var(--scout-ui-line);
+          background: var(--scout-ui-muted);
           border-radius: 0 0 12px 12px;
         }
         .scout-track-group-sites.is-open { display: flex; }
@@ -8087,7 +7546,7 @@ function getScoutWorkbenchThemeCss() {
           font-size: 12px;
         }
         .scout-track-site-row.is-current { font-weight: 650; }
-        .scout-track-site-meta { color: #9a7d60; font-size: 11px; flex: 1 1 auto; min-width: 0; }
+        .scout-track-site-meta { color: var(--scout-ui-subtle); font-size: 11px; flex: 1 1 auto; min-width: 0; }
         .scout-track-site-pill.is-subscribed { opacity: 1; }
         .scout-track-site-pill.is-empty { opacity: 0.45; }
         .jlc-site-pill.is-empty { opacity: 0.5; }
@@ -8102,8 +7561,8 @@ function getScoutWorkbenchThemeCss() {
         #jlc-wb .scout-work-site-chip {
           appearance: none;
           border: 1px solid color-mix(in srgb, var(--scout-theme-color) 45%, #e6d3b8) !important;
-          background: var(--scout-theme-light, #fffaf3) !important;
-          color: var(--scout-theme-dark, #6b4a2e) !important;
+          background: var(--scout-theme-light, var(--scout-ui-surface)) !important;
+          color: var(--scout-theme-dark, var(--scout-ui-text)) !important;
           border-radius: 999px !important;
           padding: 2px 8px !important;
           font-size: 11px !important;
@@ -8158,10 +7617,10 @@ function applyScoutSiteTheme() {
 
 function getScoutSitePageThemeCss() {
   return `
-/* ===== 三站统一暗色页主题：同结构，只换强调色（PC/手机同一套） ===== */
+/* Shared page tokens; each site keeps a suitable light or dark surface. */
 html.scout-cream-site,
 html.scout-cream-site body {
-  /* 默认暗底 */
+  --scout-color-scheme: dark;
   --scout-page-bg: #12141a;
   --scout-page-panel: #1a1e28;
   --scout-page-header: #161a24;
@@ -8177,19 +7636,25 @@ html.scout-cream-site body {
   --scout-accent-soft: rgba(91, 141, 239, 0.18);
   background: var(--scout-page-bg) !important;
   color: var(--scout-text-color) !important;
-  color-scheme: dark;
+  color-scheme: var(--scout-color-scheme);
 }
 
-/* xvideos：暗红强调 */
+/* XVideos uses a muted light surface; XNXX and Eporner retain dark surfaces. */
 html.scout-cream-site body.creamu-site-xvideos {
-  --scout-accent: #e54840;
-  --scout-accent-soft: rgba(229, 72, 64, 0.20);
-  --scout-link: #f09088;
-  --scout-link-hover: #ffb8b0;
-  --scout-page-header: #1a1214;
-  --scout-card: #22181a;
-  --scout-card-bg: #22181a;
-  --scout-page-panel: #1e1618;
+  --scout-color-scheme: light;
+  --scout-page-bg: #e5e4df;
+  --scout-page-header: #edede7;
+  --scout-page-panel: #efeee9;
+  --scout-card: #e7e6df;
+  --scout-card-bg: #efeee9;
+  --scout-bg-clean: #e5e4df;
+  --scout-page-border: #cdd0c6;
+  --scout-text-color: #353c36;
+  --scout-text-muted: #6c756a;
+  --scout-accent: #a64740;
+  --scout-accent-soft: #a6474014;
+  --scout-link: #744a42;
+  --scout-link-hover: #963d35;
 }
 /* xnxx：冷蓝强调（仍暗底，不走白天粉蓝） */
 html.scout-cream-site body.creamu-site-xnxx {
@@ -8218,14 +7683,6 @@ html.scout-cream-site body.creamu-site-eporner {
 html.scout-cream-site body a { color: var(--scout-link); }
 html.scout-cream-site body a:visited { color: var(--scout-link); opacity: 0.9; }
 html.scout-cream-site body a:hover { color: var(--scout-link-hover); }
-
-/* 订阅钮底色已在 getScoutThemeCss 中；此处仅保证 cream 下对比 */
-html.scout-cream-site #scout-search-track-bar.scout-track-fab,
-html.scout-cream-site #scout-search-track-bar.scout-track-banner {
-  background: rgba(18, 20, 28, 0.94) !important;
-  border-color: var(--scout-page-border, rgba(255,255,255,0.12)) !important;
-  color: var(--scout-text-color, #e8eaef) !important;
-}
 
 /* 顶栏/表单/分页/侧栏：仅 PC。手机保持站点原生控件，避免列表周边被改乱 */
 @media (min-width: 821px) {
@@ -8278,7 +7735,7 @@ html.scout-cream-site #scout-search-track-bar.scout-track-banner {
     border: 1px solid var(--scout-page-border) !important;
     border-radius: 10px !important;
     box-shadow: 0 1px 0 rgba(0,0,0,0.04) !important;
-    color-scheme: dark;
+    color-scheme: var(--scout-color-scheme);
   }
   /*
    * 页级暗色按钮：只用 :where() 排除工作台，避免 :not(#id) 把特异性抬到
@@ -8286,7 +7743,7 @@ html.scout-cream-site #scout-search-track-bar.scout-track-banner {
    */
   html.scout-cream-site input[type="button"],
   html.scout-cream-site input[type="submit"],
-  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)) {
+  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)):where(:not(.scout-preview-button)) {
     background: var(--scout-page-panel) !important;
     color: var(--scout-text-color) !important;
     border: 1px solid var(--scout-page-border) !important;
@@ -8296,7 +7753,7 @@ html.scout-cream-site #scout-search-track-bar.scout-track-banner {
   }
   html.scout-cream-site input[type="button"]:hover,
   html.scout-cream-site input[type="submit"]:hover,
-  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)):hover {
+  html.scout-cream-site button:where(:not(#jlc-wb *)):where(:not(#scout-collect-dialog *)):where(:not(#jlc-wb-fab)):where(:not(#scout-search-track-bar *)):where(:not(.scout-work-fav-bar *)):where(:not(.scout-pub-addon *)):where(:not(.scout-preview-button)):hover {
     border-color: var(--scout-theme-color) !important;
     color: var(--scout-theme-color) !important;
   }
@@ -8385,20 +7842,6 @@ html.scout-cream-site .video-title {
   }
 }
 @media (max-width: 820px) {
-  html.scout-cream-site body.creamu-site-xvideos .video-metadata.scout-tags-collapsed,
-  html.scout-cream-site body.creamu-site-xnxx .video-metadata.scout-tags-collapsed,
-  html.scout-cream-site body.creamu-site-xnxx .metadata-row.video-tags.scout-tags-collapsed,
-  html.scout-cream-site body.creamu-site-xnxx .video-tags.scout-tags-collapsed {
-    max-height: 2.15em !important;
-    overflow: hidden !important;
-  }
-  html.scout-cream-site body.creamu-site-xvideos .video-metadata.scout-tags-expanded,
-  html.scout-cream-site body.creamu-site-xnxx .video-metadata.scout-tags-expanded,
-  html.scout-cream-site body.creamu-site-xnxx .metadata-row.video-tags.scout-tags-expanded,
-  html.scout-cream-site body.creamu-site-xnxx .video-tags.scout-tags-expanded {
-    max-height: none !important;
-    overflow: visible !important;
-  }
   html.scout-cream-site .scout-desc-collapsed {
     -webkit-line-clamp: 2 !important;
     max-height: 3em !important;
@@ -8551,25 +7994,10 @@ function getScoutPageEnhancementThemeCss() {
         }
         /* 手机详情：标签默认一行；描述默认两行；点展开 */
         @media (max-width: 820px) {
-          .video-metadata.scout-tags-collapsed,
-          .ordered-label-list.scout-tags-collapsed,
-          .video-tags-list.scout-tags-collapsed,
-          .metadata-row.video-tags.scout-tags-collapsed,
-          .video-tags.scout-tags-collapsed,
-          .video-metadata.cropped:not(.scout-tags-expanded) {
-            max-height: 2.15em !important;
-            overflow: hidden !important;
-            height: auto !important;
+          :is(.scout-tags-collapsed, .scout-tags-expanded) {
+            max-height: none !important; overflow: visible !important; height: auto !important;
           }
-          .video-metadata.scout-tags-expanded,
-          .ordered-label-list.scout-tags-expanded,
-          .video-tags-list.scout-tags-expanded,
-          .metadata-row.video-tags.scout-tags-expanded,
-          .video-tags.scout-tags-expanded {
-            max-height: none !important;
-            overflow: visible !important;
-            height: auto !important;
-          }
+          .scout-tags-collapsed [data-scout-tag-extra] { display: none !important; }
           .scout-desc-collapsed,
           .video-description.scout-desc-collapsed,
           #video-description.scout-desc-collapsed,
@@ -8595,15 +8023,16 @@ function getScoutPageEnhancementThemeCss() {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 100% !important;
+            width: fit-content !important;
             max-width: 100% !important;
+            min-height: 32px;
             margin: 4px 0 8px !important;
-            padding: 8px 12px !important;
+            padding: 4px 9px !important;
             border: 1px solid rgba(255,255,255,0.16) !important;
-            border-radius: 12px !important;
+            border-radius: 6px !important;
             background: rgba(0,0,0,0.35) !important;
             color: #e8eaef !important;
-            font-size: 13px !important;
+            font: 12px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif !important;
             font-weight: 650 !important;
             cursor: pointer !important;
             box-sizing: border-box !important;
@@ -8739,125 +8168,21 @@ function getScoutPageEnhancementThemeCss() {
         .scout-lex-overlay-clipped {
           overflow: hidden !important;
         }
-        /* ===== 详情页：收藏作品按钮（PC / 手机） ===== */
-        .scout-work-fav-bar {
-          display: flex !important;
-          align-items: center !important;
-          gap: 8px !important;
-          margin: 8px 0 10px !important;
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-          clear: both !important;
-        }
-        .scout-work-fav-btn {
-          display: inline-flex !important;
-          align-items: center !important;
-          gap: 10px !important;
-          min-height: 44px !important;
-          max-width: 100% !important;
-          margin: 0 !important;
-          padding: 8px 14px 8px 12px !important;
-          border: 0 !important;
-          border-radius: 14px !important;
-          cursor: pointer !important;
-          box-sizing: border-box !important;
-          text-align: left !important;
-          color: #fff !important;
-          background: linear-gradient(135deg, var(--scout-accent, #e8a24e), var(--scout-theme-dark, #b56e28)) !important;
-          box-shadow: 0 3px 0 rgba(0,0,0,.22), 0 8px 18px rgba(0,0,0,.28) !important;
-          transition: transform .12s ease, filter .12s ease, box-shadow .12s ease !important;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .scout-work-fav-btn:hover {
-          filter: brightness(1.06);
-        }
-        .scout-work-fav-btn:active {
-          transform: translateY(1px);
-          box-shadow: 0 1px 0 rgba(0,0,0,.22), 0 4px 10px rgba(0,0,0,.22) !important;
-        }
-        .scout-work-fav-btn.is-saved {
-          background: linear-gradient(135deg, #3d4a3a, #2a3828) !important;
-          box-shadow: 0 0 0 1px rgba(120, 200, 140, 0.45), 0 6px 14px rgba(0,0,0,.25) !important;
-          color: #e8f8ec !important;
-        }
-        .scout-work-fav-ico {
-          flex: 0 0 auto !important;
-          width: 28px !important;
-          height: 28px !important;
-          border-radius: 50% !important;
-          display: inline-flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          font-size: 16px !important;
-          line-height: 1 !important;
-          background: rgba(0,0,0,.22) !important;
-        }
-        .scout-work-fav-btn.is-saved .scout-work-fav-ico {
-          color: #ffd76a !important;
-          background: rgba(255, 215, 100, 0.16) !important;
-        }
-        .scout-work-fav-text {
-          display: flex !important;
-          flex-direction: column !important;
-          gap: 1px !important;
-          min-width: 0 !important;
-        }
-        .scout-work-fav-label {
-          font-size: 14px !important;
-          font-weight: 750 !important;
-          line-height: 1.2 !important;
-          letter-spacing: 0.2px !important;
-        }
-        .scout-work-fav-sub {
-          font-size: 11px !important;
-          font-weight: 500 !important;
-          line-height: 1.2 !important;
-          opacity: 0.88 !important;
-        }
+        .scout-detail-title { margin-bottom: 8px !important; line-height: 1.35 !important; overflow-wrap: anywhere; }
+        .scout-work-fav-bar { display: flex; clear: both; width: 100%; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 14px; padding: 0 0 12px; border-bottom: 1px solid var(--scout-page-border, #ccd0c8); max-width: 100%; box-sizing: border-box; }
+        #scout-work-fav-bar > button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 6px 9px; border: 1px solid var(--scout-page-border, #ccd0c8); border-radius: 6px; background: transparent; color: var(--scout-text-color, #343b36); font: 600 12px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif; cursor: pointer; box-shadow: none; box-sizing: border-box; }
+        #scout-work-fav-bar > button:hover { background: var(--scout-accent-soft, #899b8014); }
+        #scout-work-fav-bar > button:focus-visible { outline: 2px solid var(--scout-theme-color); outline-offset: 2px; }
+        #scout-work-fav-bar > button:disabled { opacity: .5; cursor: default; }
+        #scout-work-fav-bar .scout-work-fav-btn { background: var(--scout-accent-soft, #899b8014); border-color: var(--scout-link, #71816b); }
+        #scout-work-fav-bar .scout-work-fav-btn.is-saved { border-color: var(--scout-theme-color); }
+        .scout-work-fav-ico { font-size: 16px; line-height: 1; color: var(--scout-link, #71816b); }
+        #scout-detail-console { margin-left: auto; }
         @media (max-width: 820px) {
-          .scout-work-fav-bar {
-            width: 100% !important;
-            margin: 10px 0 12px !important;
-          }
-          .scout-work-fav-btn {
-            width: 100% !important;
-            min-height: 48px !important;
-            padding: 10px 14px !important;
-            border-radius: 16px !important;
-            justify-content: flex-start !important;
-          }
-          .scout-work-fav-ico {
-            width: 32px !important;
-            height: 32px !important;
-            font-size: 18px !important;
-          }
-          .scout-work-fav-label {
-            font-size: 15px !important;
-          }
-          .scout-work-fav-sub {
-            font-size: 12px !important;
-          }
-        }
-        @media (min-width: 821px) {
-          .scout-work-fav-btn {
-            min-width: 200px !important;
-          }
-        }
-        /* 奶油主题下跟站强调色 */
-        html.scout-cream-site .scout-work-fav-btn:not(.is-saved) {
-          background: linear-gradient(135deg, var(--scout-accent, #5b8def), color-mix(in srgb, var(--scout-accent, #5b8def) 70%, #000)) !important;
-        }
-        html.scout-cream-site body.creamu-site-xvideos .scout-work-fav-btn:not(.is-saved) {
-          background: linear-gradient(135deg, #e54840, #9e2a24) !important;
-        }
-        html.scout-cream-site body.creamu-site-xnxx .scout-work-fav-btn:not(.is-saved) {
-          background: linear-gradient(135deg, #4d8ef0, #1a4fa0) !important;
-        }
-        html.scout-cream-site body.creamu-site-eporner .scout-work-fav-btn:not(.is-saved) {
-          background: linear-gradient(135deg, #3cb86a, #1e7a42) !important;
+          #scout-work-fav-bar { gap: 6px; margin-bottom: 10px; }
+          #scout-detail-console { margin-left: 0; }
         }
 
-        /* 手机列表预览层：绝对铺满，不参与文档流、不撑大卡片 */
         .scout-list-preview-layer {
           position: absolute !important;
           left: 0 !important;
@@ -8898,24 +8223,10 @@ function getScoutPageEnhancementThemeCss() {
         .scout-site-preview-disabled {
           display: none !important;
         }
-        .scout-preview-playing::after {
-          content: '预览中 · 再点进入';
-          position: absolute;
-          left: 6px;
-          bottom: 6px;
-          z-index: 25;
-          padding: 2px 7px;
-          border-radius: 999px;
-          font-size: 10px;
-          font-weight: 650;
-          color: #fff;
-          background: rgba(0,0,0,.62);
-          pointer-events: none;
-          max-width: calc(100% - 12px);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
+        .scout-preview-button { position: absolute; right: 8px; bottom: 8px; z-index: 30; min-height: 32px; padding: 5px 9px; border: 1px solid #ffffff66; border-radius: 6px; background: #17201bd9; color: white; font: 600 12px/1.2 'Segoe UI', sans-serif; cursor: pointer; box-sizing: border-box; }
+        .scout-preview-button[aria-pressed="true"] { background: #3d6348; }
+        .scout-preview-button:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+
 
         .scout-lex-flow-overlay .scout-lex-flow-chips {
           display: flex !important;
@@ -9030,16 +8341,16 @@ function getScoutPageEnhancementThemeCss() {
           vertical-align: middle !important;
           transition: background .12s ease, border-color .12s ease, color .12s ease;
         }
-        /* 未入库：暗底描边 */
+        /* 未入库：轻描边，跟随站点明暗配色 */
         html.scout-cream-site a.scout-site-tag.scout-tag-out,
         html.scout-cream-site .scout-site-tag.scout-tag-out {
-          background: rgba(255,255,255,0.06) !important;
-          border: 1px solid rgba(255,255,255,0.14) !important;
-          color: #c8cdd8 !important;
+          background: transparent !important;
+          border: 1px solid var(--scout-page-border, #ccd0c8) !important;
+          color: var(--scout-text-color, #343b36) !important;
         }
         html.scout-cream-site a.scout-site-tag.scout-tag-out:hover {
           border-color: var(--scout-accent, #5b8def) !important;
-          color: #fff !important;
+          color: var(--scout-link) !important;
         }
         /* 已入库：强调色填充 */
         html.scout-cream-site a.scout-site-tag.scout-tag-in,
@@ -9047,12 +8358,12 @@ function getScoutPageEnhancementThemeCss() {
         html.scout-cream-site a.scout-site-tag.scout-tag-explored {
           background: var(--scout-accent-soft, rgba(91,141,239,.22)) !important;
           border: 1px solid var(--scout-accent, #5b8def) !important;
-          color: #f0f4ff !important;
+          color: var(--scout-text-color, #343b36) !important;
         }
         html.scout-cream-site a.scout-site-tag.scout-tag-loved {
-          background: rgba(229, 72, 64, 0.28) !important;
+          background: rgba(229, 72, 64, 0.10) !important;
           border-color: #e54840 !important;
-          color: #ffe8e6 !important;
+          color: var(--scout-text-color, #343b36) !important;
           box-shadow: 0 0 0 1px rgba(229, 72, 64, 0.25);
         }
         html.scout-cream-site .scout-tag-zh {
@@ -9073,45 +8384,25 @@ function getScoutPageEnhancementThemeCss() {
           font-size: 11px !important;
           line-height: 1 !important;
         }
-        html.scout-cream-site .scout-tag-addon {
-          display: inline-flex !important;
-          gap: 2px !important;
-          margin-left: 2px !important;
-          font-size: 10px !important;
-          font-weight: 700 !important;
-          line-height: 1 !important;
-          vertical-align: middle !important;
-        }
-        html.scout-cream-site .scout-tag-addon span {
-          cursor: pointer;
-          border-radius: 4px !important;
-          padding: 1px 3px !important;
-          background: rgba(0,0,0,0.28) !important;
-        }
-        .scout-tag-action {
-          cursor: pointer;
-        }
-        .scout-tag-add-action {
-          color: #8fd4a0;
-        }
-        .scout-tag-block-action {
-          color: #f09088;
-        }
         .scout-pub-addon {
           display: inline-flex;
-          gap: 4px;
+          gap: 6px;
           margin-left: 8px;
           max-width: 100%;
           vertical-align: middle;
           font-size: 12px;
         }
         .scout-pub-addon .scout-pub-action {
-          height: 24px;
+          min-height: 32px;
           margin: 0;
-          padding: 2px 8px;
+          padding: 4px 8px;
+          border: 1px solid var(--scout-page-border, #ccd0c8);
           border-radius: 6px;
-          font-size: 11.5px;
-          line-height: 1;
+          background: var(--scout-page-panel, #eeeee8);
+          color: var(--scout-text-color, #343b36);
+          font: 12px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif;
+          box-sizing: border-box;
+          box-shadow: none;
           cursor: pointer;
         }
         .scout-pub-addon .scout-pub-love-action.is-loved {
@@ -9119,7 +8410,7 @@ function getScoutPageEnhancementThemeCss() {
           background: #e2f5e4;
           color: #2f6b3a;
         }
-        /* 标签容器：可换行，暗色面板 */
+        /* 标签容器保持原生结构；发布者不参与标签折叠。 */
         html.scout-cream-site .video-metadata,
         html.scout-cream-site .video-tags-list,
         html.scout-cream-site .ordered-label-list,
@@ -9283,16 +8574,16 @@ function getScoutSiteLayoutThemeCss() {
           background: var(--scout-card-bg, #1e2430) !important;
           border: 1px solid var(--scout-page-border, rgba(255,255,255,.10)) !important;
           border-radius: 12px !important;
-          box-shadow: 0 4px 14px rgba(0,0,0,.28) !important;
+          box-shadow: none !important;
           overflow: hidden !important;
           padding: 6px !important;
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
         }
         html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block {
-          box-shadow: 0 4px 14px rgba(229, 72, 64, 0.12) !important;
+          box-shadow: none !important;
         }
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block {
-          box-shadow: 0 4px 14px rgba(77, 142, 240, 0.12) !important;
+          box-shadow: none !important;
         }
         html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block .thumb-inside,
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .thumb-inside,
@@ -9307,7 +8598,7 @@ function getScoutSiteLayoutThemeCss() {
           padding: 4px 2px 0 !important;
           box-sizing: border-box !important;
           max-width: 100% !important;
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
         }
         html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block p,
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block p,
@@ -9325,7 +8616,7 @@ function getScoutSiteLayoutThemeCss() {
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .uploader,
         html.scout-cream-site body.creamu-site-xvideos .mozaique .thumb-block .uploader a,
         html.scout-cream-site body.creamu-site-xnxx .mozaique .thumb-block .uploader a {
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
           max-width: 100% !important;
           overflow: hidden !important;
           word-break: break-word !important;
@@ -9348,7 +8639,7 @@ function getScoutSiteLayoutThemeCss() {
           border: 1px solid var(--scout-page-border, rgba(255,255,255,.10)) !important;
           border-radius: 10px !important;
           box-shadow: 0 2px 10px rgba(0,0,0,.22) !important;
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
           box-sizing: border-box !important;
         }
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbtit,
@@ -9357,7 +8648,7 @@ function getScoutSiteLayoutThemeCss() {
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbunder a,
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbstats,
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mb-uploader a {
-          color: #e8eaef !important;
+          color: var(--scout-text-color, #e8eaef) !important;
           opacity: 1 !important;
         }
         html.scout-cream-site body.creamu-site-eporner #vidresults .mb .mbtit a {
@@ -9443,166 +8734,10 @@ function getScoutSiteLayoutThemeCss() {
           }
         }
 
-        /* PC：顶部超矮订阅条 */
-        #scout-search-track-bar.scout-track-banner {
-          position: fixed !important;
-          top: 8px !important;
-          left: 50% !important;
-          transform: translateX(-50%) !important;
-          z-index: 999990 !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 6px !important;
-          max-width: min(380px, 72vw) !important;
-          min-height: 0 !important;
-          height: auto !important;
-          padding: 3px 4px 3px 10px !important;
-          border-radius: 999px !important;
-          background: rgba(18, 20, 28, 0.92) !important;
-          border: 1px solid rgba(255,255,255,0.12) !important;
-          box-shadow: 0 4px 12px rgba(0,0,0,.28) !important;
-          color: #e8eaef !important;
-          font-size: 11.5px !important;
-          line-height: 1.2 !important;
-          box-sizing: border-box !important;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-        }
-        #scout-search-track-bar .scout-track-banner-text {
-          flex: 1 1 auto;
-          min-width: 0;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          font-weight: 600;
-        }
-        #scout-search-track-bar .scout-track-banner-btn {
-          flex: 0 0 auto;
-          border: 0;
-          border-radius: 999px;
-          padding: 2px 9px;
-          min-height: 22px;
-          font-size: 11px;
-          font-weight: 650;
-          line-height: 1.2;
-          cursor: pointer;
-          background: var(--scout-accent, #5b8def);
-          color: #fff;
-        }
-        #scout-search-track-bar.scout-track-banner.is-on .scout-track-banner-btn {
-          background: rgba(255,255,255,0.12);
-          color: #e8eaef;
-        }
-        /* 断点条：全局压成单行矮胶囊 */
-        #jlc-tracking-pagebar {
-          position: fixed !important;
-          top: 8px !important;
-          left: 50% !important;
-          transform: translateX(-50%) !important;
-          z-index: 999999 !important;
-          display: flex !important;
-          align-items: center !important;
-          width: min(420px, 94vw) !important;
-          min-height: 0 !important;
-          max-height: 36px !important;
-          padding: 4px 8px !important;
-          border-radius: 999px !important;
-          gap: 6px !important;
-          box-sizing: border-box !important;
-          border: 1px solid rgba(255,255,255,.12) !important;
-          background: rgba(18,20,28,.92) !important;
-          box-shadow: 0 4px 14px rgba(0,0,0,.28) !important;
-          color: #e8eaef !important;
-          font-size: 12px !important;
-        }
-        #jlc-tracking-pagebar .jlc-tracking-pagebar-text {
-          flex: 1 1 auto !important;
-          min-width: 0 !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          white-space: nowrap !important;
-          font-weight: 650 !important;
-          font-size: 11.5px !important;
-          line-height: 1.2 !important;
-        }
-        #jlc-tracking-pagebar .scout-tracking-pagebar-action {
-          flex: 0 0 auto !important;
-          min-height: 22px !important;
-          padding: 2px 8px !important;
-          border-radius: 999px !important;
-          font-size: 11px !important;
-          cursor: pointer !important;
-        }
-        #jlc-tracking-pagebar .jlc-bp-continue {
-          border: 0 !important;
-          background: var(--scout-accent, #5b8def) !important;
-          color: #fff !important;
-          font-weight: 650 !important;
-        }
-        #jlc-tracking-pagebar .scout-bp-dismiss {
-          border: 1px solid rgba(255,255,255,.2) !important;
-          background: transparent !important;
-          color: #c8cdd8 !important;
-        }
-        /* 手机：订阅小圆钮 —— 固定视口右下，在工作台钮上方 */
-        #scout-search-track-bar.scout-track-fab {
-          position: fixed !important;
-          right: 16px !important;
-          bottom: 64px !important;
-          left: auto !important;
-          top: auto !important;
-          transform: none !important;
-          z-index: 999991 !important;
-          width: 40px !important;
-          height: 40px !important;
-          min-width: 40px !important;
-          max-width: 40px !important;
-          padding: 0 !important;
-          margin: 0 !important;
-          border-radius: 50% !important;
-          border: 1px solid rgba(255,255,255,0.14) !important;
-          background: rgba(18, 20, 28, 0.92) !important;
-          box-shadow: 0 4px 14px rgba(0,0,0,.35) !important;
-          display: flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          cursor: pointer !important;
-          color: #f0f0f0 !important;
-          font-size: 18px !important;
-          line-height: 1 !important;
-          box-sizing: border-box !important;
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          -webkit-tap-highlight-color: transparent;
-        }
-        #scout-search-track-bar.scout-track-fab.is-on {
-          border-color: rgba(255, 200, 80, 0.55) !important;
-          box-shadow: 0 4px 16px rgba(255, 180, 40, 0.28) !important;
-        }
-        #scout-search-track-bar.scout-track-fab .scout-track-fab-ico {
-          pointer-events: none;
-        }
-        @media (max-width: 820px) {
-          #jlc-tracking-pagebar {
-            top: 6px !important;
-            bottom: auto !important;
-            left: 50% !important;
-            transform: translateX(-50%) !important;
-            width: min(340px, 94vw) !important;
-            max-height: 34px !important;
-            padding: 3px 6px 3px 8px !important;
-            font-size: 11px !important;
-          }
-          /* 手机订阅仍是 40 圆钮，略缩小一点少挡屏 */
-          #scout-search-track-bar.scout-track-fab {
-            width: 36px !important;
-            height: 36px !important;
-            min-width: 36px !important;
-            max-width: 36px !important;
-            font-size: 16px !important;
-            bottom: 60px !important;
-          }
-        }
+        #scout-search-track-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 8px; padding: 10px 12px; border: 1px solid var(--scout-page-border, #cdd0ca); border-radius: 8px; background: var(--scout-page-panel, #eeeee8); color: var(--scout-text-color, #343b36); font: 13px/1.5 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+        .scout-track-banner-text { flex: 1; min-width: 120px; overflow-wrap: anywhere; }
+        .scout-track-banner-text small { display: block; font-size: 10px; color: var(--scout-text-muted, #737970); }
+        #scout-search-track-bar button { min-height: 34px; padding: 5px 9px; border: 1px solid var(--scout-page-border, #cdd0ca); border-radius: 6px; color: inherit; background: transparent; cursor: pointer; font: 12px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif; box-sizing: border-box; }
 
         @media (min-width: 821px) {
           /* PC：内容区 + 列表底色 + 卡面 */
@@ -9754,91 +8889,14 @@ function getScoutSiteLayoutThemeCss() {
           }
         }
 
-        html.scout-cream-site body.creamu-site-xvideos #video-player-bg,
-        html.scout-cream-site body.creamu-site-xnxx #video-player-bg {
-          background-color: #0b0909 !important;
-          padding: 24px 0 !important;
+        html.scout-cream-site :is(#video-player-bg, #movieplayer-box, .video-wrapper) {
+          background: #101216 !important; padding: 0 !important; box-shadow: none !important;
         }
-        html.scout-cream-site body.creamu-site-xvideos .player-container,
-        html.scout-cream-site body.creamu-site-xnxx .player-container {
-          max-width: 1200px !important;
-          margin: 0 auto !important;
-          border-radius: 16px !important;
-          overflow: hidden !important;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5) !important;
-        }
-        html.scout-cream-site body.creamu-site-eporner .video-wrapper {
-          background-color: #0b0909 !important;
-          padding: 20px !important;
-          border-radius: 16px !important;
-          max-width: 1200px !important;
-          margin: 0 auto !important;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5) !important;
-        }
+        html.scout-cream-site .player-container { max-width: 100% !important; margin: 0 auto !important; box-shadow: none !important; }
+        html.scout-console-docked :is(#main, #content, #movieplayer-left, #video-player-bg, #html5video, #movieplayer-box, .video-wrapper) { min-width: 0 !important; max-width: 100% !important; box-sizing: border-box; }
+        html.scout-console-docked :is(#html5video, #movieplayer-box) video { max-width: 100% !important; }
 
         @media (max-width: 820px) {
-          #jlc-wb .jlc-wb-nav {
-            display: flex !important;
-            gap: 8px !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-            padding: 0 16px 12px !important;
-            white-space: nowrap !important;
-            scrollbar-width: none !important;
-          }
-          #jlc-wb .jlc-wb-nav::-webkit-scrollbar { display: none !important; }
-          #jlc-wb .jlc-wb-nav button {
-            flex: 0 0 auto !important;
-            padding: 8px 16px !important;
-            font-size: 13.5px !important;
-          }
-          /* 手机工作台钮：与订阅同款小圆，贴视口右下（不跟页滚） */
-          #jlc-wb-fab {
-            position: fixed !important;
-            right: 16px !important;
-            bottom: 16px !important;
-            left: auto !important;
-            top: auto !important;
-            opacity: 1 !important;
-            width: 40px !important;
-            height: 40px !important;
-            min-width: 40px !important;
-            border-radius: 50% !important;
-            font-size: 17px !important;
-            z-index: 2147483000 !important;
-            box-shadow: 0 4px 14px rgba(0,0,0,.45) !important;
-            visibility: visible !important;
-            display: flex !important;
-            pointer-events: auto !important;
-          }
-          #jlc-wb-fab:active, #jlc-wb-fab.is-dragging {
-            opacity: 1 !important;
-          }
-          #jlc-wb-fab .jlc-wb-fab-badge {
-            top: -2px !important;
-            right: -2px !important;
-            font-size: 10px !important;
-            min-width: 16px !important;
-            height: 16px !important;
-          }
-          #jlc-wb .jlc-wb-search,
-          #jlc-wb select.jlc-wb-select,
-          #jlc-wb select,
-          #jlc-wb .jlc-wb-btn {
-            min-height: 40px !important;
-            font-size: 14px !important;
-          }
-          .scout-tag-addon {
-            margin-left: 6px !important;
-            gap: 4px !important;
-          }
-          .scout-tag-addon span {
-            padding: 3px 5px !important;
-            font-size: 11px !important;
-            border-radius: 4px !important;
-          }
-          #jlc-wb { height: 70vh !important; }
-
           /*
            * eporner 手机：尽量单列，但不用 absolute 图（易高度塌成 0 挡没）
            * 只清 float + 宽度 100%，图片保持站点自然高度
@@ -9900,99 +8958,70 @@ function getScoutSiteLayoutThemeCss() {
 // @@creamu-part:page-enhancements
 // Shared page helpers
 
-/** 将工作台放到视口内；无有效记忆位置时用默认几何 */
+let scoutDrawerExpanded = false;
+let scoutBodyOverflow = null;
+
+function isScoutNarrowViewport() { return window.matchMedia('(max-width: 820px)').matches; }
+
 function applyScoutWorkbenchGeometry(wb, patch = {}) {
   if (!wb) return null;
-  const def = getCreamuDefaultWorkbenchRect(window);
-  const savedPos = GM_getValue('scout_wb_pos', null) || {};
-  const savedSize = GM_getValue('scout_wb_size', null) || {};
-
-  const nextWidth = patch.width != null
-    ? patch.width
-    : (parseCreamuPixel(savedSize.width) || parseCreamuPixel(wb.style.width) || def.width);
-  const nextHeight = patch.height != null
-    ? patch.height
-    : (parseCreamuPixel(savedSize.height) || parseCreamuPixel(wb.style.height) || def.height);
-  const nextLeft = patch.left != null
-    ? patch.left
-    : (parseCreamuPixel(savedPos.left) || parseCreamuPixel(wb.style.left));
-  const nextTop = patch.top != null
-    ? patch.top
-    : (parseCreamuPixel(savedPos.top) || parseCreamuPixel(wb.style.top));
-
-  const rect = clampCreamuWorkbenchRect({
-    left: nextLeft,
-    top: nextTop,
-    width: nextWidth,
-    height: nextHeight
-  }, window);
-  wb.style.left = rect.left + 'px';
-  wb.style.top = rect.top + 'px';
-  wb.style.right = 'auto';
-  wb.style.bottom = 'auto';
-  wb.style.width = rect.width + 'px';
-  wb.style.height = rect.height + 'px';
-  wb.style.maxHeight = 'none';
+  const narrow = isScoutNarrowViewport();
+  const docked = !narrow && window.innerWidth >= 1200 && GM_getValue('scout_wb_layout', 'dock') === 'dock';
+  const open = wb.classList.contains('is-open');
+  const viewport = window.visualViewport;
+  const height = viewport ? viewport.height : window.innerHeight;
+  const top = viewport ? viewport.offsetTop : 0;
+  const keyboardOpen = narrow && height < window.innerHeight * .75;
+  let rect;
+  if (narrow) {
+    const expanded = scoutDrawerExpanded || keyboardOpen;
+    const panelHeight = Math.round(height * (expanded ? .96 : .64));
+    rect = { left: 0, top: top + height - panelHeight, width: window.innerWidth, height: panelHeight };
+  } else if (docked) {
+    const width = Math.min(520, Math.max(400, Math.round(window.innerWidth * .3)));
+    rect = { left: window.innerWidth - width, top: 0, width, height: window.innerHeight };
+  } else {
+    const def = getCreamuDefaultWorkbenchRect(window);
+    const saved = { ...GM_getValue('scout_wb_pos', {}), ...GM_getValue('scout_wb_size', {}) };
+    rect = clampCreamuWorkbenchRect({
+      left: patch.left ?? parseCreamuPixel(saved.left), top: patch.top ?? parseCreamuPixel(saved.top),
+      width: patch.width ?? (parseCreamuPixel(saved.width) || def.width),
+      height: patch.height ?? (parseCreamuPixel(saved.height) || def.height),
+    }, window);
+  }
+  wb.classList.toggle('is-mobile', narrow);
+  wb.classList.toggle('is-docked', docked);
+  wb.classList.toggle('is-expanded', scoutDrawerExpanded);
+  wb.classList.toggle('is-keyboard-open', keyboardOpen);
+  // Scout owns geometry, including visualViewport offsets; override shared CSS's bottom-pinned mobile default.
+  const geometry = { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px', height: rect.height + 'px', right: 'auto', bottom: 'auto', 'max-height': 'none' };
+  Object.entries(geometry).forEach(([property, value]) => wb.style.setProperty(property, value, 'important'));
+  document.documentElement.classList.toggle('scout-console-docked', open && docked);
+  document.documentElement.style.setProperty('--scout-dock-width', rect.width + 'px');
+  const lock = open && narrow && scoutDrawerExpanded;
+  if (lock && scoutBodyOverflow === null) { scoutBodyOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
+  if (!lock && scoutBodyOverflow !== null) { document.body.style.overflow = scoutBodyOverflow; scoutBodyOverflow = null; }
+  const expand = wb.querySelector('#scout-wb-expand-btn');
+  if (expand) { expand.hidden = !narrow; expand.textContent = scoutDrawerExpanded ? '收起' : '展开'; expand.setAttribute('aria-expanded', String(scoutDrawerExpanded)); }
+  const layout = wb.querySelector('#scout-wb-layout-btn');
+  if (layout) { layout.hidden = narrow || window.innerWidth < 1200; layout.textContent = docked ? '浮窗' : '停靠'; }
+  const focused = document.activeElement;
+  if (open && narrow && wb.contains(focused) && focused.matches('input, textarea, select')) {
+    focused.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
   return rect;
-}
-
-function isScoutNarrowViewport() {
-  try {
-    return !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
-  } catch (_) {
-    return window.innerWidth <= 820;
-  }
-}
-
-/**
- * 手机：工作台钮 + 订阅钮叠在右下角视口固定（不跟页滚走，不吃 left/top 记忆）
- * 上 ☆订阅 · 下 🧭工作台
- */
-function dockMobileFabStack() {
-  if (!isScoutNarrowViewport()) return;
-  const fab = document.getElementById('jlc-wb-fab');
-  if (fab) {
-    fab.style.position = 'fixed';
-    fab.style.left = 'auto';
-    fab.style.top = 'auto';
-    fab.style.right = '16px';
-    fab.style.bottom = '16px';
-    fab.style.zIndex = '2147483000';
-    fab.style.visibility = 'visible';
-    fab.style.opacity = '1';
-    fab.style.display = 'flex';
-    fab.style.pointerEvents = 'auto';
-    fab.classList.add('scout-fab-docked');
-  }
-  const track = document.getElementById('scout-search-track-bar');
-  if (track && track.classList.contains('scout-track-fab')) {
-    track.style.left = 'auto';
-    track.style.top = 'auto';
-    track.style.right = '16px';
-    track.style.bottom = '64px';
-  }
 }
 
 function clampScoutFabPosition(fab) {
   if (!fab) return;
-  // 手机强制贴右下，忽略 left/top 记忆（否则一滚/换页就像丢了）
   if (isScoutNarrowViewport()) {
-    dockMobileFabStack();
+    Object.assign(fab.style, { left: 'auto', top: 'auto', right: '16px', bottom: 'max(16px, env(safe-area-inset-bottom))' });
     return;
   }
-  const left = parseCreamuPixel(fab.style.left);
-  const top = parseCreamuPixel(fab.style.top);
-  // 仍用默认 right/bottom 时不必钳制
+  const left = parseCreamuPixel(fab.style.left), top = parseCreamuPixel(fab.style.top);
   if (!Number.isFinite(left) || !Number.isFinite(top)) return;
-  const point = clampCreamuWorkbenchPoint(
-    { left, top },
-    { width: fab.offsetWidth || 34, height: fab.offsetHeight || 34 },
-    window
-  );
-  fab.style.left = point.left + 'px';
-  fab.style.top = point.top + 'px';
-  fab.style.right = 'auto';
-  fab.style.bottom = 'auto';
+  const point = clampCreamuWorkbenchPoint({ left, top }, { width: fab.offsetWidth || 110, height: fab.offsetHeight || 44 }, window);
+  Object.assign(fab.style, { left: point.left + 'px', top: point.top + 'px', right: 'auto', bottom: 'auto' });
 }
 
 function makeDraggable(el, isFab = false) {
@@ -10002,7 +9031,10 @@ function makeDraggable(el, isFab = false) {
     threshold: 6,
     thresholdMode: 'axis',
     isDragDisabled: () => isFab && isScoutNarrowViewport(),
-    shouldIgnoreDrag: (event) => !!event.target?.closest?.('button, input'),
+    shouldIgnoreDrag: (event) => {
+      const control = event.target?.closest?.('button, input');
+      return !!control && control !== el;
+    },
     applyPosition: (point) => {
       el.style.left = point.left + 'px';
       el.style.top = point.top + 'px';
@@ -10020,6 +9052,7 @@ function makeDraggable(el, isFab = false) {
 function makeHeaderDraggable(wbEl, headerEl) {
   bindCreamuWorkbenchDrag(wbEl, {
     header: headerEl,
+    isDragDisabled: () => wbEl.classList.contains('is-mobile') || wbEl.classList.contains('is-docked'),
     boundKey: 'scoutHeaderDragBound',
     shouldIgnoreDrag: (event) => !!event.target?.closest?.('.jlc-wb-header-actions'),
     applyRect: (rect) => applyScoutWorkbenchGeometry(wbEl, rect),
@@ -10032,6 +9065,7 @@ function makeResizable(wbEl) {
   bindCreamuWorkbenchResize(wbEl, {
     boundKey: 'scoutPanelResizeBound',
     handleBoundPrefix: 'scoutResizeHandle',
+    isDragDisabled: () => wbEl.classList.contains('is-mobile') || wbEl.classList.contains('is-docked'),
     applyRect: (rect) => applyScoutWorkbenchGeometry(wbEl, rect),
     onEnd: () => {
       GM_setValue('scout_wb_size', { width: wbEl.style.width, height: wbEl.style.height });
@@ -10041,69 +9075,59 @@ function makeResizable(wbEl) {
   });
 }
 
-function showScoutCollectDialog({ text, sources, onSaved }) {
+function showScoutCollectDialog({ text, sources, onSaved, tags }) {
   const existing = document.getElementById('scout-collect-dialog');
-  if (existing) existing.remove();
-
-  const types = getLexiconTypes();
-  const known = getLexiconTerms().find(t => t.text.toLowerCase().trim() === compactText(text).toLowerCase());
-
-  const dialog = document.createElement('div');
+  if (existing) { existing.close(); existing.remove(); }
+  const choices = [...new Set((tags || [text]).filter(Boolean))];
+  if (!choices.length) return;
+  const dialog = document.createElement('dialog');
   dialog.id = 'scout-collect-dialog';
-  dialog.innerHTML = `
-    <div class="scout-collect-card">
-      <h4>采集词条</h4>
-      <p class="scout-collect-term">${escapeHtml(text)}</p>
-      <label>中文翻译</label>
-      <input type="text" id="scout-collect-zh" placeholder="可选，填写中文含义" value="${escapeHtml((known && known.zh) || '')}">
-      <label>分类</label>
-      <select id="scout-collect-type">
-        ${types.map(ty => {
-          const sel = known && known.type === ty ? 'selected' : (ty === '未分类' && !known ? 'selected' : '');
-          return `<option value="${escapeHtml(ty)}" ${sel}>${escapeHtml(ty)}</option>`;
-        }).join('')}
-      </select>
-      <label class="scout-collect-loved">
-        <input type="checkbox" id="scout-collect-loved" ${(known && known.loved) ? 'checked' : ''}>
-        标记为心动标签
-      </label>
-      <div class="scout-collect-actions">
-        <button type="button" class="jlc-wb-btn ghost" id="scout-collect-cancel">取消</button>
-        <button type="button" class="jlc-wb-btn primary" id="scout-collect-save">入库</button>
-      </div>
-    </div>
-  `;
+  dialog.setAttribute('aria-label', '标签操作');
   document.body.appendChild(dialog);
-
-  const close = () => dialog.remove();
-  dialog.addEventListener('click', (e) => {
-    if (e.target === dialog) close();
-  });
-  dialog.querySelector('#scout-collect-cancel').addEventListener('click', close);
-  dialog.querySelector('#scout-collect-save').addEventListener('click', () => {
-    const zh = dialog.querySelector('#scout-collect-zh').value.trim();
-    const type = dialog.querySelector('#scout-collect-type').value || '未分类';
-    const loved = dialog.querySelector('#scout-collect-loved').checked;
-    const term = addLexiconTerm({
-      text,
-      zh,
-      type,
-      loved,
-      status: zh || type !== '未分类' ? 'confirmed' : 'unreviewed',
-      sources: sources || []
+  const render = (selected) => {
+    const known = getLexiconTerms().find(term => lexiconIdentityKey(term.text) === lexiconIdentityKey(selected));
+    dialog.innerHTML = `<div class="scout-collect-card">
+      <div class="scout-dialog-head"><strong>用标签继续找</strong><button type="button" class="jlc-wb-icon-btn" id="scout-collect-cancel" aria-label="关闭标签操作">×</button></div>
+      <label for="scout-tag-choice">当前标签</label><select id="scout-tag-choice">${choices.map(tag => `<option${tag === selected ? ' selected' : ''}>${escapeHtml(tag)}</option>`).join('')}</select>
+      <div class="scout-tag-search-actions">${Object.entries(SCOUT_SEARCH_ROLE_LABELS).map(([role, label]) => `<button type="button" class="jlc-wb-btn" data-tag-search="${role}">${label}</button>`).join('')}</div>
+      <p class="scout-dialog-note">加入搜索后可以继续选词，也可以直接搜索。</p>
+      <div class="scout-collect-actions"><button type="button" class="jlc-wb-btn primary" id="scout-collect-save">${known ? '更新词条' : '收藏词条'}</button><button type="button" class="jlc-wb-btn ghost" id="scout-tag-love">${known?.loved ? '取消心动' : '标为心动'}</button></div>
+      <details><summary>分类与中文备注</summary><label for="scout-collect-zh">中文含义</label><input type="text" id="scout-collect-zh" value="${escapeHtml(known?.zh || '')}" placeholder="可以稍后填写">
+      <label for="scout-collect-type">分类</label><select id="scout-collect-type">${getLexiconTypes().map(type => `<option${type === (known?.type || '未分类') ? ' selected' : ''}>${escapeHtml(type)}</option>`).join('')}</select></details>
+      <details><summary>减少不想看的内容</summary><p class="scout-dialog-note">对标题含有此词的作品生效。</p><div class="scout-collect-actions"><button type="button" class="jlc-wb-btn ghost" data-tag-block="dim">淡化</button><button type="button" class="jlc-wb-btn ghost" data-tag-block="hide">隐藏</button></div></details>
+    </div>`;
+    dialog.querySelector('#scout-tag-choice').onchange = event => render(event.target.value);
+    dialog.querySelector('#scout-collect-cancel').onclick = () => dialog.close();
+    const saved = (term) => {
+      if (!term) return;
+      onSaved?.(term);
+      refreshScoutWorkbenchPagesIfActive('lexicon', 'combo');
+      enhancePageTags();
+      dialog.close();
+    };
+    dialog.querySelector('#scout-collect-save').onclick = () => {
+      const term = addLexiconTerm({ text: selected, sources: sources || [], zh: dialog.querySelector('#scout-collect-zh').value.trim(), type: dialog.querySelector('#scout-collect-type').value, loved: !!known?.loved });
+      showToast('已收藏词条：' + selected); saved(term);
+    };
+    dialog.querySelector('#scout-tag-love').onclick = () => {
+      const term = known ? updateLexiconTerm(known.id, { loved: !known.loved }) : addLexiconTerm({ text: selected, loved: true, sources: sources || [] });
+      showToast(term?.loved ? '已标为心动：' + selected : '已取消心动：' + selected); saved(term);
+    };
+    dialog.querySelectorAll('[data-tag-search]').forEach(button => button.onclick = () => {
+      const recipe = addScoutSearchTerms(getScoutSearchDraft(), selected, button.dataset.tagSearch, 1);
+      saveScoutSearchDraft(recipe); resetScoutSearchUiSession();
+      dialog.close();
+      window.__scoutOpenWorkbench('combo');
     });
-    close();
-    if (term) {
-      showToast(`已采集: ${term.text}${term.zh ? ' · ' + term.zh : ''} [${term.type}]`);
-      if (typeof onSaved === 'function') onSaved(term);
-    }
-  });
-
-  const zhInp = dialog.querySelector('#scout-collect-zh');
-  setTimeout(() => {
-    zhInp.focus();
-    zhInp.select();
-  }, 30);
+    dialog.querySelectorAll('[data-tag-block]').forEach(button => button.onclick = () => {
+      addBlockWord({ text: selected, mode: button.dataset.tagBlock, match: 'word', scope: 'title', reason: '从作品标签添加' });
+      showToast('已更新屏蔽：' + selected); applyListBlocks(); enhancePageTags(); refreshScoutWorkbenchPagesIfActive('blocks', 'lexicon'); dialog.close();
+    });
+  };
+  render(text || choices[0]);
+  dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener('close', () => dialog.remove(), { once: true });
+  dialog.showModal();
 }
 
 function buildLexiconHitFlowHtml(matchResult, options) {
@@ -10135,6 +9159,19 @@ function buildLexiconHitFlowHtml(matchResult, options) {
   return `${head}<span class="scout-lex-flow-chips">${chips}${more}</span>`;
 }
 // @@creamu-part:list-enhancements
+
+function isScoutVideoDestination(link, url) {
+  if (!link || !url) return false;
+  try { return new URL(link.href, location.href).pathname.replace(/\/$/, '') === new URL(url, location.href).pathname.replace(/\/$/, ''); }
+  catch (_) { return false; }
+}
+
+function getScoutVideoNavigationLink(event, url) {
+  if (event.type === 'click' ? event.button !== 0 : event.type !== 'auxclick' || event.button !== 1) return null;
+  if (event.target.closest('button, input, [data-scout-ui], .scout-pub-addon')) return null;
+  const link = event.target.closest('a[href]');
+  return isScoutVideoDestination(link, url) ? link : null;
+}
 
 function clearListBlockInlinePresentation(el) {
   if (!el || !el.style) return;
@@ -10278,20 +9315,15 @@ function applyVideoOpenMode(listEntries) {
     el.querySelectorAll('a[href]').forEach(a => {
       const href = a.getAttribute('href') || '';
       if (!href || href === '#' || href.startsWith('javascript:')) return;
-      // 只处理看起来像视频的链接
-      if (
-        !/\/video|\/video-|\/videos\//i.test(href) &&
-        !a.closest('.thumb-block, .post, .video-block, [id^="video_"], .mb, .mb[data-id], #vidresults .mb')
-      ) {
-        return;
-      }
+      const meta = parseVideoElement(el);
+      if (!meta || !isScoutVideoDestination(a, meta.url)) return;
       if (newTab) {
         a.setAttribute('target', '_blank');
         a.setAttribute('rel', 'noopener noreferrer');
         if (a.dataset.scoutNewTabBound === '1') return;
         a.dataset.scoutNewTabBound = '1';
         a.addEventListener('click', (e) => {
-          if (!isOpenVideosNewTab()) return;
+          if (!isOpenVideosNewTab() || e.target.closest('button, [data-scout-ui]')) return;
           // 左键：强制新标签（部分站点忽略 target）
           if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
           e.preventDefault();
@@ -10329,29 +9361,13 @@ function applyClickedEnhancements(listEntries) {
     if (el.dataset.scoutClickBound === '1') return;
     el.dataset.scoutClickBound = '1';
 
-    const mark = () => {
-      markVideoClicked({
-        site,
-        videoId,
-        title: meta.title,
-        url: meta.url,
-        thumb: meta.thumb,
-        uploader: meta.uploader
-      });
+    const mark = (event) => {
+      if (!getScoutVideoNavigationLink(event, meta.url)) return;
+      markVideoClicked({ site, videoId, title: meta.title, url: meta.url, thumb: meta.thumb, uploader: meta.uploader });
       el.classList.add('scout-visited-item');
     };
-
-    // 卡片内链接（含中键）；整卡 pointerdown 兜底
-    el.querySelectorAll('a[href]').forEach(a => {
-      a.addEventListener('pointerdown', mark, { passive: true });
-      a.addEventListener('click', mark, { passive: true });
-      a.addEventListener('auxclick', mark, { passive: true });
-    });
-    el.addEventListener('pointerdown', (e) => {
-      // 避免与屏蔽控件等冲突：仅卡片主体
-      if (e.target.closest('.scout-tag-addon, .scout-pub-addon, button, input')) return;
-      mark();
-    }, { passive: true });
+    el.addEventListener('click', mark, true);
+    el.addEventListener('auxclick', mark, true);
   });
 
   applyVideoOpenMode(entries);
@@ -10534,9 +9550,9 @@ function enhanceListLexiconHitFlows(listEntries) {
 }
 // @@creamu-part:32-combo-page
 const SCOUT_SEARCH_ROLE_LABELS = {
-  required: '必须',
-  preference: '偏好',
-  excluded: '排除',
+  required: '必须有',
+  preference: '更喜欢',
+  excluded: '不要',
 };
 
 function createScoutSearchUiSession(previous) {
@@ -10590,34 +9606,77 @@ function renderScoutSearchConditionOptions(selectedRole) {
 }
 
 function renderScoutSearchConditions(recipe) {
-  const normalized = normalizeScoutSearchRecipe(recipe);
-  return SCOUT_SEARCH_ROLE_ORDER.map((role) => {
-    const conditions = normalized.conditions.filter((condition) => condition.role === role);
-    const rows = conditions.length
-      ? conditions.map((condition) => `
-          <div class="scout-search-condition is-${role}" data-condition-id="${escapeHtml(condition.id)}">
-            <span class="scout-search-condition-text" title="${escapeHtml(condition.text)}">${escapeHtml(condition.text)}</span>
-            <select class="jlc-wb-select scout-search-condition-role" aria-label="条件类型">
-              ${renderScoutSearchConditionOptions(role)}
-            </select>
-            <select class="jlc-wb-select scout-search-condition-priority" aria-label="偏好层级"${role === 'preference' ? '' : ' hidden'}>
-              ${[1, 2, 3].map((priority) => (
-                `<option value="${priority}"${condition.priority === priority ? ' selected' : ''}>` +
-                  `${priority} 级</option>`
-              )).join('')}
-            </select>
-            <button type="button" class="jlc-wb-icon-btn scout-search-condition-remove" title="移除" aria-label="移除 ${escapeHtml(condition.text)}">×</button>
-          </div>`).join('')
-      : '<div class="scout-search-condition-empty">暂无</div>';
-    return `
-      <section class="scout-search-condition-group is-${role}" data-condition-role="${role}">
-        <div class="scout-search-section-head">
-          <strong>${SCOUT_SEARCH_ROLE_LABELS[role]}</strong>
-          <span>${conditions.length}</span>
-        </div>
-        <div class="scout-search-condition-list">${rows}</div>
-      </section>`;
-  }).join('');
+  return normalizeScoutSearchRecipe(recipe).conditions.map(condition => `
+    <div class="scout-search-condition is-${condition.role}" data-condition-id="${escapeHtml(condition.id)}">
+      <span class="scout-search-condition-text" title="${escapeHtml(condition.text)}">${escapeHtml(condition.text)}</span>
+      <select class="jlc-wb-select scout-search-condition-role" aria-label="条件类型">${renderScoutSearchConditionOptions(condition.role)}</select>
+      <select class="jlc-wb-select scout-search-condition-priority" aria-label="偏好层级"${condition.role === 'preference' ? '' : ' hidden'}>
+        ${[1, 2, 3].map(priority => `<option value="${priority}"${condition.priority === priority ? ' selected' : ''}>${priority} 级</option>`).join('')}
+      </select>
+      <button type="button" class="jlc-wb-icon-btn scout-search-condition-remove" aria-label="移除 ${escapeHtml(condition.text)}">×</button>
+    </div>`).join('');
+}
+
+let scoutSearchContextHref = '';
+let scoutSearchInput = '';
+
+function ensureScoutSearchContextDraft() {
+  if (scoutSearchContextHref === location.href) return;
+  scoutSearchContextHref = location.href;
+  const current = parseScoutExactFilterLocation(location);
+  const query = detectPageKind() === 'search' ? parseSearchContext().query : '';
+  if (!getScoutSearchDraft().conditions.length && (current || query)) {
+    saveScoutSearchDraft(current?.recipe || addScoutSearchTerms(getScoutSearchDraft(), query, 'required', 1));
+  }
+  markScoutWorkbenchPagesDirty('combo');
+}
+
+function renderScoutSearchContext() {
+  const site = detectSite();
+  const kind = detectPageKind();
+  if (kind === 'search') {
+    const ctx = parseSearchContext();
+    const track = findTrackBySiteQuery(site, ctx.query);
+    return `<section class="scout-search-context"><small>正在浏览 · ${escapeHtml(scoutSiteShortLabel(site))}</small>
+      <strong>${escapeHtml(ctx.query || '当前列表')}</strong><div class="scout-context-actions">
+      <button type="button" class="jlc-wb-btn ghost" data-context-action="use">用当前搜索</button>
+      <button type="button" class="jlc-wb-btn ghost" data-context-action="track"${track ? ' disabled' : ''}>${track ? '已加入追更' : '收藏当前搜索'}</button>
+      ${track ? `<button type="button" class="jlc-wb-btn primary" data-context-action="resume">继续 · 第 ${track.last_seen_page || 1} 页</button>` : ''}</div></section>`;
+  }
+  return '';
+}
+
+function getScoutRecipeNavigationUrl(recipe, site, url) {
+  const query = buildScoutBrowsingQuery(recipe, site);
+  if (!query) return '';
+  const target = buildScoutExactFilterUrl(url || buildSearchUrl(site, query), recipe, 'browse');
+  if (!parseScoutExactFilterLocation(new URL(target))) {
+    showToast('搜索条件过长：最多 16 个条件，每个不超过 96 字，请精简后再搜索', true);
+    return '';
+  }
+  return target;
+}
+
+function openScoutCurrentSiteSearch() {
+  let recipe = getScoutSearchDraft();
+  if (compactText(scoutSearchInput)) {
+    const target = getScoutSearchTarget(document.querySelector('[data-jlc-wb-page="combo"]'));
+    recipe = addScoutSearchTerms(recipe, scoutSearchInput.split(/[,，;；]+/), target.role, target.priority);
+    scoutSearchInput = '';
+    document.getElementById('scout-combo-free-input').value = '';
+    saveScoutRecipeAndRender(recipe);
+  }
+  const site = detectSite() || recipe.sites[0];
+  if (!recipe.sites.includes(site)) {
+    recipe = saveScoutRecipeAndRender({ ...recipe, sites: [...recipe.sites, site] });
+  }
+  const url = getScoutRecipeNavigationUrl(recipe, site);
+  if (!url) {
+    if (!recipe.conditions.some(condition => condition.role !== 'excluded')) showToast('输入搜索词，或从页面标签中选择', true);
+    return;
+  }
+  incrementScoutRecipeTermUsage(recipe);
+  openScoutUrl(url, { newTab: !isScoutNarrowViewport() });
 }
 
 function getScoutSearchPoolTerms(recipe, type, query, availableTerms) {
@@ -10873,7 +9932,7 @@ function renderScoutSearchAssessments() {
   if (!session.plan) {
     host.innerHTML = '';
     empty.hidden = false;
-    empty.textContent = '评估组合后在此比较三个站点';
+    empty.textContent = '比较三站，查看结果量与核验样本';
   } else {
     host.innerHTML = session.plan.recipe.sites
       .map((site) => renderScoutSearchAssessmentSite(site))
@@ -10899,10 +9958,10 @@ function renderScoutSearchRelatedSection() {
 
 function renderScoutSearchRuntimeState() {
   const session = __scoutSearchUiSession;
-  const runButton = document.getElementById('scout-combo-search-btn');
+  const runButton = document.getElementById('scout-combo-compare-btn');
   if (runButton) {
     runButton.disabled = session.running;
-    runButton.textContent = session.running ? '评估中' : '评估组合';
+    runButton.textContent = session.running ? '比较中…' : '比较三站';
   }
   renderScoutSearchAssessments();
 }
@@ -11002,6 +10061,10 @@ function renderComboPage() {
   if (!container.hasAttribute('data-search-target-role')) {
     setScoutSearchTarget(container, 'required', 1);
   }
+  const oldInput = container.querySelector('#scout-combo-free-input');
+  if (oldInput) scoutSearchInput = oldInput.value;
+  const scrollTop = container.querySelector('.scout-combo-scroll')?.scrollTop || 0;
+  const disclosures = new Set([...container.querySelectorAll('details[open][id]')].map(el => el.id));
   const target = getScoutSearchTarget(container);
   const recipe = getScoutSearchDraft();
   const terms = getLexiconTerms();
@@ -11018,9 +10081,10 @@ function renderComboPage() {
 
   container.innerHTML = `
     <div class="jlc-wb-list-scroll scout-combo-scroll">
+      ${renderScoutSearchContext()}
       <header class="scout-search-builder-head">
         <div>
-          <strong>搜索条件</strong>
+          <strong>继续找你想看的</strong>
           <span>${escapeHtml(describeScoutSearchRecipe(recipe))}</span>
         </div>
         <div class="scout-search-role-switch" role="group" aria-label="添加目标">
@@ -11030,7 +10094,7 @@ function renderComboPage() {
       </header>
 
       <div class="scout-search-add-row">
-        <input type="text" class="jlc-wb-search" id="scout-combo-free-input" placeholder="输入词或短语">
+        <input type="text" class="jlc-wb-search" id="scout-combo-free-input" aria-label="搜索词" placeholder="输入搜索词，或添加页面标签" value="${escapeHtml(scoutSearchInput)}">
         <div class="scout-search-priority-switch"${target.role === 'preference' ? '' : ' hidden'} role="group" aria-label="偏好层级">
           ${[1, 2, 3].map((priority) => `
             <button type="button" data-search-priority="${priority}" class="${target.priority === priority ? 'is-active' : ''}">${priority}</button>`).join('')}
@@ -11042,7 +10106,7 @@ function renderComboPage() {
         <div class="scout-search-condition-column">
           ${renderScoutSearchConditions(recipe)}
         </div>
-        <div class="scout-search-pool-column">
+        <details class="scout-search-pool-column" id="scout-search-word-picker"><summary>从词库与当前标签选词</summary>
           <div class="scout-search-pool-toolbar">
             <input type="search" class="jlc-wb-search" id="scout-search-term-filter" placeholder="筛选词库">
             <select class="jlc-wb-select" id="scout-search-type-filter" aria-label="词库分类">
@@ -11052,15 +10116,17 @@ function renderComboPage() {
           <div class="scout-search-pool" id="scout-combo-pool">${renderScoutSearchPoolHtml(recipe, selectedType, '', terms)}</div>
           <div id="scout-search-related-host">${renderScoutRelatedSuggestions(recipe)}</div>
           ${renderScoutCurrentTagChoices(currentMeta)}
-        </div>
+        </details>
       </div>
 
-      <section class="scout-search-site-plan">
+      <details class="scout-search-site-plan" id="scout-search-advanced"><summary>站点与高级设置</summary>
+        <label class="scout-priority-toggle"><input type="checkbox" id="scout-search-show-priority"${container.classList.contains('scout-show-priority') ? ' checked' : ''}> 调整偏好优先级</label>
         <div class="scout-search-site-row" role="group" aria-label="搜索站点">${siteSwitches}</div>
         ${planHtml}
-      </section>
+        <button type="button" class="jlc-wb-btn ghost" id="scout-combo-clear-btn">清空搜索条件</button>
+      </details>
 
-      <section class="scout-search-results-section" aria-label="组合评估">
+      <details class="scout-search-results-section" id="scout-search-comparison"><summary>三站比较与核验结果</summary>
         <header class="scout-search-results-head">
           <div>
             <strong id="scout-search-result-status">未运行</strong>
@@ -11069,8 +10135,8 @@ function renderComboPage() {
         </header>
         <details id="scout-search-errors" class="scout-search-errors" hidden></details>
         <div id="scout-search-assessments" class="scout-search-assessments"></div>
-        <div id="scout-search-results-empty" class="jlc-wb-empty">评估组合后在此比较三个站点</div>
-      </section>
+        <div id="scout-search-results-empty" class="jlc-wb-empty">比较三站，查看结果量与核验样本</div>
+      </details>
     </div>
 
     <div class="jlc-wb-footer scout-combo-dock">
@@ -11080,9 +10146,10 @@ function renderComboPage() {
         <button type="button" class="jlc-wb-icon-btn" id="scout-search-save-cancel" title="取消" aria-label="取消收藏">×</button>
       </div>
       <div class="scout-combo-dock-actions">
-        <button type="button" class="jlc-wb-btn primary" id="scout-combo-search-btn">评估组合</button>
-        <button type="button" class="jlc-wb-btn ghost" id="scout-save-current-search-btn">收藏配方</button>
-        <button type="button" class="jlc-wb-btn ghost" id="scout-combo-clear-btn">清空</button>
+        <button type="button" class="jlc-wb-btn primary" id="scout-combo-search-btn">当前站搜索</button>
+        <button type="button" class="jlc-wb-btn ghost" id="scout-combo-compare-btn">比较三站</button>
+        <button type="button" class="jlc-wb-btn ghost" id="scout-save-current-search-btn">收藏搜索</button>
+
       </div>
     </div>
   `;
@@ -11104,16 +10171,19 @@ function renderComboPage() {
     const input = container.querySelector('#scout-combo-free-input');
     const raw = compactText(input && input.value);
     if (!raw) return;
+    input.value = '';
+    scoutSearchInput = '';
     const values = /[,，;；]/.test(raw) ? raw.split(/[,，;；]+/) : [raw];
     saveScoutRecipeAndRender(
       addScoutSearchTerms(recipe, values, target.role, target.priority)
     );
   };
   container.querySelector('#scout-combo-add-btn')?.addEventListener('click', addManualTerms);
+  container.querySelector('#scout-combo-free-input')?.addEventListener('input', event => { scoutSearchInput = event.target.value; });
   container.querySelector('#scout-combo-free-input')?.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    addManualTerms();
+    openScoutCurrentSiteSearch();
   });
 
   container.querySelectorAll('.scout-search-condition').forEach((row) => {
@@ -11184,15 +10254,27 @@ function renderComboPage() {
     });
   });
 
-  container.querySelector('#scout-combo-search-btn')?.addEventListener('click', () => {
+  container.querySelector('#scout-combo-search-btn')?.addEventListener('click', openScoutCurrentSiteSearch);
+  container.querySelector('#scout-combo-compare-btn')?.addEventListener('click', () => {
+    if (compactText(scoutSearchInput)) addManualTerms();
+    document.getElementById('scout-search-comparison').open = true;
+    scoutDrawerExpanded = true;
+    applyScoutWorkbenchGeometry(document.getElementById('jlc-wb'));
     startScoutRecipeSearch();
   });
   container.querySelector('#scout-combo-clear-btn')?.addEventListener('click', () => {
+    scoutSearchInput = '';
+    container.querySelector('#scout-combo-free-input').value = '';
     saveScoutRecipeAndRender(Object.assign({}, recipe, { conditions: [], label: '' }));
   });
 
   const saveBar = container.querySelector('#scout-search-savebar');
   container.querySelector('#scout-save-current-search-btn')?.addEventListener('click', () => {
+    if (compactText(scoutSearchInput)) {
+      addManualTerms();
+      document.getElementById('scout-save-current-search-btn').click();
+      return;
+    }
     saveBar.hidden = false;
     const labelInput = container.querySelector('#scout-search-label');
     if (labelInput && !labelInput.value) {
@@ -11214,7 +10296,7 @@ function renderComboPage() {
     }
     const label = compactText(container.querySelector('#scout-search-label')?.value) ||
       describeScoutSearchRecipe(recipe);
-    const saved = saveScoutSearchDraft(Object.assign({}, recipe, { label }));
+    const saved = saveScoutSearchDraft(Object.assign({}, getScoutSearchDraft(), { label }));
     const tracks = addTracksForScoutRecipe(saved, label, buildScoutSearchPlan(saved, { terms }));
     if (!tracks.length) {
       showToast('当前配方无法收藏', true);
@@ -11223,8 +10305,20 @@ function renderComboPage() {
     if (typeof setupSearchClickTracking === 'function') setupSearchClickTracking();
     showToast(`已收藏 ${tracks.length} 个站点`);
     saveBar.hidden = true;
+    enhanceSearchTrackSubscribe();
     markScoutWorkbenchPageRendered('combo');
   });
+
+  container.querySelector('#scout-search-show-priority').onchange = event => container.classList.toggle('scout-show-priority', event.target.checked);
+  container.querySelectorAll('[data-context-action]').forEach(button => button.onclick = () => {
+    const action = button.dataset.contextAction;
+    const ctx = parseSearchContext();
+    if (action === 'use') saveScoutRecipeAndRender(parseScoutExactFilterLocation(location)?.recipe || addScoutSearchTerms({ sites: recipe.sites, conditions: [] }, ctx.query, 'required', 1));
+    if (action === 'track') { addTrack({ site: detectSite(), query: ctx.query, label: ctx.query, url: ctx.url, recipe: getScoutCurrentSearchRecipe() }); renderComboPage(); enhanceSearchTrackSubscribe(); }
+    if (action === 'resume') openTrackAtBreakpoint(findTrackBySiteQuery(detectSite(), ctx.query));
+  });
+  disclosures.forEach(id => { const el = container.querySelector('#' + id); if (el) el.open = true; });
+  container.querySelector('.scout-combo-scroll').scrollTop = scrollTop;
 
   container.querySelector('#scout-search-assessments')?.addEventListener('click', (event) => {
     const removeButton = event.target.closest('[data-search-remove-condition]');
@@ -11246,10 +10340,7 @@ function renderComboPage() {
 
   markScoutWorkbenchPageRendered('combo');
   renderScoutSearchRuntimeState();
-  if (window.__scoutRunSearchOnOpen) {
-    window.__scoutRunSearchOnOpen = false;
-    setTimeout(() => startScoutRecipeSearch(), 0);
-  }
+
 }
 // @@creamu-part:detail-enhancements
 
@@ -11259,7 +10350,10 @@ const SCOUT_DETAIL_TAG_BOX_SELECTOR = [
   '.metadata-row.video-tags',
   '.video-tags-list',
   '.ordered-label-list',
-  '.video-tags'
+  '.video-tags',
+  '#video-info-tags',
+  '#video-tags',
+  '.tag-container'
 ].join(',');
 
 const SCOUT_DETAIL_DESCRIPTION_SELECTOR = [
@@ -11334,11 +10428,13 @@ function setupMobileDetailTagsCollapse(boxes) {
     return !!el.querySelector('a.is-keyword, a[href^="/tags/"], a[href^="/tag/"]');
   });
   if (!tagsOnly.length) return;
+  const items = [...new Set(getScoutPageTagAnchors(detectSite()).map(anchor => anchor.closest('li') || anchor))];
+  items.forEach((item, index) => item.toggleAttribute('data-scout-tag-extra', index >= 4));
 
   const box = tagsOnly[0];
   tagsOnly.forEach((el) => {
-    el.classList.add('scout-tags-collapsed');
-    el.classList.remove('scout-tags-expanded');
+    el.classList.remove('cropped');
+    if (!document.getElementById('scout-tags-toggle') && !el.classList.contains('scout-tags-expanded')) el.classList.add('scout-tags-collapsed');
   });
 
   let toggle = document.getElementById('scout-tags-toggle');
@@ -11381,8 +10477,7 @@ function setupMobileDetailDescCollapse(boxes) {
 
   const box = list[0];
   list.forEach((el) => {
-    el.classList.add('scout-desc-collapsed');
-    el.classList.remove('scout-desc-expanded');
+    if (!document.getElementById('scout-desc-toggle') && !el.classList.contains('scout-desc-expanded')) el.classList.add('scout-desc-collapsed');
   });
 
   let toggle = document.getElementById('scout-desc-toggle');
@@ -11467,8 +10562,7 @@ function buildScoutPageTagSignature(site, anchors, terms, blocks, isNarrow) {
   const tagState = (Array.isArray(anchors) ? anchors : []).map((anchor) => [
     getScoutTagNodeId(anchor),
     getScoutEnhanceTagText(anchor),
-    anchor.getAttribute('href') || '',
-    anchor.querySelector('.scout-tag-addon') ? 1 : 0
+    anchor.getAttribute('href') || ''
   ]);
   return JSON.stringify([
     site || '',
@@ -11478,22 +10572,6 @@ function buildScoutPageTagSignature(site, anchors, terms, blocks, isNarrow) {
     termState,
     blockState
   ]);
-}
-
-function getScoutPageTagSelector(site) {
-  if (site === 'xvideos' || site === 'xnxx') {
-    return (
-      '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
-      '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a'
-    );
-  }
-  if (site === 'eporner') {
-    return (
-      'a[href^="/tag/"], a[href^="/cat/"], .vit-pornstar a, .vit-category a, ' +
-      '#video-tags a, .tag-container a, a.is-keyword, a.tag'
-    );
-  }
-  return '';
 }
 
 function getScoutPageTagAnchors(site) {
@@ -11590,7 +10668,7 @@ function applyTagVisualState(a, txt, termIndex, preparedBlocks, preparedTerms) {
   if (oldHeart) oldHeart.remove();
   if (zhEl) zhEl.remove();
   a.classList.add('scout-tag-out');
-  a.title = txt + '（未入库 · 点 ＋ 采集）';
+  a.title = txt + '（未入库 · 可在“用标签搜索 / 收藏”中添加）';
 }
 
 function enhancePageTags() {
@@ -11625,77 +10703,17 @@ function enhancePageTags() {
   const preparedTerms = prepareLexiconMatcher(terms);
   const termIndex = buildLexiconTermIndex(preparedTerms);
   const preparedBlocks = prepareBlockMatchers(blocks);
-  const meta = scrapeVideoMeta();
 
   window.__scoutUiMutating = true;
   try {
     anchors.forEach(a => {
       let txt = '';
-      if (a.querySelector('.scout-tag-addon')) {
-        const txt = a.getAttribute('data-scout-tag') || '';
-        if (txt) applyTagVisualState(a, txt, termIndex, preparedBlocks, preparedTerms);
-        return;
-      }
-
       txt = getScoutEnhanceTagText(a);
       if (!txt || txt.startsWith('+') || /[＋✕]/.test(txt)) return;
 
       a.setAttribute('data-scout-tag', txt);
 
       applyTagVisualState(a, txt, termIndex, preparedBlocks, preparedTerms);
-
-      const wrapper = document.createElement('span');
-      wrapper.className = 'scout-tag-addon';
-
-      const addBtn = document.createElement('span');
-      addBtn.className = 'scout-tag-action scout-tag-add-action';
-      addBtn.textContent = '＋';
-      addBtn.title = '采集入库（选分类/翻译）';
-      addBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showScoutCollectDialog({
-          text: txt,
-          sources: [{ site: currentSite, url: location.href, title: meta.title, at: new Date().toISOString() }],
-          onSaved() {
-            refreshScoutWorkbenchPageIfActive('lexicon');
-            refreshScoutWorkbenchPageIfActive('combo');
-            // 清签名以允许词库条更新
-            const bar = document.getElementById('scout-lex-hit-bar');
-            if (bar) delete bar.dataset.hitSig;
-            enhancePageTags();
-          }
-        });
-      });
-
-      const blockBtn = document.createElement('span');
-      blockBtn.className = 'scout-tag-action scout-tag-block-action';
-      blockBtn.textContent = '✕';
-      blockBtn.title = '弱屏蔽(点击) | 强隐藏(Shift+点击)';
-      blockBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const isShift = e.shiftKey;
-        const targetMode = isShift ? 'hide' : 'dim';
-        addBlockWord({
-          text: txt,
-          mode: targetMode,
-          match: 'word',
-          scope: 'title',
-          reason: `自视频标签快捷添加 (${isShift ? '强隐藏' : '弱淡化'})`
-        });
-        showToast(`已加入屏蔽库: ${txt} (${isShift ? '彻底蒸发' : '弱淡化'})`, true);
-        applyListBlocks();
-        refreshScoutWorkbenchPageIfActive('blocks');
-        refreshScoutWorkbenchPageIfActive('combo');
-        const bar = document.getElementById('scout-lex-hit-bar');
-        if (bar) delete bar.dataset.hitSig;
-        enhancePageTags();
-      });
-
-      wrapper.appendChild(addBtn);
-      wrapper.appendChild(blockBtn);
-      a.appendChild(wrapper);
     });
     __scoutPageTagSignature = buildScoutPageTagSignature(
       currentSite,
@@ -11714,12 +10732,13 @@ function enhancePageTags() {
 
 /**
  * 详情页：收藏作品 → 作品列表 + 可选采集标签进词库
- * 醒目双行按钮（PC 贴标题下；手机加宽触控）
+ * 原生标题之后的统一操作栏；保持播放器和站点操作的原有节点。
  */
 function findScoutWorkFavoriteHost() {
   return (
     document.querySelector('h2.page-title') ||
     document.querySelector('.page-title') ||
+    document.querySelector('#video-content-metadata .video-title') ||
     document.querySelector('h1') ||
     document.querySelector('.video-metadata') ||
     document.querySelector('#video-info, .video-info, .title-container')
@@ -11734,134 +10753,109 @@ function syncScoutWorkFavoriteButton(site, videoId, targetButton) {
   button.setAttribute('aria-pressed', saved ? 'true' : 'false');
   const ico = button.querySelector('.scout-work-fav-ico');
   const label = button.querySelector('.scout-work-fav-label');
-  const sub = button.querySelector('.scout-work-fav-sub');
   if (ico) ico.textContent = saved ? '★' : '☆';
   if (label) label.textContent = saved ? '已收藏' : '收藏作品';
-  if (sub) sub.textContent = saved ? '点按更新 · 补采标签' : '入库作品 · 采集标签';
   button.title = saved
     ? '已在作品列表。再次点击可更新信息并补采标签'
     : '收藏到「作品」列表，并采集本页标签进词库';
 }
 
-function enhancePageWorkFavorite() {
+function saveScoutCurrentWork() {
   const currentSite = detectSite();
   if (!currentSite || detectPageKind() !== 'video') return;
-
-  let wrap = document.getElementById('scout-work-fav-bar');
-  let btn = document.getElementById('scout-work-fav-btn');
-  const locationVideoId = videoIdFromUrl(location.href);
-  if (
-    wrap &&
-    btn &&
-    btn.dataset.scoutSite === currentSite &&
-    (!locationVideoId || btn.dataset.scoutVideoId === locationVideoId)
-  ) {
-    syncScoutWorkFavoriteButton(currentSite, btn.dataset.scoutVideoId || locationVideoId);
-    return;
-  }
-  if (btn) btn.remove();
-  if (wrap) wrap.remove();
-
   const meta = scrapeVideoMeta();
-  const url = (meta && meta.url) || location.href;
+  const url = meta.url || location.href;
   const videoId = videoIdFromUrl(url);
-  if (!videoId) return;
-
-  const host = findScoutWorkFavoriteHost();
-  if (!host) return;
-
-  wrap = document.createElement('div');
-  wrap.id = 'scout-work-fav-bar';
-  wrap.className = 'scout-work-fav-bar';
-  wrap.setAttribute('data-scout-ui', '1');
-
-  btn = document.createElement('button');
-  btn.type = 'button';
-  btn.id = 'scout-work-fav-btn';
-  btn.className = 'scout-work-fav-btn';
-  btn.dataset.scoutSite = currentSite;
-  btn.dataset.scoutVideoId = videoId;
-  btn.innerHTML =
-    '<span class="scout-work-fav-ico" aria-hidden="true">☆</span>' +
-    '<span class="scout-work-fav-text">' +
-    '<span class="scout-work-fav-label">收藏作品</span>' +
-    '<span class="scout-work-fav-sub">入库作品 · 采集标签</span>' +
-    '</span>';
-
-  syncScoutWorkFavoriteButton(currentSite, videoId, btn);
-
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const saved = isWorkSaved(currentSite, videoId);
-    if (saved && !confirm('已在作品列表中。更新信息并再次采集标签？')) return;
-    // 点击时重采（创建按钮时 poster/og 可能还没就绪 → thumb 空）
-    const live = typeof scrapeVideoMeta === 'function' ? scrapeVideoMeta() : meta;
-    const liveUrl = (live && live.url) || url;
-    const liveId =
-      (typeof videoIdFromUrl === 'function' ? videoIdFromUrl(liveUrl) : '') || videoId;
-    const liveThumb =
-      (live && live.thumb) ||
-      (typeof pickDetailThumbUrl === 'function' ? pickDetailThumbUrl() : '') ||
-      (meta && meta.thumb) ||
-      '';
-    const res = addWork(
-      {
-        site: currentSite,
-        videoId: liveId,
-        title: (live && live.title) || meta.title,
-        url: liveUrl,
-        thumb: liveThumb,
-        thumbUrl: liveThumb,
-        uploader: (live && live.uploader) || meta.uploader,
-        tags: (live && live.tags) || meta.tags || []
-      },
-      { autoCollectTags: true }
+  if (!videoId) { showToast('无法识别当前作品', true); return; }
+  const thumb = meta.thumb || pickDetailThumbUrl() || '';
+  const res = addWork(
+    {
+      site: currentSite,
+      videoId: videoId,
+      title: meta.title,
+      url: url,
+      thumb: thumb,
+      thumbUrl: thumb,
+      uploader: meta.uploader,
+      tags: meta.tags || []
+    },
+    { autoCollectTags: true }
+  );
+  syncScoutWorkFavoriteButton(currentSite, videoId);
+  if (res.work) {
+    showToast(
+      (res.added ? '已收藏作品' : '已更新作品') +
+        (res.tagsCollected ? `，采集标签 ${res.tagsCollected} 个` : '') +
+        (thumb ? '' : '（暂无封面，稍后再更）')
     );
-    syncScoutWorkFavoriteButton(currentSite, videoId);
-    if (res.work) {
-      showToast(
-        (res.added ? '已收藏作品' : '已更新作品') +
-          (res.tagsCollected ? `，采集标签 ${res.tagsCollected} 个` : '') +
-          (liveThumb ? '' : '（暂无封面，稍后再更）')
-      );
-      markVideoClicked({
-        site: currentSite,
-        videoId: liveId,
-        title: (live && live.title) || meta.title,
-        url: liveUrl,
-        thumb: liveThumb,
-        uploader: (live && live.uploader) || meta.uploader
+    markVideoClicked({
+      site: currentSite,
+      videoId: videoId,
+      title: meta.title,
+      url: url,
+      thumb: thumb,
+      uploader: meta.uploader
+    });
+    // 异步把远程封面缓存成 dataURL（列表离线可显，防防盗链）
+    if (
+      thumb &&
+      !/^data:image\//i.test(thumb) &&
+      typeof cacheThumbToDataUrl === 'function' &&
+      typeof updateWorkThumb === 'function'
+    ) {
+      const wid = res.work.id;
+      cacheThumbToDataUrl(thumb).then((dataUrl) => {
+        if (!dataUrl) return;
+        if (updateWorkThumb(wid, dataUrl, thumb)) {
+          refreshScoutWorkbenchPageIfActive('works');
+        }
       });
-      // 异步把远程封面缓存成 dataURL（列表离线可显，防防盗链）
-      if (
-        liveThumb &&
-        !/^data:image\//i.test(liveThumb) &&
-        typeof cacheThumbToDataUrl === 'function' &&
-        typeof updateWorkThumb === 'function'
-      ) {
-        const wid = res.work.id;
-        cacheThumbToDataUrl(liveThumb).then((dataUrl) => {
-          if (!dataUrl) return;
-          if (updateWorkThumb(wid, dataUrl, liveThumb)) {
-            refreshScoutWorkbenchPageIfActive('works');
-          }
-        });
-      }
-      refreshScoutWorkbenchPageIfActive('works');
-      refreshScoutWorkbenchPageIfActive('lexicon');
-      enhancePageTags();
-    } else {
-      showToast('收藏失败：无法识别作品 ID', true);
     }
-  });
-
-  wrap.appendChild(btn);
-  if (host.parentNode) {
-    host.parentNode.insertBefore(wrap, host.nextSibling);
+    refreshScoutWorkbenchPageIfActive('works');
+    refreshScoutWorkbenchPageIfActive('lexicon');
+    refreshScoutWorkbenchContext();
+    enhancePageTags();
   } else {
-    host.appendChild(wrap);
+    showToast('收藏失败：无法识别作品 ID', true);
   }
+
+}
+
+function openScoutCurrentTags() {
+  const meta = scrapeVideoMeta();
+  const tags = getScoutPageTagAnchors(detectSite()).map(getScoutEnhanceTagText).filter(Boolean);
+  if (!tags.length) { showToast('当前作品暂无可用标签'); return; }
+  showScoutCollectDialog({ tags, sources: [{ site: detectSite(), url: location.href, title: meta.title, at: new Date().toISOString() }] });
+}
+
+function enhancePageWorkFavorite() {
+  const site = detectSite();
+  if (!site || detectPageKind() !== 'video') return;
+  const host = findScoutWorkFavoriteHost();
+  const videoId = videoIdFromUrl(location.href);
+  if (!host || !videoId) return;
+  host.classList.add('scout-detail-title');
+  let bar = document.getElementById('scout-work-fav-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'scout-work-fav-bar';
+    bar.className = 'scout-work-fav-bar';
+    bar.dataset.scoutUi = '1';
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', '当前作品操作');
+    bar.innerHTML = `<button type="button" id="scout-work-fav-btn" class="scout-work-fav-btn"><span class="scout-work-fav-ico" aria-hidden="true">☆</span><span class="scout-work-fav-label">收藏作品</span></button>
+      <button type="button" id="scout-tags-manage">用标签搜索 / 收藏</button>
+      <button type="button" id="scout-detail-console">打开控制台 <span aria-hidden="true">↗</span></button>`;
+    bar.querySelector('#scout-work-fav-btn').onclick = saveScoutCurrentWork;
+    bar.querySelector('#scout-tags-manage').onclick = openScoutCurrentTags;
+    bar.querySelector('#scout-detail-console').onclick = () => window.__scoutOpenWorkbench();
+  }
+  if (host.nextElementSibling !== bar) host.insertAdjacentElement('afterend', bar);
+  const button = bar.querySelector('#scout-work-fav-btn');
+  button.dataset.scoutSite = site;
+  button.dataset.scoutVideoId = videoId;
+  syncScoutWorkFavoriteButton(site, videoId, button);
+  bar.querySelector('#scout-tags-manage').disabled = !getScoutPageTagAnchors(site).length;
 }
 
 function findScoutPublisherAnchor(site) {
@@ -11872,7 +10866,7 @@ function findScoutPublisherAnchor(site) {
   }
   if (site === 'eporner') {
     return document.querySelector(
-      'a[href*="/profile/"][title="Uploader"], a[href*="/profile/"], ' +
+      '#video-info-tags .vit-uploader a, a[href*="/profile/"][title="Uploader"], ' +
         '.publisher-name, .publisher a, a[href*="/channel/"], .post-channel a'
     );
   }
@@ -11893,7 +10887,8 @@ function enhancePagePublisher() {
     ? getScoutLibraryRevision()
     : 0;
   const existing = anchorEl.parentNode.querySelector('.scout-pub-addon');
-  if (existing && existing.dataset.scoutLibraryRevision === String(revision)) return;
+  const publisherKey = [location.href, anchorEl.getAttribute('href'), anchorEl.textContent].join('|');
+  if (existing && existing.dataset.scoutLibraryRevision === String(revision) && existing.dataset.scoutPublisher === publisherKey) return;
   if (existing) existing.remove();
 
   const meta = scrapeVideoMeta();
@@ -11903,11 +10898,13 @@ function enhancePagePublisher() {
   const wrapper = document.createElement('span');
   wrapper.className = 'scout-pub-addon';
   wrapper.dataset.scoutLibraryRevision = String(revision);
+  wrapper.dataset.scoutPublisher = publisherKey;
 
   const pubs = getPublishers();
   const matched = pubs.find(p => p.name.toLowerCase() === pubName.toLowerCase());
 
   const loveBtn = document.createElement('button');
+  loveBtn.type = 'button';
   loveBtn.className = 'scout-pub-action scout-pub-love-action';
   if (matched && matched.status === 'loved') {
     loveBtn.textContent = '❤️ 已关注熟人';
@@ -11931,6 +10928,7 @@ function enhancePagePublisher() {
   });
 
   const blockBtn = document.createElement('button');
+  blockBtn.type = 'button';
   blockBtn.className = 'scout-pub-action scout-pub-block-action';
   if (matched && matched.status === 'blocked') {
     blockBtn.textContent = '🚫 已拉黑';
@@ -11996,8 +10994,7 @@ function getScoutDetailContentSignature() {
   const tagState = anchors.map((anchor) => [
     getScoutDetailNodeId(anchor),
     getScoutEnhanceTagText(anchor),
-    anchor.getAttribute('href') || '',
-    anchor.querySelector('.scout-tag-addon') ? 1 : 0
+    anchor.getAttribute('href') || ''
   ]);
   const tagBoxState = getScoutDetailTagBoxes().map((box) => getScoutDetailNodeId(box));
   const descriptionState = getScoutDetailDescriptionBoxes().map((box) => [
@@ -12524,98 +11521,35 @@ function renderWorksPage() {
 
 /** 打开某站断点页；无 track 时按 query 搜第 1 页 */
 // @@creamu-part:search-enhancements
-
-/**
- * 搜索页订阅追更入口
- * - PC：顶部细条
- * - 手机：FAB 旁小圆钮（不再铺底大横条）
- */
 function enhanceSearchTrackSubscribe() {
-  const site = typeof detectSite === 'function' ? detectSite() : null;
-  if (!site || typeof detectPageKind !== 'function' || detectPageKind() !== 'search') {
-    document.getElementById('scout-search-track-bar')?.remove();
-    return;
-  }
-
-  const ctx = typeof parseSearchContext === 'function' ? parseSearchContext() : { query: '', url: location.href };
-  const query = compactText(ctx && ctx.query);
-  if (!query) {
-    document.getElementById('scout-search-track-bar')?.remove();
-    return;
-  }
-
-  let isNarrow = false;
-  try {
-    isNarrow = !!(window.matchMedia && window.matchMedia('(max-width: 820px)').matches);
-  } catch (_) { /* ignore */ }
-
-  const existing =
-    typeof findTrackBySiteQuery === 'function' ? findTrackBySiteQuery(site, query) : null;
-  const on = !!existing;
-  const qShort = query.length > 28 ? query.slice(0, 26) + '…' : query;
-
+  const site = detectSite();
+  const ctx = detectPageKind() === 'search' ? parseSearchContext() : null;
+  const query = compactText(ctx?.query);
+  if (!site || !query) { document.getElementById('scout-search-track-bar')?.remove(); return; }
+  const list = getVideoElements()[0]?.closest('.mozaique, #vidresults, #videos-list');
+  if (!list) return;
   let bar = document.getElementById('scout-search-track-bar');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'scout-search-track-bar';
-    bar.setAttribute('data-scout-ui', '1');
-    (document.body || document.documentElement).appendChild(bar);
-  }
-  bar.className = isNarrow ? 'scout-track-fab' : 'scout-track-banner';
-  bar.classList.toggle('is-on', on);
-
-  const doToggle = () => {
-    if (on) {
-      if (!confirm(`取消订阅「${query}」？断点会一并删除。`)) return;
-      deleteTrack(existing.id);
-      showToast('已取消搜索追更');
-    } else {
-      addTrack({
-        site,
-        query,
-        label: query,
-        url: (ctx && ctx.url) || location.href
-      });
-      if (typeof setupSearchClickTracking === 'function') setupSearchClickTracking();
-      showToast('已订阅：' + qShort);
-    }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'scout-search-track-bar'; bar.dataset.scoutUi = '1'; }
+  if (bar.nextElementSibling !== list) list.insertAdjacentElement('beforebegin', bar);
+  const track = findTrackBySiteQuery(site, query);
+  const found = track && Number(track.last_seen_page || 1) === parseListPage(site) ? findBreakpointVideoElement(track) : null;
+  bar.innerHTML = `<span class="scout-track-banner-text"><small>当前搜索</small><b>${escapeHtml(query)}</b></span>
+    ${track ? `<button type="button" id="scout-bp-jump-btn">${found ? '定位上次作品' : '继续 · 第 ' + (track.last_seen_page || 1) + ' 页'}</button>` : ''}
+    <button type="button" id="scout-search-track-toggle">${track ? '已追更 · 管理' : '收藏搜索'}</button>`;
+  bar.querySelector('#scout-search-track-toggle').onclick = () => {
+    if (track) { window.__scoutOpenWorkbench('tracks'); return; }
+    addTrack({ site, query, label: query, url: ctx.url, recipe: getScoutCurrentSearchRecipe() });
     enhanceSearchTrackSubscribe();
-    refreshScoutWorkbenchPageIfActive('tracks');
-    refreshScoutWorkbenchPageIfActive('combo');
+    refreshScoutWorkbenchPagesIfActive('tracks', 'combo');
+    showToast('已收藏搜索，下次可继续浏览');
   };
-
-  if (isNarrow) {
-    // 手机：小圆钮，一点即订/取消；叠在工作台钮上方
-    bar.innerHTML = '';
-    bar.title = on ? `已订阅：${query}（点按取消）` : `订阅追更：${query}`;
-    bar.setAttribute('role', 'button');
-    bar.setAttribute('aria-label', on ? '取消搜索追更' : '订阅搜索追更');
-    bar.innerHTML = `<span class="scout-track-fab-ico">${on ? '⭐' : '☆'}</span>`;
-    bar.onclick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      doToggle();
-    };
-    if (typeof dockMobileFabStack === 'function') dockMobileFabStack();
-    return;
-  }
-
-  // PC：顶部细条
-  bar.onclick = null;
-  bar.removeAttribute('role');
-  bar.innerHTML = `
-    <span class="scout-track-banner-text" title="${escapeHtml(query)}">
-      ${on ? '⭐ 已订阅' : '☆ 追更'} · <b>${escapeHtml(qShort)}</b>
-    </span>
-    <button type="button" id="scout-search-track-toggle" class="scout-track-banner-btn">
-      ${on ? '取消' : '订阅'}
-    </button>
-  `;
-  bar.querySelector('#scout-search-track-toggle')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    doToggle();
-  });
+  const resume = bar.querySelector('#scout-bp-jump-btn');
+  if (resume) resume.onclick = () => {
+    if (!found) { openTrackAtBreakpoint(track); return; }
+    found.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    found.classList.add('scout-breakpoint-highlight');
+    setTimeout(() => found.classList.remove('scout-breakpoint-highlight'), 3000);
+  };
 }
 // @@creamu-part:36-tracking-page
 function openTrackAtBreakpoint(track, site, query) {
@@ -12634,13 +11568,14 @@ function openTrackAtBreakpoint(track, site, query) {
     typeof applyListPageToUrl === 'function'
       ? applyListPageToUrl(baseUrl, siteNorm, page)
       : baseUrl;
-  openScoutUrl(target, { newTab: true });
+  const destination = track?.recipe ? getScoutRecipeNavigationUrl(track.recipe, siteNorm, target) : target;
+  if (destination) openScoutUrl(destination, { newTab: !isScoutNarrowViewport() });
 }
 
 function openScoutRecipeFromTracking(group) {
   if (!group || !group.recipe || typeof saveScoutSearchDraft !== 'function') return false;
   saveScoutSearchDraft(group.recipe);
-  window.__scoutRunSearchOnOpen = true;
+  resetScoutSearchUiSession();
   const button = document.querySelector('#jlc-wb .jlc-wb-nav button[data-tab="combo"]');
   if (button) button.click();
   return !!button;
@@ -12662,7 +11597,7 @@ function renderTracksPage() {
   let listHtml = '';
   if (!tracks.length) {
     listHtml =
-      '<div class="jlc-wb-empty">还没有收藏的搜索追更。在搜索页时，可在“组合搜索”中一键收藏！</div>';
+      '<div class="jlc-wb-empty">还没有收藏的搜索。在列表上方或控制台搜索页点击“收藏搜索”，下次从断点继续。</div>';
   } else {
     groups.forEach((g) => {
       const curTrack =
@@ -12744,7 +11679,7 @@ function renderTracksPage() {
               </div>
             </div>
             <div class="jlc-wb-item-side">
-              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="${g.recipe ? '重新运行组合结果' : '优先当前站断点'}">${g.recipe ? '结果' : '续看'}</button>
+              <button type="button" class="jlc-wb-open-btn scout-track-open-btn" title="优先当前站断点">续看</button>
               <button type="button" class="jlc-wb-btn ghost scout-track-expand-btn">站点</button>
               <button type="button" class="jlc-wb-more-btn scout-track-more-btn">•••</button>
             </div>
@@ -12752,6 +11687,7 @@ function renderTracksPage() {
           <div class="scout-track-group-sites">${rowsHtml}</div>
           <div class="jlc-wb-item-edit scout-track-edit">
             <div class="scout-track-edit-actions">
+              ${g.recipe ? '<button type="button" class="jlc-wb-btn ghost scout-track-recipe-btn">编辑搜索条件</button>' : ''}
               ${curTrack ? '<button type="button" class="jlc-wb-btn danger scout-track-del-current-btn">取消当前站</button>' : ''}
               <button type="button" class="jlc-wb-btn danger scout-track-delete-btn">删除整组</button>
               <button type="button" class="jlc-wb-btn ghost scout-track-cancel-btn">取消</button>
@@ -12776,7 +11712,6 @@ function renderTracksPage() {
     if (!group) return;
 
     itemEl.querySelector('.scout-track-open-btn')?.addEventListener('click', () => {
-      if (group.recipe && openScoutRecipeFromTracking(group)) return;
       // 优先当前站：有订则续断点，无订则当前站搜第 1 页；无法识别站则用组内最新一条
       let site = currentSite;
       let track = site
@@ -12784,6 +11719,7 @@ function renderTracksPage() {
           ? findTrackInGroup(group, site)
           : null
         : null;
+      if (group.recipe && !track) { track = group.tracks[0]; site = track?.site; }
       if (!site) {
         track = group.tracks
           .slice()
@@ -12803,6 +11739,7 @@ function renderTracksPage() {
         ?.classList.toggle('is-open');
     });
 
+    itemEl.querySelector('.scout-track-recipe-btn')?.addEventListener('click', () => openScoutRecipeFromTracking(group));
     const moreBtn = itemEl.querySelector('.scout-track-more-btn');
     const editArea = itemEl.querySelector('.scout-track-edit');
     moreBtn?.addEventListener('click', (e) => {
@@ -13041,6 +11978,7 @@ function createScoutExactFilterState() {
     key: '',
     site: '',
     recipe: null,
+    mode: 'exact',
     terms: [],
     records: new Map(),
     queue: [],
@@ -13228,7 +12166,7 @@ function renderScoutExactFilterBar(state) {
     ? ` · ${counts.failed} 条未能核验，已保留`
     : '';
   bar.innerHTML = `
-    <span class="scout-exact-filter-text">只看同时命中 · 保留 ${counts.match}/${counts.total}${pendingText}${failedText}</span>
+    <span class="scout-exact-filter-text">${state.mode === 'browse' ? '按必须有 / 不要筛选' : '只看同时命中'} · 保留 ${counts.match}/${counts.total}${pendingText}${failedText}</span>
     <span class="scout-exact-filter-actions">
       ${counts.retryable ? '<button type="button" data-scout-exact-action="retry">重试失败</button>' : ''}
       <button type="button" data-scout-exact-action="show-all">显示全部</button>
@@ -13270,14 +12208,14 @@ function getScoutExactFilterPaginationAnchors() {
   return anchors;
 }
 
-function preserveScoutExactFilterPagination(recipe) {
+function preserveScoutExactFilterPagination(recipe, mode) {
   getScoutExactFilterPaginationAnchors().forEach((anchor) => {
     const href = compactText(anchor.getAttribute && anchor.getAttribute('href'));
     if (!href || href === '#' || /^javascript:/i.test(href)) return;
     const stored = compactText(anchor.getAttribute('data-scout-exact-original-href'));
     const original = stored || href;
     if (!stored) anchor.setAttribute('data-scout-exact-original-href', original);
-    const next = buildScoutExactFilterUrl(original, recipe);
+    const next = buildScoutExactFilterUrl(original, recipe, mode);
     if (next && next !== href) anchor.setAttribute('href', next);
   });
 }
@@ -13308,7 +12246,10 @@ async function verifyScoutExactFilterRecord(state, record) {
     recordRelations: false,
   });
   if (state !== __scoutExactFilterState || state.runId !== __scoutExactFilterState.runId) return;
-  if (evaluated && evaluated.evaluation && evaluated.evaluation.exact_match) {
+  const matched = state.mode === 'browse'
+    ? evaluated?.evaluation?.state === 'verified'
+    : evaluated?.evaluation?.exact_match;
+  if (matched) {
     record.status = 'match';
     record.error = '';
   } else {
@@ -13413,6 +12354,7 @@ function applyScoutExactSearchFilter(listEntries) {
     site,
     currentScope,
     scoutSearchRecipeFingerprint(recipe),
+    parsed.mode || 'exact',
     getScoutExactFilterPageHref(),
   ].join('|');
   let state = __scoutExactFilterState;
@@ -13422,11 +12364,12 @@ function applyScoutExactSearchFilter(listEntries) {
     state.key = pageKey;
     state.site = site;
     state.recipe = recipe;
+    state.mode = parsed.mode || 'exact';
     state.terms = typeof getLexiconTerms === 'function' ? getLexiconTerms() : [];
   }
 
   const pending = syncScoutExactFilterRecords(state, listEntries);
-  preserveScoutExactFilterPagination(recipe);
+  preserveScoutExactFilterPagination(recipe, state.mode);
   renderScoutExactFilterBar(state);
   if (pending.length) startScoutExactFilterWorkers(state);
 }
@@ -13435,6 +12378,12 @@ function setScoutSettingsOpen(open, tab) {
   const drawer = document.getElementById('jlc-wb-settings');
   if (!drawer) return;
   drawer.classList.toggle('is-open', !!open);
+  const wb = document.getElementById('jlc-wb');
+  wb.querySelector('.jlc-wb-body').inert = !!open;
+  wb.querySelector('.jlc-wb-nav').inert = !!open;
+  wb.querySelector('#scout-workbench-context').inert = !!open;
+  if (open) { scoutDrawerExpanded = true; applyScoutWorkbenchGeometry(wb); }
+  (open ? drawer.querySelector('#jlc-wb-settings-close') : wb.querySelector('#scout-wb-settings-btn'))?.focus();
   if (open) {
     renderScoutSettingsSection(tab || 'overview');
   }
@@ -13481,13 +12430,12 @@ function renderSettingsPage(section) {
       <h3>站点界面</h3>
       <div class="legacy-row">
         <label class="legacy-toggle">
-          <span>站点奶油主题</span>
+          <span>站点协调主题</span>
           <input type="checkbox" id="scout-cfg-cream-site" ${cfg.cream_site_theme !== false ? 'checked' : ''}>
         </label>
       </div>
       <div class="legacy-note scout-settings-note is-compact">
-        开启后重绘三站底色、顶栏、列表卡片（非统一奶油）。<br>
-        <b>xvideos 暖红 · xnxx 冷蓝 · eporner 叶绿</b>。卡片用站点色，不用白底。关闭=原生样式。
+        XVideos 使用柔和浅色；XNXX、Eporner 保留深色。控制台与当前站点协调，关闭后恢复原站页面。
       </div>
       <h3 class="scout-settings-subheading">浏览</h3>
       <div class="legacy-row">
@@ -13496,7 +12444,7 @@ function renderSettingsPage(section) {
           <input type="checkbox" id="scout-cfg-open-new-tab" ${cfg.open_videos_new_tab !== false ? 'checked' : ''}>
         </label>
       </div>
-      <div class="legacy-note scout-settings-note">开启后列表点影片在新标签打开，不离开当前搜索页。组合搜索同样用新标签。</div>
+      <div class="legacy-note scout-settings-note">开启后列表点影片在新标签打开，不离开当前搜索页。控制台搜索在桌面打开新标签，手机在当前页面继续。</div>
       <div class="legacy-row scout-settings-spaced-row">
         <label class="legacy-toggle">
           <span>关闭站点自动预览</span>
@@ -13505,7 +12453,7 @@ function renderSettingsPage(section) {
       </div>
       <div class="legacy-note scout-settings-note is-compact">
         关闭站点列表自动播放预览，减轻下滑卡顿。<br>
-        点缩略图的手动预览仍可用。
+        封面上的“预览”按钮仍可用，点封面始终进入详情。
       </div>
     `;
   } else if (sec === 'overview') {
@@ -13902,11 +12850,58 @@ function refreshScoutWorkbenchPageIfActive(pageName) {
 function refreshScoutWorkbenchPagesIfActive(...pageNames) {
   const workbench = document.getElementById('jlc-wb');
   if (!workbench || !workbench.classList.contains('is-open')) return false;
+  refreshScoutWorkbenchContext();
   const active = workbench.querySelector('.jlc-wb-nav button.active');
   const activePageName = active && active.getAttribute('data-tab');
   const candidates = pageNames.length ? pageNames : SCOUT_WORKBENCH_PAGE_NAMES;
   if (!activePageName || !candidates.includes(activePageName)) return false;
   return renderScoutWorkbenchTab(activePageName);
+}
+
+function refreshScoutWorkbenchContext() {
+  const wb = document.getElementById('jlc-wb');
+  const context = document.getElementById('scout-workbench-context');
+  if (!context || !wb.classList.contains('is-open')) return;
+  if (detectPageKind() !== 'video') {
+    context.hidden = true;
+    context.replaceChildren();
+    delete context.dataset.signature;
+    return;
+  }
+  const signature = [
+    location.href, getScoutLibraryRevision(),
+    findScoutWorkFavoriteHost()?.textContent,
+    findScoutPublisherAnchor(detectSite())?.textContent,
+    document.querySelector('meta[property="og:image"]')?.content,
+    ...getScoutPageTagAnchors(detectSite()).map(getScoutEnhanceTagText),
+  ].join('|');
+  if (context.dataset.signature === signature) return;
+  const meta = scrapeVideoMeta();
+  const saved = isWorkSaved(detectSite(), videoIdFromUrl(location.href));
+  context.hidden = false;
+  context.dataset.signature = signature;
+  context.innerHTML = `<div class="scout-current-work-heading">
+    ${meta.thumb ? `<img class="scout-current-work-cover" src="${escapeHtml(meta.thumb)}" alt="">` : ''}
+    <div class="scout-current-work-copy"><small>当前作品 · ${escapeHtml(scoutSiteShortLabel(detectSite()))}</small>
+    <strong title="${escapeHtml(meta.title)}">${escapeHtml(meta.title || '当前作品')}</strong>
+    <span>${escapeHtml(meta.uploader || '发布者未提供')}${meta.tags.length ? ' · ' + meta.tags.length + ' 个标签' : ''}</span></div>
+    <button type="button" class="jlc-wb-btn ghost" data-context-action="return">返回影片</button>
+    </div><div class="scout-current-work-actions">
+    <button type="button" class="jlc-wb-btn ghost" data-context-action="favorite" aria-pressed="${saved}">${saved ? '已收藏 · 更新' : '收藏作品'}</button>
+    <button type="button" class="jlc-wb-btn ghost" data-context-action="tags"${meta.tags.length ? '' : ' disabled'}>用标签继续找</button></div>`;
+  context.querySelector('img')?.addEventListener('error', event => event.currentTarget.remove(), { once: true });
+  context.querySelector('[data-context-action="favorite"]').onclick = saveScoutCurrentWork;
+  context.querySelector('[data-context-action="tags"]').onclick = () => {
+    window.__scoutOpenWorkbench('combo');
+    const picker = document.getElementById('scout-search-word-picker');
+    if (picker) picker.open = true;
+    document.querySelector('.scout-search-current-tags')?.scrollIntoView({ block: 'nearest' });
+  };
+  context.querySelector('[data-context-action="return"]').onclick = () => {
+    window.__scoutCloseWorkbench();
+    const title = findScoutWorkFavoriteHost();
+    if (title) { title.tabIndex = -1; title.focus({ preventScroll: true }); title.scrollIntoView({ block: 'start' }); }
+  };
 }
 
 function initScoutWorkbench() {
@@ -13919,9 +12914,12 @@ function initScoutWorkbench() {
 
   let fab = document.getElementById('jlc-wb-fab');
   if (!fab) {
-    fab = document.createElement('div');
+    fab = document.createElement('button');
+    fab.type = 'button';
+    fab.setAttribute('aria-label', '打开 Scout 控制台');
+    fab.setAttribute('aria-expanded', 'false');
     fab.id = 'jlc-wb-fab';
-    fab.innerHTML = '<span class="jlc-wb-fab-badge">0</span>🧭';
+    fab.innerHTML = '<span class="scout-brand-mark" aria-hidden="true">S</span><span>Scout</span><span class="jlc-wb-fab-badge">0</span>';
     document.body.appendChild(fab);
   }
 
@@ -13935,25 +12933,14 @@ function initScoutWorkbench() {
     }
   }
   clampScoutFabPosition(fab);
-  dockMobileFabStack();
-  if (!window.__scoutFabDockBound) {
-    window.__scoutFabDockBound = true;
-    window.addEventListener('resize', () => {
-      clampScoutFabPosition(document.getElementById('jlc-wb-fab'));
-      dockMobileFabStack();
-    }, { passive: true });
-    window.addEventListener('orientationchange', () => {
-      setTimeout(() => {
-        clampScoutFabPosition(document.getElementById('jlc-wb-fab'));
-        dockMobileFabStack();
-      }, 120);
-    }, { passive: true });
-  }
 
   let wb = document.getElementById('jlc-wb');
   if (!wb) {
     wb = document.createElement('div');
     wb.id = 'jlc-wb';
+    wb.tabIndex = -1;
+    wb.setAttribute('role', 'region');
+    wb.setAttribute('aria-label', 'Scout 控制台');
     wb.innerHTML = `
       <div class="jlc-wb-resize-w"></div>
       <div class="jlc-wb-resize-h"></div>
@@ -13962,23 +12949,29 @@ function initScoutWorkbench() {
       <div class="jlc-wb-header">
         <div>
           <div class="jlc-wb-title">Creamu · Scout</div>
-          <div class="jlc-wb-subtitle">欧美发现工作台 v${SCOUT_VERSION}</div>
+          <div class="jlc-wb-subtitle">发现 · 收藏 · 继续浏览</div>
         </div>
         <div class="jlc-wb-header-actions">
+          <button type="button" class="jlc-wb-btn ghost" id="scout-wb-expand-btn">展开</button>
+          <button type="button" class="jlc-wb-btn ghost" id="scout-wb-layout-btn">浮窗</button>
           <button type="button" class="jlc-wb-icon-btn" id="scout-wb-settings-btn" title="设置">⚙</button>
           <button type="button" class="jlc-wb-icon-btn" id="scout-wb-close-btn" title="最小化">✕</button>
         </div>
       </div>
 
-      <div class="jlc-wb-nav">
-        <button class="active" data-tab="combo">搜索</button>
-        <button data-tab="lexicon">词库</button>
-        <button data-tab="works">作品</button>
-        <button data-tab="publishers">熟人</button>
-        <button data-tab="tracks">追更</button>
-        <button data-tab="blocks">屏蔽</button>
+      <div class="jlc-wb-nav" aria-label="控制台导航">
+        <button type="button" class="active" data-tab="combo">搜索</button>
+        <button type="button" data-tab="tracks">追更</button>
+        <button type="button" data-tab="works">收藏</button>
+        <button type="button" id="scout-wb-more-btn" aria-expanded="false">管理 ▾</button>
+        <div class="scout-secondary-nav" hidden>
+          <button type="button" data-tab="lexicon">词库</button>
+          <button type="button" data-tab="publishers">熟人</button>
+          <button type="button" data-tab="blocks">屏蔽</button>
+        </div>
       </div>
 
+      <section id="scout-workbench-context" aria-label="当前作品" hidden></section>
       <div class="jlc-wb-body">
         <div data-jlc-wb-page="combo"></div>
         <div data-jlc-wb-page="lexicon" hidden></div>
@@ -14015,7 +13008,7 @@ function initScoutWorkbench() {
   makeResizable(wb);
 
   function triggerTab(tabName) {
-    wb.querySelectorAll('.jlc-wb-nav button').forEach(btn => {
+    wb.querySelectorAll('.jlc-wb-nav [data-tab]').forEach(btn => {
       if (btn.getAttribute('data-tab') === tabName) {
         btn.classList.add('active');
       } else {
@@ -14031,26 +13024,32 @@ function initScoutWorkbench() {
       }
     });
 
+    const secondary = ['lexicon', 'publishers', 'blocks'].includes(tabName);
+    wb.querySelector('.scout-secondary-nav').hidden = !secondary;
+    wb.querySelector('#scout-wb-more-btn').setAttribute('aria-expanded', String(secondary));
+    if (isScoutNarrowViewport() && tabName !== 'combo') scoutDrawerExpanded = true;
     renderScoutWorkbenchTab(tabName);
+    applyScoutWorkbenchGeometry(wb);
   }
 
   function openScoutWorkbench(tabName) {
-    applyScoutWorkbenchGeometry(wb);
+    ensureScoutSearchContextDraft();
     wb.classList.add('is-open');
     fab.classList.add('is-panel-open');
-    // PC 端不要锁 body 滚动：部分站点会因此产生遮罩/焦点异常，表现为“点了没开”
-    if (window.matchMedia && window.matchMedia('(max-width: 820px)').matches) {
-      document.body.style.overflow = 'hidden';
-    }
+    fab.setAttribute('aria-expanded', 'true');
     const tab = tabName || (wb.querySelector('.jlc-wb-nav button.active')?.getAttribute('data-tab')) || 'combo';
     triggerTab(tab);
+    refreshScoutWorkbenchContext();
+    wb.focus({ preventScroll: true });
   }
 
   function closeScoutWorkbench() {
     setScoutSettingsOpen(false);
     wb.classList.remove('is-open');
     fab.classList.remove('is-panel-open');
-    document.body.style.overflow = '';
+    fab.setAttribute('aria-expanded', 'false');
+    applyScoutWorkbenchGeometry(wb);
+    fab.focus({ preventScroll: true });
   }
 
   if (fab.dataset.scoutClickBound !== '1') {
@@ -14068,6 +13067,36 @@ function initScoutWorkbench() {
       }
     });
   }
+
+  window.__scoutOpenWorkbench = openScoutWorkbench;
+  window.__scoutCloseWorkbench = closeScoutWorkbench;
+  wb.querySelector('#scout-wb-expand-btn').onclick = () => { scoutDrawerExpanded = !scoutDrawerExpanded; applyScoutWorkbenchGeometry(wb); };
+  wb.querySelector('#scout-wb-layout-btn').onclick = () => {
+    GM_setValue('scout_wb_layout', wb.classList.contains('is-docked') ? 'float' : 'dock');
+    applyScoutWorkbenchGeometry(wb);
+  };
+  wb.querySelector('#scout-wb-more-btn').onclick = (event) => {
+    const menu = wb.querySelector('.scout-secondary-nav');
+    menu.hidden = !menu.hidden;
+    event.currentTarget.setAttribute('aria-expanded', String(!menu.hidden));
+  };
+  wb.addEventListener('focusin', (event) => {
+    if (isScoutNarrowViewport() && event.target.matches('input, textarea')) {
+      scoutDrawerExpanded = true;
+      applyScoutWorkbenchGeometry(wb);
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !wb.classList.contains('is-open') || document.querySelector('dialog[open]')) return;
+    if (wb.querySelector('.jlc-wb-settings.is-open')) setScoutSettingsOpen(false);
+    else closeScoutWorkbench();
+  });
+  document.addEventListener('fullscreenchange', () => {
+    document.documentElement.classList.toggle('scout-player-fullscreen', !!document.fullscreenElement);
+    if (document.fullscreenElement) { stopListPreview(); closeScoutWorkbench(); }
+  });
+  window.visualViewport?.addEventListener('resize', () => { if (wb.classList.contains('is-open')) applyScoutWorkbenchGeometry(wb); });
+  window.visualViewport?.addEventListener('scroll', () => { if (wb.classList.contains('is-open') && isScoutNarrowViewport()) applyScoutWorkbenchGeometry(wb); });
 
   const closeBtn = wb.querySelector('#scout-wb-close-btn');
   if (closeBtn && closeBtn.dataset.scoutBound !== '1') {
@@ -14101,7 +13130,7 @@ function initScoutWorkbench() {
 
   if (wb.dataset.scoutNavBound !== '1') {
     wb.dataset.scoutNavBound = '1';
-    wb.querySelectorAll('.jlc-wb-nav button').forEach(btn => {
+    wb.querySelectorAll('.jlc-wb-nav [data-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
         setScoutSettingsOpen(false);
         triggerTab(btn.getAttribute('data-tab'));
@@ -14155,7 +13184,7 @@ function findBreakpointVideoElement(track) {
  * 列表点击 → 写追更断点（与 JLC last_seen 类似）。
  * 仅在搜索页绑定；是否写入取决于当前 URL 能否匹配收藏 track。
  */
-const SCOUT_SEARCH_TRACK_EVENTS = ['click', 'auxclick', 'pointerdown'];
+const SCOUT_SEARCH_TRACK_EVENTS = ['click', 'auxclick'];
 
 function markSearchTrackingBreakpointFromEvent(e) {
   const site = detectSite();
@@ -14170,7 +13199,7 @@ function markSearchTrackingBreakpointFromEvent(e) {
   if (!videoEl) return;
 
   const meta = parseVideoElement(videoEl);
-  if (!meta || !meta.url) return;
+  if (!meta || !meta.url || !getScoutVideoNavigationLink(e, meta.url)) return;
 
   const searchCtx = parseSearchContext();
   if (!searchCtx.query) return;
@@ -14191,14 +13220,6 @@ function markSearchTrackingBreakpointFromEvent(e) {
     updated_at: new Date().toISOString()
   });
 
-  markVideoClicked({
-    site,
-    videoId,
-    title: meta.title,
-    url: meta.url,
-    thumb: meta.thumb,
-    uploader: meta.uploader
-  });
 }
 
 function enableSearchClickTracking() {
@@ -14234,99 +13255,17 @@ function setupSearchClickTracking() {
   applySearchClickTrackingMode();
 }
 
-function showTrackingPagebar(track, targetEl) {
-  let bar = document.getElementById('jlc-tracking-pagebar');
-  if (bar) return;
-
-  bar = document.createElement('div');
-  bar.id = 'jlc-tracking-pagebar';
-  bar.className = 'jlc-wb-pagebar scout-tracking-pagebar';
-
-  let hint = '';
-  let buttonText = '';
-  let actionFn = null;
-  const label = escapeHtml(track.label || '');
-  const page = track.last_seen_page || 1;
-
-  if (targetEl) {
-    hint = `本页有断点 · p${page}`;
-    buttonText = '定位';
-    actionFn = () => {
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      targetEl.classList.add('scout-breakpoint-highlight');
-      setTimeout(() => {
-        targetEl.classList.remove('scout-breakpoint-highlight');
-      }, 5000);
-      bar.remove();
-    };
-  } else {
-    hint = `上次 p${page}`;
-    buttonText = '续看';
-    const targetUrl = applyListPageToUrl(track.url, track.site, track.last_seen_page);
-    actionFn = () => {
-      location.href = targetUrl;
-    };
-  }
-
-  bar.innerHTML = `
-    <span class="jlc-tracking-pagebar-text" title="${label}">
-      ⭐ ${label} · ${hint}
-    </span>
-    <button type="button" class="scout-tracking-pagebar-action jlc-bp-continue" id="scout-bp-jump-btn">${buttonText}</button>
-    <button type="button" class="scout-tracking-pagebar-action scout-bp-dismiss" id="scout-bp-close-bar-btn">忽略</button>
-  `;
-
-  document.body.appendChild(bar);
-
-  bar.querySelector('#scout-bp-jump-btn').addEventListener('click', actionFn);
-  bar.querySelector('#scout-bp-close-bar-btn').addEventListener('click', () => {
-    bar.remove();
-  });
-}
-
 function checkSearchTrackingBreakpoints() {
-  const site = detectSite();
-  if (!site) return;
-  const kind = detectPageKind();
-  if (kind !== 'search') return;
-
-  // 搜索页始终挂断点监听（收藏可后发生）
+  if (detectPageKind() !== 'search') return;
   setupSearchClickTracking();
-
-  const searchCtx = parseSearchContext();
-  if (!searchCtx.query) return;
-
-  const matchedTrack =
-    typeof findTrackBySiteQuery === 'function'
-      ? findTrackBySiteQuery(site, searchCtx.query)
-      : null;
-  if (!matchedTrack) return;
-
-  const currentPage = parseListPage(site);
-  const lastPage = Number(matchedTrack.last_seen_page) || 1;
-
-  if (matchedTrack.last_seen_item && currentPage === lastPage) {
-    setTimeout(() => {
-      const foundEl = findBreakpointVideoElement(matchedTrack);
-      if (foundEl) {
-        showTrackingPagebar(matchedTrack, foundEl);
-      } else if (lastPage > 1) {
-        // 本页未找到该片，仍提示可跳页
-        showTrackingPagebar(matchedTrack, null);
-      }
-    }, 800);
-  } else if (lastPage > 1 && currentPage !== lastPage) {
-    // 不在断点页（含从首页回来）→ 提示继续
-    showTrackingPagebar(matchedTrack, null);
-  }
+  enhanceSearchTrackSubscribe();
 }
 // @@creamu-part:preview-runtime
 
 // ----------------------------------------
-// 列表预览：点缩略图播预览，再点一次进详情（xvideos/xnxx 的 data-pvv；eporner 不做预览）
+// Preview is an explicit action. Cover links always retain navigation semantics.
 let __scoutPreviewVideo = null;
 let __scoutPreviewHost = null;
-let __scoutPreviewTimer = null;
 
 function isScoutMobileListViewport() {
   try {
@@ -14337,10 +13276,6 @@ function isScoutMobileListViewport() {
 }
 
 function stopListPreview() {
-  if (__scoutPreviewTimer) {
-    clearInterval(__scoutPreviewTimer);
-    __scoutPreviewTimer = null;
-  }
   if (__scoutPreviewVideo) {
     try {
       const layer = __scoutPreviewVideo.closest('.scout-list-preview-layer');
@@ -14353,7 +13288,9 @@ function stopListPreview() {
     __scoutPreviewVideo = null;
   }
   if (__scoutPreviewHost) {
-    __scoutPreviewHost.classList.remove('scout-preview-playing', 'scout-preview-positioned');
+    const button = __scoutPreviewHost.querySelector('.scout-preview-button');
+    if (button) { button.textContent = '预览'; button.setAttribute('aria-pressed', 'false'); }
+    __scoutPreviewHost.classList.remove('scout-preview-playing');
     __scoutPreviewHost.querySelectorAll('img[data-scout-orig-src]').forEach((img) => {
       if (img.dataset.scoutOrigSrc) img.src = img.dataset.scoutOrigSrc;
     });
@@ -14413,22 +13350,27 @@ function mountPreviewVideo(host, url) {
   __scoutPreviewVideo = v;
 
   let failed = false;
+  let failureTimer;
   const fail = () => {
     if (failed) return;
     failed = true;
+    clearTimeout(failureTimer);
+    if (__scoutPreviewVideo !== v) return;
     try {
       wrap.remove();
     } catch (_) { /* ignore */ }
     if (__scoutPreviewVideo === v) __scoutPreviewVideo = null;
     stopListPreview();
+    showToast('预览暂不可用，可以点封面进入详情');
   };
   v.addEventListener('error', fail);
   v.src = url;
   const p = v.play();
   if (p && typeof p.catch === 'function') p.catch(fail);
-  setTimeout(() => {
-    if (v && v.readyState < 2 && !failed) fail();
-  }, 1800);
+  failureTimer = setTimeout(() => {
+    if (__scoutPreviewVideo === v && v.readyState < 2 && !failed) fail();
+  }, 6000);
+  v.addEventListener('loadeddata', () => clearTimeout(failureTimer), { once: true });
   return v;
 }
 
@@ -14460,97 +13402,70 @@ function playListPreviewOnHost(host, img) {
     host.classList.add('scout-preview-positioned');
   }
 
+  const button = host.querySelector('.scout-preview-button');
+  if (button) { button.textContent = '停止预览'; button.setAttribute('aria-pressed', 'true'); }
   mountPreviewVideo(host, pvv);
   return true;
 }
 
+function syncListPreviewButtons() {
+  if (detectPageKind() === 'video') return;
+  for (const card of getVideoElements()) {
+    const img = card.querySelector('.thumb img, .thumb-inside img, img');
+    if (!img || isEpornerListContext(card) || !getListPreviewUrl(img)) continue;
+    const host = img.closest('.thumb, .thumb-inside') || img.parentElement;
+    if (!host || host.querySelector('.scout-preview-button')) continue;
+    host.classList.add('scout-preview-positioned');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'scout-preview-button';
+    button.dataset.scoutUi = '1';
+    button.textContent = '预览';
+    button.setAttribute('aria-pressed', 'false');
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (__scoutPreviewHost === host) stopListPreview();
+      else playListPreviewOnHost(host, img);
+    });
+    host.appendChild(button);
+  }
+}
+
 function enableListPreviewPlayback() {
   if (typeof detectPageKind === 'function' && detectPageKind() === 'video') return;
+  syncListPreviewButtons();
   if (window.__creamuScoutListPreviewRuntime) return;
-  let lastScrollY = window.scrollY || 0;
-
-  // 点缩略图区域：先预览；再点同卡缩略图 → 放行进详情
-  const onClick = (e) => {
-    if (!isScoutMobileListViewport()) return;
-    if (e.target.closest('#jlc-wb, #jlc-wb-fab, #scout-search-track-bar')) return;
-
-    // 标题/元信息区：不拦截
-    if (e.target.closest('.thumb-under, .mbtit, p.title, .title, .mbunder, .mbstats, .uploader')) {
-      return;
-    }
-
-    // eporner 列表无预览能力：完全不拦截
-    if (isEpornerListContext(e.target)) return;
-
-    // xvideos / xnxx 卡
-    const card = e.target.closest('.thumb-block, .mozaique [id^="video_"]');
-    const img =
-      (e.target.tagName === 'IMG' ? e.target : null) ||
-      (card && card.querySelector('.thumb img, .thumb-inside img, img'));
-    if (!img) return;
-
-    // 必须点在图区域
-    const inThumb = e.target.closest('.thumb, .thumb-inside, a[href*="/video"]');
-    if (!inThumb && e.target !== img) return;
-
-    const a =
-      img.closest('a[href*="/video"]') ||
-      (card && card.querySelector('a[href*="/video"]'));
-    if (!a) return;
-
-    const host = img.closest('.thumb, .thumb-inside') || a || img.parentElement;
-    if (!host) return;
-
-    // 第二次点同一预览中的图 → 不拦截，进详情
-    if (__scoutPreviewHost === host && host.classList.contains('scout-preview-playing')) {
-      stopListPreview();
-      return;
-    }
-
-    const ok = playListPreviewOnHost(host, img);
-    if (ok) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  };
-  document.addEventListener('click', onClick, true);
-
-  // 明显滚动才停预览（避免点按微抖立刻关掉）
   const onScroll = () => {
-    const y = window.scrollY || 0;
-    if (Math.abs(y - lastScrollY) < 48) return;
-    lastScrollY = y;
-    if (__scoutPreviewHost || __scoutPreviewVideo) stopListPreview();
+    if (!__scoutPreviewHost) return;
+    const rect = __scoutPreviewHost.getBoundingClientRect();
+    if (rect.bottom <= 0 || rect.top >= window.innerHeight) stopListPreview();
   };
+  const onVisibilityChange = () => { if (document.hidden) stopListPreview(); };
+  const onKeydown = (event) => { if (event.key === 'Escape') stopListPreview(); };
   window.addEventListener('scroll', onScroll, { passive: true, capture: true });
-
-  const onVisibilityChange = () => {
-    if (document.hidden) stopListPreview();
-  };
   document.addEventListener('visibilitychange', onVisibilityChange);
-  window.__creamuScoutListPreviewRuntime = { onClick, onScroll, onVisibilityChange };
+  document.addEventListener('keydown', onKeydown);
+  window.__creamuScoutListPreviewRuntime = { onScroll, onVisibilityChange, onKeydown };
 }
 
 function disableListPreviewPlayback() {
   const runtime = window.__creamuScoutListPreviewRuntime;
   if (!runtime) return;
-  document.removeEventListener('click', runtime.onClick, true);
   window.removeEventListener('scroll', runtime.onScroll, true);
   document.removeEventListener('visibilitychange', runtime.onVisibilityChange);
+  document.removeEventListener('keydown', runtime.onKeydown);
+  document.querySelectorAll('.scout-preview-button').forEach(button => button.remove());
   window.__creamuScoutListPreviewRuntime = null;
   stopListPreview();
 }
 
 function applyListPreviewPlaybackMode() {
-  const isList =
-    typeof detectPageKind !== 'function' || detectPageKind() !== 'video';
-  if (isList) enableListPreviewPlayback();
+  if (typeof detectPageKind !== 'function' || detectPageKind() !== 'video') enableListPreviewPlayback();
   else disableListPreviewPlayback();
 }
 
-function setupListPreviewPlayback() {
-  applyListPreviewPlaybackMode();
-}
+function setupListPreviewPlayback() { applyListPreviewPlaybackMode(); }
 
 // 站点列表自动预览拦截（block_site_auto_preview）
 
@@ -15095,6 +14010,13 @@ function refreshPageEnhancements(reason, options) {
     const navigated = href !== __scoutLastHref || kind !== __scoutLastKind;
     __scoutLastHref = href;
     __scoutLastKind = kind;
+    if (navigated) {
+      stopListPreview();
+      if (document.getElementById('jlc-wb')?.classList.contains('is-open')) {
+        ensureScoutSearchContextDraft();
+        refreshScoutWorkbenchPageIfActive('combo');
+      }
+    }
     let listEntries = options && options.listEntries;
 
     if (typeof applyBlockSiteAutoPreviewMode === 'function') {
@@ -15117,6 +14039,7 @@ function refreshPageEnhancements(reason, options) {
       markCurrentVideoPageClicked();
       enhancePageTags();
       enhancePagePublisher();
+      refreshScoutWorkbenchContext();
       rememberScoutDetailContent();
     } else if (kind === 'search') {
       if (!listEntries) listEntries = collectListVideoEntries();
@@ -15124,7 +14047,7 @@ function refreshPageEnhancements(reason, options) {
       if (typeof applyScoutExactSearchFilter === 'function') {
         try { applyScoutExactSearchFilter(listEntries); } catch (e) { console.warn(e); }
       }
-      // 搜索页顶栏：订阅/取消追更（不依赖打开工作台）
+      // 搜索列表上方：收藏、管理与继续浏览
       if (typeof enhanceSearchTrackSubscribe === 'function') {
         try { enhanceSearchTrackSubscribe(); } catch (e) { console.warn(e); }
       }
@@ -15145,6 +14068,9 @@ function refreshPageEnhancements(reason, options) {
     if (kind === 'video') {
       document.getElementById('scout-search-track-bar')?.remove();
       if (typeof stopListPreview === 'function') stopListPreview();
+    } else {
+      document.getElementById('scout-work-fav-bar')?.remove();
+      refreshScoutWorkbenchContext();
     }
   } catch (err) {
     console.warn('[Creamu Scout] refresh failed:', reason, err);
@@ -15178,7 +14104,6 @@ function isScoutUiNode(node) {
     node.id === 'scout-desc-toggle' ||
     node.id === 'scout-collect-dialog' ||
     node.id === 'creamu-scout-toast-container' ||
-    node.id === 'jlc-tracking-pagebar' ||
     node.id === 'jlc-wb' ||
     node.id === 'jlc-wb-fab'
   ) {
@@ -15188,7 +14113,6 @@ function isScoutUiNode(node) {
     node.classList.contains('scout-lex-flow-card') ||
     node.classList.contains('scout-lex-flow-overlay') ||
     node.classList.contains('scout-lex-hit-bar') ||
-    node.classList.contains('scout-tag-addon') ||
     node.classList.contains('scout-tag-heart') ||
     node.classList.contains('scout-pub-addon') ||
     node.classList.contains('scout-pub-badge') ||
@@ -15200,7 +14124,7 @@ function isScoutUiNode(node) {
   }
   if (node.id === 'scout-seek-hud') return true;
   return !!(node.closest && node.closest(
-    '#scout-lex-hit-bar, #scout-work-fav-bar, #scout-exact-filter-bar, #scout-collect-dialog, #creamu-scout-toast-container, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-tag-addon, .scout-pub-addon, .scout-list-preview-video'
+    '[data-scout-ui], #scout-lex-hit-bar, #scout-work-fav-bar, #scout-exact-filter-bar, #scout-collect-dialog, #creamu-scout-toast-container, #jlc-wb, #jlc-wb-fab, #scout-seek-hud, .scout-lex-flow-overlay, .scout-pub-addon, .scout-list-preview-layer'
   ));
 }
 

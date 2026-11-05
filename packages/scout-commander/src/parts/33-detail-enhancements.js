@@ -6,7 +6,10 @@ const SCOUT_DETAIL_TAG_BOX_SELECTOR = [
   '.metadata-row.video-tags',
   '.video-tags-list',
   '.ordered-label-list',
-  '.video-tags'
+  '.video-tags',
+  '#video-info-tags',
+  '#video-tags',
+  '.tag-container'
 ].join(',');
 
 const SCOUT_DETAIL_DESCRIPTION_SELECTOR = [
@@ -81,11 +84,13 @@ function setupMobileDetailTagsCollapse(boxes) {
     return !!el.querySelector('a.is-keyword, a[href^="/tags/"], a[href^="/tag/"]');
   });
   if (!tagsOnly.length) return;
+  const items = [...new Set(getScoutPageTagAnchors(detectSite()).map(anchor => anchor.closest('li') || anchor))];
+  items.forEach((item, index) => item.toggleAttribute('data-scout-tag-extra', index >= 4));
 
   const box = tagsOnly[0];
   tagsOnly.forEach((el) => {
-    el.classList.add('scout-tags-collapsed');
-    el.classList.remove('scout-tags-expanded');
+    el.classList.remove('cropped');
+    if (!document.getElementById('scout-tags-toggle') && !el.classList.contains('scout-tags-expanded')) el.classList.add('scout-tags-collapsed');
   });
 
   let toggle = document.getElementById('scout-tags-toggle');
@@ -128,8 +133,7 @@ function setupMobileDetailDescCollapse(boxes) {
 
   const box = list[0];
   list.forEach((el) => {
-    el.classList.add('scout-desc-collapsed');
-    el.classList.remove('scout-desc-expanded');
+    if (!document.getElementById('scout-desc-toggle') && !el.classList.contains('scout-desc-expanded')) el.classList.add('scout-desc-collapsed');
   });
 
   let toggle = document.getElementById('scout-desc-toggle');
@@ -214,8 +218,7 @@ function buildScoutPageTagSignature(site, anchors, terms, blocks, isNarrow) {
   const tagState = (Array.isArray(anchors) ? anchors : []).map((anchor) => [
     getScoutTagNodeId(anchor),
     getScoutEnhanceTagText(anchor),
-    anchor.getAttribute('href') || '',
-    anchor.querySelector('.scout-tag-addon') ? 1 : 0
+    anchor.getAttribute('href') || ''
   ]);
   return JSON.stringify([
     site || '',
@@ -225,22 +228,6 @@ function buildScoutPageTagSignature(site, anchors, terms, blocks, isNarrow) {
     termState,
     blockState
   ]);
-}
-
-function getScoutPageTagSelector(site) {
-  if (site === 'xvideos' || site === 'xnxx') {
-    return (
-      '.video-metadata a.is-keyword, .video-tags-list a.is-keyword, .ordered-label-list a.is-keyword, ' +
-      '.video-metadata .video-tags a, .metadata-row .video-tags a, .video-tags a'
-    );
-  }
-  if (site === 'eporner') {
-    return (
-      'a[href^="/tag/"], a[href^="/cat/"], .vit-pornstar a, .vit-category a, ' +
-      '#video-tags a, .tag-container a, a.is-keyword, a.tag'
-    );
-  }
-  return '';
 }
 
 function getScoutPageTagAnchors(site) {
@@ -337,7 +324,7 @@ function applyTagVisualState(a, txt, termIndex, preparedBlocks, preparedTerms) {
   if (oldHeart) oldHeart.remove();
   if (zhEl) zhEl.remove();
   a.classList.add('scout-tag-out');
-  a.title = txt + '（未入库 · 点 ＋ 采集）';
+  a.title = txt + '（未入库 · 可在“用标签搜索 / 收藏”中添加）';
 }
 
 function enhancePageTags() {
@@ -372,77 +359,17 @@ function enhancePageTags() {
   const preparedTerms = prepareLexiconMatcher(terms);
   const termIndex = buildLexiconTermIndex(preparedTerms);
   const preparedBlocks = prepareBlockMatchers(blocks);
-  const meta = scrapeVideoMeta();
 
   window.__scoutUiMutating = true;
   try {
     anchors.forEach(a => {
       let txt = '';
-      if (a.querySelector('.scout-tag-addon')) {
-        const txt = a.getAttribute('data-scout-tag') || '';
-        if (txt) applyTagVisualState(a, txt, termIndex, preparedBlocks, preparedTerms);
-        return;
-      }
-
       txt = getScoutEnhanceTagText(a);
       if (!txt || txt.startsWith('+') || /[＋✕]/.test(txt)) return;
 
       a.setAttribute('data-scout-tag', txt);
 
       applyTagVisualState(a, txt, termIndex, preparedBlocks, preparedTerms);
-
-      const wrapper = document.createElement('span');
-      wrapper.className = 'scout-tag-addon';
-
-      const addBtn = document.createElement('span');
-      addBtn.className = 'scout-tag-action scout-tag-add-action';
-      addBtn.textContent = '＋';
-      addBtn.title = '采集入库（选分类/翻译）';
-      addBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        showScoutCollectDialog({
-          text: txt,
-          sources: [{ site: currentSite, url: location.href, title: meta.title, at: new Date().toISOString() }],
-          onSaved() {
-            refreshScoutWorkbenchPageIfActive('lexicon');
-            refreshScoutWorkbenchPageIfActive('combo');
-            // 清签名以允许词库条更新
-            const bar = document.getElementById('scout-lex-hit-bar');
-            if (bar) delete bar.dataset.hitSig;
-            enhancePageTags();
-          }
-        });
-      });
-
-      const blockBtn = document.createElement('span');
-      blockBtn.className = 'scout-tag-action scout-tag-block-action';
-      blockBtn.textContent = '✕';
-      blockBtn.title = '弱屏蔽(点击) | 强隐藏(Shift+点击)';
-      blockBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const isShift = e.shiftKey;
-        const targetMode = isShift ? 'hide' : 'dim';
-        addBlockWord({
-          text: txt,
-          mode: targetMode,
-          match: 'word',
-          scope: 'title',
-          reason: `自视频标签快捷添加 (${isShift ? '强隐藏' : '弱淡化'})`
-        });
-        showToast(`已加入屏蔽库: ${txt} (${isShift ? '彻底蒸发' : '弱淡化'})`, true);
-        applyListBlocks();
-        refreshScoutWorkbenchPageIfActive('blocks');
-        refreshScoutWorkbenchPageIfActive('combo');
-        const bar = document.getElementById('scout-lex-hit-bar');
-        if (bar) delete bar.dataset.hitSig;
-        enhancePageTags();
-      });
-
-      wrapper.appendChild(addBtn);
-      wrapper.appendChild(blockBtn);
-      a.appendChild(wrapper);
     });
     __scoutPageTagSignature = buildScoutPageTagSignature(
       currentSite,
@@ -461,12 +388,13 @@ function enhancePageTags() {
 
 /**
  * 详情页：收藏作品 → 作品列表 + 可选采集标签进词库
- * 醒目双行按钮（PC 贴标题下；手机加宽触控）
+ * 原生标题之后的统一操作栏；保持播放器和站点操作的原有节点。
  */
 function findScoutWorkFavoriteHost() {
   return (
     document.querySelector('h2.page-title') ||
     document.querySelector('.page-title') ||
+    document.querySelector('#video-content-metadata .video-title') ||
     document.querySelector('h1') ||
     document.querySelector('.video-metadata') ||
     document.querySelector('#video-info, .video-info, .title-container')
@@ -481,134 +409,109 @@ function syncScoutWorkFavoriteButton(site, videoId, targetButton) {
   button.setAttribute('aria-pressed', saved ? 'true' : 'false');
   const ico = button.querySelector('.scout-work-fav-ico');
   const label = button.querySelector('.scout-work-fav-label');
-  const sub = button.querySelector('.scout-work-fav-sub');
   if (ico) ico.textContent = saved ? '★' : '☆';
   if (label) label.textContent = saved ? '已收藏' : '收藏作品';
-  if (sub) sub.textContent = saved ? '点按更新 · 补采标签' : '入库作品 · 采集标签';
   button.title = saved
     ? '已在作品列表。再次点击可更新信息并补采标签'
     : '收藏到「作品」列表，并采集本页标签进词库';
 }
 
-function enhancePageWorkFavorite() {
+function saveScoutCurrentWork() {
   const currentSite = detectSite();
   if (!currentSite || detectPageKind() !== 'video') return;
-
-  let wrap = document.getElementById('scout-work-fav-bar');
-  let btn = document.getElementById('scout-work-fav-btn');
-  const locationVideoId = videoIdFromUrl(location.href);
-  if (
-    wrap &&
-    btn &&
-    btn.dataset.scoutSite === currentSite &&
-    (!locationVideoId || btn.dataset.scoutVideoId === locationVideoId)
-  ) {
-    syncScoutWorkFavoriteButton(currentSite, btn.dataset.scoutVideoId || locationVideoId);
-    return;
-  }
-  if (btn) btn.remove();
-  if (wrap) wrap.remove();
-
   const meta = scrapeVideoMeta();
-  const url = (meta && meta.url) || location.href;
+  const url = meta.url || location.href;
   const videoId = videoIdFromUrl(url);
-  if (!videoId) return;
-
-  const host = findScoutWorkFavoriteHost();
-  if (!host) return;
-
-  wrap = document.createElement('div');
-  wrap.id = 'scout-work-fav-bar';
-  wrap.className = 'scout-work-fav-bar';
-  wrap.setAttribute('data-scout-ui', '1');
-
-  btn = document.createElement('button');
-  btn.type = 'button';
-  btn.id = 'scout-work-fav-btn';
-  btn.className = 'scout-work-fav-btn';
-  btn.dataset.scoutSite = currentSite;
-  btn.dataset.scoutVideoId = videoId;
-  btn.innerHTML =
-    '<span class="scout-work-fav-ico" aria-hidden="true">☆</span>' +
-    '<span class="scout-work-fav-text">' +
-    '<span class="scout-work-fav-label">收藏作品</span>' +
-    '<span class="scout-work-fav-sub">入库作品 · 采集标签</span>' +
-    '</span>';
-
-  syncScoutWorkFavoriteButton(currentSite, videoId, btn);
-
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const saved = isWorkSaved(currentSite, videoId);
-    if (saved && !confirm('已在作品列表中。更新信息并再次采集标签？')) return;
-    // 点击时重采（创建按钮时 poster/og 可能还没就绪 → thumb 空）
-    const live = typeof scrapeVideoMeta === 'function' ? scrapeVideoMeta() : meta;
-    const liveUrl = (live && live.url) || url;
-    const liveId =
-      (typeof videoIdFromUrl === 'function' ? videoIdFromUrl(liveUrl) : '') || videoId;
-    const liveThumb =
-      (live && live.thumb) ||
-      (typeof pickDetailThumbUrl === 'function' ? pickDetailThumbUrl() : '') ||
-      (meta && meta.thumb) ||
-      '';
-    const res = addWork(
-      {
-        site: currentSite,
-        videoId: liveId,
-        title: (live && live.title) || meta.title,
-        url: liveUrl,
-        thumb: liveThumb,
-        thumbUrl: liveThumb,
-        uploader: (live && live.uploader) || meta.uploader,
-        tags: (live && live.tags) || meta.tags || []
-      },
-      { autoCollectTags: true }
+  if (!videoId) { showToast('无法识别当前作品', true); return; }
+  const thumb = meta.thumb || pickDetailThumbUrl() || '';
+  const res = addWork(
+    {
+      site: currentSite,
+      videoId: videoId,
+      title: meta.title,
+      url: url,
+      thumb: thumb,
+      thumbUrl: thumb,
+      uploader: meta.uploader,
+      tags: meta.tags || []
+    },
+    { autoCollectTags: true }
+  );
+  syncScoutWorkFavoriteButton(currentSite, videoId);
+  if (res.work) {
+    showToast(
+      (res.added ? '已收藏作品' : '已更新作品') +
+        (res.tagsCollected ? `，采集标签 ${res.tagsCollected} 个` : '') +
+        (thumb ? '' : '（暂无封面，稍后再更）')
     );
-    syncScoutWorkFavoriteButton(currentSite, videoId);
-    if (res.work) {
-      showToast(
-        (res.added ? '已收藏作品' : '已更新作品') +
-          (res.tagsCollected ? `，采集标签 ${res.tagsCollected} 个` : '') +
-          (liveThumb ? '' : '（暂无封面，稍后再更）')
-      );
-      markVideoClicked({
-        site: currentSite,
-        videoId: liveId,
-        title: (live && live.title) || meta.title,
-        url: liveUrl,
-        thumb: liveThumb,
-        uploader: (live && live.uploader) || meta.uploader
+    markVideoClicked({
+      site: currentSite,
+      videoId: videoId,
+      title: meta.title,
+      url: url,
+      thumb: thumb,
+      uploader: meta.uploader
+    });
+    // 异步把远程封面缓存成 dataURL（列表离线可显，防防盗链）
+    if (
+      thumb &&
+      !/^data:image\//i.test(thumb) &&
+      typeof cacheThumbToDataUrl === 'function' &&
+      typeof updateWorkThumb === 'function'
+    ) {
+      const wid = res.work.id;
+      cacheThumbToDataUrl(thumb).then((dataUrl) => {
+        if (!dataUrl) return;
+        if (updateWorkThumb(wid, dataUrl, thumb)) {
+          refreshScoutWorkbenchPageIfActive('works');
+        }
       });
-      // 异步把远程封面缓存成 dataURL（列表离线可显，防防盗链）
-      if (
-        liveThumb &&
-        !/^data:image\//i.test(liveThumb) &&
-        typeof cacheThumbToDataUrl === 'function' &&
-        typeof updateWorkThumb === 'function'
-      ) {
-        const wid = res.work.id;
-        cacheThumbToDataUrl(liveThumb).then((dataUrl) => {
-          if (!dataUrl) return;
-          if (updateWorkThumb(wid, dataUrl, liveThumb)) {
-            refreshScoutWorkbenchPageIfActive('works');
-          }
-        });
-      }
-      refreshScoutWorkbenchPageIfActive('works');
-      refreshScoutWorkbenchPageIfActive('lexicon');
-      enhancePageTags();
-    } else {
-      showToast('收藏失败：无法识别作品 ID', true);
     }
-  });
-
-  wrap.appendChild(btn);
-  if (host.parentNode) {
-    host.parentNode.insertBefore(wrap, host.nextSibling);
+    refreshScoutWorkbenchPageIfActive('works');
+    refreshScoutWorkbenchPageIfActive('lexicon');
+    refreshScoutWorkbenchContext();
+    enhancePageTags();
   } else {
-    host.appendChild(wrap);
+    showToast('收藏失败：无法识别作品 ID', true);
   }
+
+}
+
+function openScoutCurrentTags() {
+  const meta = scrapeVideoMeta();
+  const tags = getScoutPageTagAnchors(detectSite()).map(getScoutEnhanceTagText).filter(Boolean);
+  if (!tags.length) { showToast('当前作品暂无可用标签'); return; }
+  showScoutCollectDialog({ tags, sources: [{ site: detectSite(), url: location.href, title: meta.title, at: new Date().toISOString() }] });
+}
+
+function enhancePageWorkFavorite() {
+  const site = detectSite();
+  if (!site || detectPageKind() !== 'video') return;
+  const host = findScoutWorkFavoriteHost();
+  const videoId = videoIdFromUrl(location.href);
+  if (!host || !videoId) return;
+  host.classList.add('scout-detail-title');
+  let bar = document.getElementById('scout-work-fav-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'scout-work-fav-bar';
+    bar.className = 'scout-work-fav-bar';
+    bar.dataset.scoutUi = '1';
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', '当前作品操作');
+    bar.innerHTML = `<button type="button" id="scout-work-fav-btn" class="scout-work-fav-btn"><span class="scout-work-fav-ico" aria-hidden="true">☆</span><span class="scout-work-fav-label">收藏作品</span></button>
+      <button type="button" id="scout-tags-manage">用标签搜索 / 收藏</button>
+      <button type="button" id="scout-detail-console">打开控制台 <span aria-hidden="true">↗</span></button>`;
+    bar.querySelector('#scout-work-fav-btn').onclick = saveScoutCurrentWork;
+    bar.querySelector('#scout-tags-manage').onclick = openScoutCurrentTags;
+    bar.querySelector('#scout-detail-console').onclick = () => window.__scoutOpenWorkbench();
+  }
+  if (host.nextElementSibling !== bar) host.insertAdjacentElement('afterend', bar);
+  const button = bar.querySelector('#scout-work-fav-btn');
+  button.dataset.scoutSite = site;
+  button.dataset.scoutVideoId = videoId;
+  syncScoutWorkFavoriteButton(site, videoId, button);
+  bar.querySelector('#scout-tags-manage').disabled = !getScoutPageTagAnchors(site).length;
 }
 
 function findScoutPublisherAnchor(site) {
@@ -619,7 +522,7 @@ function findScoutPublisherAnchor(site) {
   }
   if (site === 'eporner') {
     return document.querySelector(
-      'a[href*="/profile/"][title="Uploader"], a[href*="/profile/"], ' +
+      '#video-info-tags .vit-uploader a, a[href*="/profile/"][title="Uploader"], ' +
         '.publisher-name, .publisher a, a[href*="/channel/"], .post-channel a'
     );
   }
@@ -640,7 +543,8 @@ function enhancePagePublisher() {
     ? getScoutLibraryRevision()
     : 0;
   const existing = anchorEl.parentNode.querySelector('.scout-pub-addon');
-  if (existing && existing.dataset.scoutLibraryRevision === String(revision)) return;
+  const publisherKey = [location.href, anchorEl.getAttribute('href'), anchorEl.textContent].join('|');
+  if (existing && existing.dataset.scoutLibraryRevision === String(revision) && existing.dataset.scoutPublisher === publisherKey) return;
   if (existing) existing.remove();
 
   const meta = scrapeVideoMeta();
@@ -650,11 +554,13 @@ function enhancePagePublisher() {
   const wrapper = document.createElement('span');
   wrapper.className = 'scout-pub-addon';
   wrapper.dataset.scoutLibraryRevision = String(revision);
+  wrapper.dataset.scoutPublisher = publisherKey;
 
   const pubs = getPublishers();
   const matched = pubs.find(p => p.name.toLowerCase() === pubName.toLowerCase());
 
   const loveBtn = document.createElement('button');
+  loveBtn.type = 'button';
   loveBtn.className = 'scout-pub-action scout-pub-love-action';
   if (matched && matched.status === 'loved') {
     loveBtn.textContent = '❤️ 已关注熟人';
@@ -678,6 +584,7 @@ function enhancePagePublisher() {
   });
 
   const blockBtn = document.createElement('button');
+  blockBtn.type = 'button';
   blockBtn.className = 'scout-pub-action scout-pub-block-action';
   if (matched && matched.status === 'blocked') {
     blockBtn.textContent = '🚫 已拉黑';
@@ -743,8 +650,7 @@ function getScoutDetailContentSignature() {
   const tagState = anchors.map((anchor) => [
     getScoutDetailNodeId(anchor),
     getScoutEnhanceTagText(anchor),
-    anchor.getAttribute('href') || '',
-    anchor.querySelector('.scout-tag-addon') ? 1 : 0
+    anchor.getAttribute('href') || ''
   ]);
   const tagBoxState = getScoutDetailTagBoxes().map((box) => getScoutDetailNodeId(box));
   const descriptionState = getScoutDetailDescriptionBoxes().map((box) => [

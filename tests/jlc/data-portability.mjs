@@ -41,7 +41,8 @@ const importedConfigContext = {
 vm.createContext(importedConfigContext);
 vm.runInContext(knownPersonsSource[0], importedConfigContext);
 vm.runInContext(importedConfigSource, importedConfigContext);
-importedConfigContext.applyImportedConfig({ custom_persons: ['Imported Person'] });
+importedConfigContext.applyImportedConfig({ custom_persons: ['Imported Person'], hidden_meta_tags: ['Hidden Tag'] });
+assert.deepEqual(Array.from(importedConfigStored.hidden_meta_tags), ['Hidden Tag'], 'config import preserves tag display preferences');
 assert.deepEqual(
   Array.from(importedConfigContext.knownPersons).sort(),
   ['Emby Person', 'Imported Person'],
@@ -113,7 +114,6 @@ const preferenceContext = {
     avInfo: true,
     halfImg: false,
     fullTitle: false,
-    menutoTop: false,
     hiddenWord: [],
     hiddenAvid: [],
     columnNumFull: 4,

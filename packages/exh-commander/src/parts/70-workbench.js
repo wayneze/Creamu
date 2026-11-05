@@ -61,6 +61,7 @@
 
   function applyFabPosition(fab, session) {
     if (!fab) return;
+    if (session?.fabLeft == null || session?.fabTop == null) return;
     const left = Number(session && session.fabLeft);
     const top = Number(session && session.fabTop);
     if (!Number.isFinite(left) || !Number.isFinite(top)) return;
@@ -78,7 +79,7 @@
     applyFabPosition(fab, wbSession || loadSession());
     bindCreamuFabDrag(fab, {
       boundKey: 'exhFabDragBound',
-      eventType: 'mouse',
+      eventType: 'pointer',
       threshold: 10,
       suppressDuration: 50,
       applyPosition: (point) => {
@@ -112,8 +113,11 @@
       fab = document.createElement('button');
       fab.id = 'jlc-wb-fab';
       fab.type = 'button';
-      fab.title = 'Creamu · ExH（可拖动 · 点击打开）';
-      fab.innerHTML = '<span>⌘</span><span class="jlc-wb-fab-badge">0</span>';
+      fab.title = '打开 Creamu · ExH 控制台 · 拖动可调整位置';
+      fab.setAttribute('aria-label', '打开 Creamu · ExH 控制台');
+      fab.setAttribute('aria-controls', 'jlc-wb');
+      fab.setAttribute('aria-expanded', 'false');
+      fab.innerHTML = '<span class="exc-brand-mark" aria-hidden="true">c</span><span>控制台</span><span class="jlc-wb-fab-badge" aria-hidden="true">0</span>';
       document.body.appendChild(fab);
     }
     bindFabDrag(fab);
@@ -147,22 +151,25 @@
     if (shell) return shell;
     shell = document.createElement('div');
     shell.id = 'jlc-wb';
+    shell.setAttribute('role', 'region');
+    shell.setAttribute('aria-label', 'Creamu · ExH 控制台');
+    shell.tabIndex = -1;
     shell.innerHTML =
       '<div class="jlc-wb-resize-w" title="拖拽调整宽度"></div>' +
       '<div class="jlc-wb-resize-h" title="拖拽调整高度"></div>' +
       '<div class="jlc-wb-resize-corner" title="拖拽调整大小"></div>' +
       '<div class="jlc-wb-header" title="按住标题栏拖动窗口">' +
-      '  <div><div class="jlc-wb-title">Creamu · ExH</div>' +
-      '  <div class="jlc-wb-subtitle" id="jlc-wb-header-sub">加载中… · 可拖动</div></div>' +
+      '  <div class="exc-wb-brand"><div class="jlc-wb-title">ExH 控制台</div>' +
+      '  <div class="jlc-wb-subtitle" id="jlc-wb-header-sub">追更与作品库</div></div>' +
       '  <div class="jlc-wb-header-actions">' +
-      '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-settings-btn" title="设置">⚙</button>' +
-      '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-min-btn" title="收起">—</button>' +
-      '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-close-btn" title="关闭">×</button>' +
+      '    <button type="button" class="jlc-wb-btn ghost" id="exc-wb-layout-toggle">浮窗</button>' +
+      '    <button type="button" class="jlc-wb-btn ghost" id="jlc-wb-settings-btn" aria-controls="jlc-wb-settings" aria-expanded="false">设置</button>' +
+      '    <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-close-btn" title="收起控制台" aria-label="收起控制台">×</button>' +
       '  </div>' +
       '</div>' +
       '<div class="jlc-wb-nav">' +
       '  <button type="button" data-nav="tracking" class="active">追更</button>' +
-      '  <button type="button" data-nav="works">作品状态</button>' +
+      '  <button type="button" data-nav="works">作品库</button>' +
       '</div>' +
       '<div class="jlc-wb-body">' +
       '  <div data-jlc-wb-page="tracking"><div id="exc-wb-tracking-root"></div></div>' +
@@ -171,16 +178,16 @@
       '<div class="jlc-wb-footer">' +
       '  <div class="jlc-wb-footer-summary" id="jlc-wb-footer-summary">—</div>' +
       '  <div class="jlc-wb-footer-actions">' +
-      '    <button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">⭐ 收藏当前</button>' +
+      '    <button type="button" class="jlc-wb-btn primary" id="jlc-wb-save-current">收藏当前搜索</button>' +
       '    <button type="button" class="jlc-wb-btn ghost" id="exc-check-updates" title="从每条追更首页向后翻到断点。条目间隔 5～10 秒">检查更新</button>' +
       '    <button type="button" class="jlc-wb-btn ghost" id="exc-sync-all" title="同时同步 WebDAV 与 LRR（已配置的项）">同步</button>' +
       '  </div>' +
       '</div>' +
-      '<div class="jlc-wb-settings" id="jlc-wb-settings">' +
+      '<div class="jlc-wb-settings" id="jlc-wb-settings" role="region" aria-label="控制台设置" inert>' +
       '  <div class="jlc-wb-settings-panel">' +
       '    <div class="jlc-wb-settings-head">' +
       '      <strong>设置</strong>' +
-      '      <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-settings-close">×</button>' +
+      '      <button type="button" class="jlc-wb-icon-btn" id="jlc-wb-settings-close" aria-label="返回控制台" title="返回控制台">←</button>' +
       '    </div>' +
       '    <div class="jlc-wb-settings-nav" id="jlc-wb-settings-nav">' +
       '      <button type="button" data-jlc-settings-tab="sync" class="active">同步</button>' +
@@ -195,7 +202,12 @@
     document.body.appendChild(shell);
 
     document.getElementById('jlc-wb-close-btn').onclick = () => toggleWorkbench(false);
-    document.getElementById('jlc-wb-min-btn').onclick = () => toggleWorkbench(false);
+    document.getElementById('exc-wb-layout-toggle').onclick = () => {
+      wbSession = wbSession || loadSession();
+      wbSession.panelMode = wbSession.panelMode === 'float' ? 'dock' : 'float';
+      clampWorkbenchShellPos(shell, wbSession);
+      saveSession(wbSession);
+    };
     document.getElementById('jlc-wb-settings-btn').onclick = () => openSettings(true);
     document.getElementById('jlc-wb-settings-close').onclick = () => openSettings(false);
     document.getElementById('jlc-wb-save-current').onclick = async () => {
@@ -228,6 +240,14 @@
     bindFooterActions();
     initWbDrag(shell.querySelector('.jlc-wb-header'), shell);
     initWbResizeHandles(shell);
+    window.addEventListener('resize', () => clampWorkbenchShellPos(shell, wbSession || loadSession()), { passive: true });
+    shell.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (document.getElementById('jlc-wb-settings').classList.contains('is-open')) openSettings(false);
+      else toggleWorkbench(false);
+    });
     return shell;
   }
 
@@ -236,7 +256,10 @@
     const shell = document.getElementById('jlc-wb');
     if (!shell) return;
     shell.querySelectorAll('.jlc-wb-nav button').forEach((b) => {
-      b.classList.toggle('active', b.getAttribute('data-nav') === nav);
+      const active = b.getAttribute('data-nav') === nav;
+      b.classList.toggle('active', active);
+      if (active) b.setAttribute('aria-current', 'page');
+      else b.removeAttribute('aria-current');
     });
     shell.querySelectorAll('[data-jlc-wb-page]').forEach((p) => {
       const id = p.getAttribute('data-jlc-wb-page');
@@ -249,6 +272,11 @@
     const el = document.getElementById('jlc-wb-settings');
     if (!el) return;
     el.classList.toggle('is-open', !!open);
+    el.inert = !open;
+    const shell = document.getElementById('jlc-wb');
+    Array.from(shell.children).filter((node) => node !== el).forEach((node) => { node.inert = !!open; });
+    const trigger = document.getElementById('jlc-wb-settings-btn');
+    trigger.setAttribute('aria-expanded', String(!!open));
     if (open) {
       renderSettingsSections('sync');
       const nav = document.getElementById('jlc-wb-settings-nav');
@@ -258,6 +286,7 @@
         );
       }
     }
+    (open ? document.getElementById('jlc-wb-settings-close') : trigger).focus({ preventScroll: true });
   }
 
   function splitCsvField(s) {
@@ -269,7 +298,7 @@
 
   function settingsSaveFooter() {
     return (
-      '<button type="button" class="jlc-wb-btn primary jlc-wb-save-action" id="exc-cfg-save">💾 保存本页</button>'
+      '<button type="button" class="jlc-wb-btn primary jlc-wb-save-action" id="exc-cfg-save">保存并应用</button>'
     );
   }
 
@@ -500,7 +529,8 @@
   function initWbDrag(handle, panel) {
     bindCreamuWorkbenchDrag(panel, {
       boundKey: 'exhPanelDragBound',
-      eventType: 'mouse',
+      eventType: 'pointer',
+      isDragDisabled: () => panel.classList.contains('is-docked') || window.innerWidth <= 820,
       shouldIgnoreDrag: (event) => !!event.target?.closest?.('.jlc-wb-header-actions'),
       getStartRect: () => getExhWorkbenchInteractionRect(panel),
       applyRect: (rect) => applyCreamuInteractionRect(panel, rect),
@@ -514,7 +544,8 @@
     bindCreamuWorkbenchResize(panel, {
       boundKey: 'exhPanelResizeBound',
       handleBoundPrefix: 'exhResizeHandle',
-      eventType: 'mouse',
+      eventType: 'pointer',
+      isDragDisabled: () => panel.classList.contains('is-docked') || window.innerWidth <= 820,
       getStartRect: () => getExhWorkbenchInteractionRect(panel),
       applyRect: (rect) => applyCreamuInteractionRect(panel, rect),
       onEnd: (rect) => persistExhWorkbenchRect(panel, rect, true),
@@ -525,6 +556,27 @@
 
   function clampWorkbenchShellPos(wb, session) {
     if (!wb) return;
+    const mobile = window.innerWidth <= 820;
+    const docked = !mobile && window.innerWidth >= 1200 && session.panelMode !== 'float';
+    const dockWidth = Math.round(Math.min(500, Math.max(400, window.innerWidth * .30)));
+    wb.classList.toggle('is-docked', docked);
+    wb.classList.toggle('is-mobile', mobile);
+    document.documentElement.classList.toggle('exc-console-docked', docked && wb.classList.contains('is-open'));
+    document.documentElement.style.setProperty('--exc-dock-width', dockWidth + 'px');
+    const toggle = document.getElementById('exc-wb-layout-toggle');
+    toggle.hidden = window.innerWidth < 1200;
+    toggle.textContent = docked ? '浮窗' : '并排';
+    toggle.setAttribute('aria-label', docked ? '切换为自由浮窗' : '切换为并排停靠');
+    wb.querySelector('.jlc-wb-header').title = docked || mobile ? 'Creamu · ExH 控制台' : '按住标题栏拖动窗口';
+    if (docked || mobile) {
+      applyCreamuInteractionRect(wb, {
+        left: docked ? window.innerWidth - dockWidth : 0,
+        top: docked ? 0 : Math.round(window.innerHeight * .08),
+        width: docked ? dockWidth : window.innerWidth,
+        height: docked ? window.innerHeight : Math.round(window.innerHeight * .92),
+      });
+      return;
+    }
     const margin = 12;
     const maxH = Math.max(280, window.innerHeight - margin * 2);
     const defaultWidth = Math.min(720, Math.max(360, Number(config.workbench_width) || 500));
@@ -549,12 +601,7 @@
       fallbackWidth: defaultWidth,
       fallbackHeight: defaultHeight,
     });
-    wb.style.width = rect.width + 'px';
-    wb.style.height = rect.height + 'px';
-    wb.style.right = 'auto';
-    wb.style.bottom = 'auto';
-    wb.style.left = rect.left + 'px';
-    wb.style.top = rect.top + 'px';
+    applyCreamuInteractionRect(wb, rect);
     session.left = rect.left;
     session.top = rect.top;
     session.width = rect.width;
@@ -564,43 +611,23 @@
   function forceWorkbenchVisible(wb) {
     if (!wb) return;
     wbSession = wbSession || loadSession();
-    const w = Math.min(
-      720,
-      Math.max(360, Number(wbSession.width || config.workbench_width) || Math.min(520, window.innerWidth - 48))
-    );
-    const maxH = Math.max(280, window.innerHeight - 24);
-    let h = Math.round(Number(wbSession.height) || 0);
-    if (!Number.isFinite(h) || h < 280) h = Math.min(maxH, Math.round(window.innerHeight * 0.78));
-    h = Math.min(maxH, Math.max(280, h));
-    const top = Math.max(24, Math.round(window.innerHeight * 0.08));
-    const left = Math.max(12, window.innerWidth - w - 24);
     wb.classList.add('is-open');
-    document.getElementById('jlc-wb-fab')?.classList.add('is-panel-open');
-    wb.style.setProperty('display', 'flex', 'important');
-    wb.style.setProperty('visibility', 'visible', 'important');
-    wb.style.setProperty('opacity', '1', 'important');
-    wb.style.setProperty('pointer-events', 'auto', 'important');
-    wb.style.setProperty('position', 'fixed', 'important');
-    wb.style.setProperty('z-index', '2147483000', 'important');
-    wb.style.setProperty('transform', 'none', 'important');
-    wb.style.setProperty('max-height', 'none', 'important');
-    wb.style.left = left + 'px';
-    wb.style.top = top + 'px';
-    wb.style.right = 'auto';
-    wb.style.bottom = 'auto';
-    wb.style.width = w + 'px';
-    wb.style.height = h + 'px';
-    wbSession.width = w;
-    wbSession.height = h;
-    wbSession.left = left;
-    wbSession.top = top;
+    const fab = document.getElementById('jlc-wb-fab');
+    fab.classList.add('is-panel-open');
+    fab.setAttribute('aria-expanded', 'true');
+    clampWorkbenchShellPos(wb, wbSession);
+    wb.focus({ preventScroll: true });
   }
 
   function forceWorkbenchHidden(wb) {
     if (!wb) return;
+    if (document.getElementById('jlc-wb-settings').classList.contains('is-open')) openSettings(false);
     wb.classList.remove('is-open');
-    document.getElementById('jlc-wb-fab')?.classList.remove('is-panel-open');
-    wb.style.setProperty('display', 'none', 'important');
+    document.documentElement.classList.remove('exc-console-docked');
+    const fab = document.getElementById('jlc-wb-fab');
+    fab.classList.remove('is-panel-open');
+    fab.setAttribute('aria-expanded', 'false');
+    fab.focus({ preventScroll: true });
   }
 
   function toggleWorkbench(force) {
@@ -621,9 +648,6 @@
     const open = force === undefined ? !currentlyOpen : !!force;
     wbSession.open = open;
     if (open) {
-      // 每次打开重置到安全可见位置，避免旧 session 屏外坐标
-      wbSession.left = null;
-      wbSession.top = null;
       forceWorkbenchVisible(wb);
       activateNav(wbSession.nav === 'works' ? 'works' : 'tracking');
       saveSession(wbSession);
@@ -720,14 +744,10 @@
         lrrBit = rel ? 'LRR/' + rel : 'LRR已同步';
       } else lrrBit = 'LRR待同步';
     }
-    setHeaderSub(
-      'v' +
-        VERSION +
-        ' · ' +
-        (ctx && ctx.trackable ? '可收藏当前搜索' : '单本页：收藏请用标签/搜索') +
-        ' · ' +
-        lrrBit
-    );
+    setHeaderSub(lrrBit.replace('未配LRR', '追更与作品库'));
+    const collect = document.getElementById('jlc-wb-save-current');
+    collect.disabled = !(ctx && ctx.trackable);
+    collect.title = collect.disabled ? '在搜索或标签列表收藏追更' : '收藏搜索并设置分类';
 
     const nav = wbSession.nav === 'works' ? 'works' : 'tracking';
     activateNav(nav);

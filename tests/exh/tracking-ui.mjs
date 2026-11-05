@@ -1092,6 +1092,7 @@ assert.equal(missingExact.kind, 'older');
 assert.equal(missingExact.count, 2);
 
 const hoverCard = {
+  matches() { return false; },
   querySelector(selector) {
     if (selector === '.exc-cover-host' || selector === '.glthumb' || selector === 'td.gl1e') {
       return hoverCover;
@@ -1165,6 +1166,10 @@ assert.match(
 
 const gmListeners = [];
 const storeRefreshCalls = [];
+const storeRefreshSnapshots = [];
+const liveEvents = {};
+const liveTrackingContext = { trackable: true, query_signature: 'live-test' };
+const liveRecords = [{ id: 'live-record' }];
 const storeLiveContext = vm.createContext({
   console,
   setTimeout(fn) {
@@ -1172,22 +1177,35 @@ const storeLiveContext = vm.createContext({
     return 1;
   },
   clearTimeout() {},
+  location: { href: 'https://e-hentai.org/?f_search=sample' },
+  parseExhPageContext() { return liveTrackingContext; },
+  async listTrackingSearches() {
+    storeRefreshCalls.push('read');
+    return liveRecords;
+  },
+  async findTrackingForContext(context, records) {
+    assert.equal(context, liveTrackingContext);
+    assert.equal(records, liveRecords);
+    return records[0];
+  },
   GM_TRACKING_REV_KEY: 'exh_commander_tracking_rev_v1',
   GM_addValueChangeListener(key, fn) {
     gmListeners.push({ key, fn });
   },
   window: {
-    addEventListener() {},
-    __excRefreshWorkbench() {
+    addEventListener(name, handler) { liveEvents[name] = handler; },
+    __excRefreshWorkbench(state) {
       storeRefreshCalls.push('wb');
+      storeRefreshSnapshots.push(state);
     },
   },
   document: {
-    addEventListener() {},
+    addEventListener(name, handler) { liveEvents[name] = handler; },
     visibilityState: 'visible',
   },
-  refreshListVolatileState() {
+  refreshListVolatileState(state) {
     storeRefreshCalls.push('list');
+    storeRefreshSnapshots.push(state);
     return Promise.resolve();
   },
 });
@@ -1198,7 +1216,19 @@ storeLiveContext.bindTrackingStoreLiveRefresh();
 assert.equal(gmListeners[0].key, 'exh_commander_tracking_rev_v1');
 gmListeners[0].fn('exh_commander_tracking_rev_v1', 'old', 'new', false);
 assert.deepEqual(storeRefreshCalls, []);
-gmListeners[0].fn('exh_commander_tracking_rev_v1', 'old', 'new', true);
-assert.deepEqual(storeRefreshCalls, ['wb', 'list']);
+for (const refresh of [
+  () => gmListeners[0].fn('exh_commander_tracking_rev_v1', 'old', 'new', true),
+  liveEvents.focus,
+  liveEvents.pageshow,
+  liveEvents.visibilitychange,
+]) {
+  storeRefreshCalls.length = 0;
+  storeRefreshSnapshots.length = 0;
+  refresh();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(storeRefreshCalls, ['read', 'wb', 'list']);
+  assert.equal(storeRefreshSnapshots[0], storeRefreshSnapshots[1]);
+  assert.equal(storeRefreshSnapshots[0].record, liveRecords[0]);
+}
 
 console.log('ExH tracking and UI behavior tests passed');

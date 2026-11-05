@@ -111,7 +111,7 @@ function tagTextFromAnchor(a) {
       const c = a.cloneNode(true);
       if (c.querySelectorAll) {
         c.querySelectorAll(
-          '.scout-tag-addon, .scout-tag-heart, .scout-pub-addon, button, input'
+          '.scout-tag-heart, .scout-pub-addon, button, input'
         ).forEach((n) => n.remove());
       }
       return sanitizeLexiconText(c.textContent || '');

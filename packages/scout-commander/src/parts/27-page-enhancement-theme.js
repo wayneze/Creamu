@@ -50,25 +50,10 @@ function getScoutPageEnhancementThemeCss() {
         }
         /* 手机详情：标签默认一行；描述默认两行；点展开 */
         @media (max-width: 820px) {
-          .video-metadata.scout-tags-collapsed,
-          .ordered-label-list.scout-tags-collapsed,
-          .video-tags-list.scout-tags-collapsed,
-          .metadata-row.video-tags.scout-tags-collapsed,
-          .video-tags.scout-tags-collapsed,
-          .video-metadata.cropped:not(.scout-tags-expanded) {
-            max-height: 2.15em !important;
-            overflow: hidden !important;
-            height: auto !important;
+          :is(.scout-tags-collapsed, .scout-tags-expanded) {
+            max-height: none !important; overflow: visible !important; height: auto !important;
           }
-          .video-metadata.scout-tags-expanded,
-          .ordered-label-list.scout-tags-expanded,
-          .video-tags-list.scout-tags-expanded,
-          .metadata-row.video-tags.scout-tags-expanded,
-          .video-tags.scout-tags-expanded {
-            max-height: none !important;
-            overflow: visible !important;
-            height: auto !important;
-          }
+          .scout-tags-collapsed [data-scout-tag-extra] { display: none !important; }
           .scout-desc-collapsed,
           .video-description.scout-desc-collapsed,
           #video-description.scout-desc-collapsed,
@@ -94,15 +79,16 @@ function getScoutPageEnhancementThemeCss() {
             display: flex !important;
             align-items: center !important;
             justify-content: center !important;
-            width: 100% !important;
+            width: fit-content !important;
             max-width: 100% !important;
+            min-height: 32px;
             margin: 4px 0 8px !important;
-            padding: 8px 12px !important;
+            padding: 4px 9px !important;
             border: 1px solid rgba(255,255,255,0.16) !important;
-            border-radius: 12px !important;
+            border-radius: 6px !important;
             background: rgba(0,0,0,0.35) !important;
             color: #e8eaef !important;
-            font-size: 13px !important;
+            font: 12px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif !important;
             font-weight: 650 !important;
             cursor: pointer !important;
             box-sizing: border-box !important;
@@ -238,125 +224,21 @@ function getScoutPageEnhancementThemeCss() {
         .scout-lex-overlay-clipped {
           overflow: hidden !important;
         }
-        /* ===== 详情页：收藏作品按钮（PC / 手机） ===== */
-        .scout-work-fav-bar {
-          display: flex !important;
-          align-items: center !important;
-          gap: 8px !important;
-          margin: 8px 0 10px !important;
-          max-width: 100% !important;
-          box-sizing: border-box !important;
-          clear: both !important;
-        }
-        .scout-work-fav-btn {
-          display: inline-flex !important;
-          align-items: center !important;
-          gap: 10px !important;
-          min-height: 44px !important;
-          max-width: 100% !important;
-          margin: 0 !important;
-          padding: 8px 14px 8px 12px !important;
-          border: 0 !important;
-          border-radius: 14px !important;
-          cursor: pointer !important;
-          box-sizing: border-box !important;
-          text-align: left !important;
-          color: #fff !important;
-          background: linear-gradient(135deg, var(--scout-accent, #e8a24e), var(--scout-theme-dark, #b56e28)) !important;
-          box-shadow: 0 3px 0 rgba(0,0,0,.22), 0 8px 18px rgba(0,0,0,.28) !important;
-          transition: transform .12s ease, filter .12s ease, box-shadow .12s ease !important;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .scout-work-fav-btn:hover {
-          filter: brightness(1.06);
-        }
-        .scout-work-fav-btn:active {
-          transform: translateY(1px);
-          box-shadow: 0 1px 0 rgba(0,0,0,.22), 0 4px 10px rgba(0,0,0,.22) !important;
-        }
-        .scout-work-fav-btn.is-saved {
-          background: linear-gradient(135deg, #3d4a3a, #2a3828) !important;
-          box-shadow: 0 0 0 1px rgba(120, 200, 140, 0.45), 0 6px 14px rgba(0,0,0,.25) !important;
-          color: #e8f8ec !important;
-        }
-        .scout-work-fav-ico {
-          flex: 0 0 auto !important;
-          width: 28px !important;
-          height: 28px !important;
-          border-radius: 50% !important;
-          display: inline-flex !important;
-          align-items: center !important;
-          justify-content: center !important;
-          font-size: 16px !important;
-          line-height: 1 !important;
-          background: rgba(0,0,0,.22) !important;
-        }
-        .scout-work-fav-btn.is-saved .scout-work-fav-ico {
-          color: #ffd76a !important;
-          background: rgba(255, 215, 100, 0.16) !important;
-        }
-        .scout-work-fav-text {
-          display: flex !important;
-          flex-direction: column !important;
-          gap: 1px !important;
-          min-width: 0 !important;
-        }
-        .scout-work-fav-label {
-          font-size: 14px !important;
-          font-weight: 750 !important;
-          line-height: 1.2 !important;
-          letter-spacing: 0.2px !important;
-        }
-        .scout-work-fav-sub {
-          font-size: 11px !important;
-          font-weight: 500 !important;
-          line-height: 1.2 !important;
-          opacity: 0.88 !important;
-        }
+        .scout-detail-title { margin-bottom: 8px !important; line-height: 1.35 !important; overflow-wrap: anywhere; }
+        .scout-work-fav-bar { display: flex; clear: both; width: 100%; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 14px; padding: 0 0 12px; border-bottom: 1px solid var(--scout-page-border, #ccd0c8); max-width: 100%; box-sizing: border-box; }
+        #scout-work-fav-bar > button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 6px 9px; border: 1px solid var(--scout-page-border, #ccd0c8); border-radius: 6px; background: transparent; color: var(--scout-text-color, #343b36); font: 600 12px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif; cursor: pointer; box-shadow: none; box-sizing: border-box; }
+        #scout-work-fav-bar > button:hover { background: var(--scout-accent-soft, #899b8014); }
+        #scout-work-fav-bar > button:focus-visible { outline: 2px solid var(--scout-theme-color); outline-offset: 2px; }
+        #scout-work-fav-bar > button:disabled { opacity: .5; cursor: default; }
+        #scout-work-fav-bar .scout-work-fav-btn { background: var(--scout-accent-soft, #899b8014); border-color: var(--scout-link, #71816b); }
+        #scout-work-fav-bar .scout-work-fav-btn.is-saved { border-color: var(--scout-theme-color); }
+        .scout-work-fav-ico { font-size: 16px; line-height: 1; color: var(--scout-link, #71816b); }
+        #scout-detail-console { margin-left: auto; }
         @media (max-width: 820px) {
-          .scout-work-fav-bar {
-            width: 100% !important;
-            margin: 10px 0 12px !important;
-          }
-          .scout-work-fav-btn {
-            width: 100% !important;
-            min-height: 48px !important;
-            padding: 10px 14px !important;
-            border-radius: 16px !important;
-            justify-content: flex-start !important;
-          }
-          .scout-work-fav-ico {
-            width: 32px !important;
-            height: 32px !important;
-            font-size: 18px !important;
-          }
-          .scout-work-fav-label {
-            font-size: 15px !important;
-          }
-          .scout-work-fav-sub {
-            font-size: 12px !important;
-          }
-        }
-        @media (min-width: 821px) {
-          .scout-work-fav-btn {
-            min-width: 200px !important;
-          }
-        }
-        /* 奶油主题下跟站强调色 */
-        html.scout-cream-site .scout-work-fav-btn:not(.is-saved) {
-          background: linear-gradient(135deg, var(--scout-accent, #5b8def), color-mix(in srgb, var(--scout-accent, #5b8def) 70%, #000)) !important;
-        }
-        html.scout-cream-site body.creamu-site-xvideos .scout-work-fav-btn:not(.is-saved) {
-          background: linear-gradient(135deg, #e54840, #9e2a24) !important;
-        }
-        html.scout-cream-site body.creamu-site-xnxx .scout-work-fav-btn:not(.is-saved) {
-          background: linear-gradient(135deg, #4d8ef0, #1a4fa0) !important;
-        }
-        html.scout-cream-site body.creamu-site-eporner .scout-work-fav-btn:not(.is-saved) {
-          background: linear-gradient(135deg, #3cb86a, #1e7a42) !important;
+          #scout-work-fav-bar { gap: 6px; margin-bottom: 10px; }
+          #scout-detail-console { margin-left: 0; }
         }
 
-        /* 手机列表预览层：绝对铺满，不参与文档流、不撑大卡片 */
         .scout-list-preview-layer {
           position: absolute !important;
           left: 0 !important;
@@ -397,24 +279,10 @@ function getScoutPageEnhancementThemeCss() {
         .scout-site-preview-disabled {
           display: none !important;
         }
-        .scout-preview-playing::after {
-          content: '预览中 · 再点进入';
-          position: absolute;
-          left: 6px;
-          bottom: 6px;
-          z-index: 25;
-          padding: 2px 7px;
-          border-radius: 999px;
-          font-size: 10px;
-          font-weight: 650;
-          color: #fff;
-          background: rgba(0,0,0,.62);
-          pointer-events: none;
-          max-width: calc(100% - 12px);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
+        .scout-preview-button { position: absolute; right: 8px; bottom: 8px; z-index: 30; min-height: 32px; padding: 5px 9px; border: 1px solid #ffffff66; border-radius: 6px; background: #17201bd9; color: white; font: 600 12px/1.2 'Segoe UI', sans-serif; cursor: pointer; box-sizing: border-box; }
+        .scout-preview-button[aria-pressed="true"] { background: #3d6348; }
+        .scout-preview-button:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+
 
         .scout-lex-flow-overlay .scout-lex-flow-chips {
           display: flex !important;
@@ -529,16 +397,16 @@ function getScoutPageEnhancementThemeCss() {
           vertical-align: middle !important;
           transition: background .12s ease, border-color .12s ease, color .12s ease;
         }
-        /* 未入库：暗底描边 */
+        /* 未入库：轻描边，跟随站点明暗配色 */
         html.scout-cream-site a.scout-site-tag.scout-tag-out,
         html.scout-cream-site .scout-site-tag.scout-tag-out {
-          background: rgba(255,255,255,0.06) !important;
-          border: 1px solid rgba(255,255,255,0.14) !important;
-          color: #c8cdd8 !important;
+          background: transparent !important;
+          border: 1px solid var(--scout-page-border, #ccd0c8) !important;
+          color: var(--scout-text-color, #343b36) !important;
         }
         html.scout-cream-site a.scout-site-tag.scout-tag-out:hover {
           border-color: var(--scout-accent, #5b8def) !important;
-          color: #fff !important;
+          color: var(--scout-link) !important;
         }
         /* 已入库：强调色填充 */
         html.scout-cream-site a.scout-site-tag.scout-tag-in,
@@ -546,12 +414,12 @@ function getScoutPageEnhancementThemeCss() {
         html.scout-cream-site a.scout-site-tag.scout-tag-explored {
           background: var(--scout-accent-soft, rgba(91,141,239,.22)) !important;
           border: 1px solid var(--scout-accent, #5b8def) !important;
-          color: #f0f4ff !important;
+          color: var(--scout-text-color, #343b36) !important;
         }
         html.scout-cream-site a.scout-site-tag.scout-tag-loved {
-          background: rgba(229, 72, 64, 0.28) !important;
+          background: rgba(229, 72, 64, 0.10) !important;
           border-color: #e54840 !important;
-          color: #ffe8e6 !important;
+          color: var(--scout-text-color, #343b36) !important;
           box-shadow: 0 0 0 1px rgba(229, 72, 64, 0.25);
         }
         html.scout-cream-site .scout-tag-zh {
@@ -572,45 +440,25 @@ function getScoutPageEnhancementThemeCss() {
           font-size: 11px !important;
           line-height: 1 !important;
         }
-        html.scout-cream-site .scout-tag-addon {
-          display: inline-flex !important;
-          gap: 2px !important;
-          margin-left: 2px !important;
-          font-size: 10px !important;
-          font-weight: 700 !important;
-          line-height: 1 !important;
-          vertical-align: middle !important;
-        }
-        html.scout-cream-site .scout-tag-addon span {
-          cursor: pointer;
-          border-radius: 4px !important;
-          padding: 1px 3px !important;
-          background: rgba(0,0,0,0.28) !important;
-        }
-        .scout-tag-action {
-          cursor: pointer;
-        }
-        .scout-tag-add-action {
-          color: #8fd4a0;
-        }
-        .scout-tag-block-action {
-          color: #f09088;
-        }
         .scout-pub-addon {
           display: inline-flex;
-          gap: 4px;
+          gap: 6px;
           margin-left: 8px;
           max-width: 100%;
           vertical-align: middle;
           font-size: 12px;
         }
         .scout-pub-addon .scout-pub-action {
-          height: 24px;
+          min-height: 32px;
           margin: 0;
-          padding: 2px 8px;
+          padding: 4px 8px;
+          border: 1px solid var(--scout-page-border, #ccd0c8);
           border-radius: 6px;
-          font-size: 11.5px;
-          line-height: 1;
+          background: var(--scout-page-panel, #eeeee8);
+          color: var(--scout-text-color, #343b36);
+          font: 12px/1.4 'Segoe UI', 'Microsoft YaHei', sans-serif;
+          box-sizing: border-box;
+          box-shadow: none;
           cursor: pointer;
         }
         .scout-pub-addon .scout-pub-love-action.is-loved {
@@ -618,7 +466,7 @@ function getScoutPageEnhancementThemeCss() {
           background: #e2f5e4;
           color: #2f6b3a;
         }
-        /* 标签容器：可换行，暗色面板 */
+        /* 标签容器保持原生结构；发布者不参与标签折叠。 */
         html.scout-cream-site .video-metadata,
         html.scout-cream-site .video-tags-list,
         html.scout-cream-site .ordered-label-list,

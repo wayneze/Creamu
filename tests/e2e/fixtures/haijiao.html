@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HJ layout fixture</title>
+<style>
+body{margin:0;font:14px sans-serif;background:#fff}*{box-sizing:border-box}
+#hj-toolbar{position:fixed;top:0;width:100%;background:white;z-index:1008}
+#toolbar-container{width:1000px;height:45px;margin:auto;display:flex;justify-content:space-between;align-items:center}
+.hj-search{display:flex;align-items:center}.hj-input{width:320px}.hj-input input{width:100%;height:32px}
+#hj-page-view{width:1000px;margin:auto}#hj-nav-second{float:left;width:130px;background:#34769a}
+.hj-nav-second ul{padding:10px;list-style:none}.hj-nav-second a{color:white}
+[id^="hj-main-content"]{float:right;width:845px}main{float:left;width:640px;margin-left:25px}
+#hj-right-aside{float:right;width:180px}.home-news-content .list{padding:20px 12px;border-bottom:1px solid #ddd}
+.morePic{display:flex}.morePic img{width:201px;height:120px;margin-right:10px}
+.infoFlowNav{width:640px;display:flex}
+#details-page{width:1000px;margin:auto}.article{min-height:180px}.floor-show{padding:20px}
+.van-overlay{position:fixed;inset:0;background:#0004;z-index:2000}.van-dialog{position:fixed;top:30%;left:20%;background:white;z-index:2001;padding:20px}
+.art-controls{height:40px;background:#202824;color:white}
+</style></head>
+<body><div id="app">
+<div id="hj-toolbar"><div id="toolbar-container"><strong>海角 · 社区</strong><div class="hj-search"><span class="navigation_text">论坛</span><div class="hj-input"><input placeholder="搜贴，搜人，搜标签"></div></div><div><button>登录</button> <button>注册</button></div></div></div>
+<div style="margin-top:45px"><div id="hj-page-view"><nav id="hj-nav-second"><div class="hj-nav-second"><ul><li><a href="/home">热门</a></li><li><a href="/article?nodeId=1">讨论</a></li><li><a href="/article?nodeId=2">人文</a></li><li><a href="/article?nodeId=3">图片</a></li></ul><ul><li><a href="/article?nodeId=4">海角公告</a></li></ul></div></nav>
+<div id="hj-main-content clearfix"><main><div class="infoFlowNav"><a class="title active">热帖</a><a class="title">新闻</a><a class="title">原创</a><a class="title">精华</a><a class="title">公告</a><a class="title">最新</a></div><div class="home-news-content">
+<div class="list hjbox-container"><h4><a class="hjbox-linkcolor" href="/post/details?pid=101">城市漫步 · 周末的散步记录</a></h4><p>沿河岸步行，记录街道与建筑。用于核对长标题和正文摘要在不同宽度下的布局。</p><div class="morePic"><img alt="街景"><img alt="建筑"><img alt="河岸"></div><div class="d-flex"><div>作者 · Sample　最新回帖：今天</div><div>浏览 123　回复 8</div></div></div>
+<div class="list hjbox-container"><h4>旅行笔记 · 山间清晨</h4><p>一段安静的阅读内容，保留论坛原本的浏览节奏。</p></div></div></main><aside id="hj-right-aside"><h2>常去板块</h2><p>公告　旅行　摄影</p></aside></div></div></div>
+<div class="details-box" hidden><div id="details-page"><div class="header"><h1>城市漫步 · 影像记录</h1><p>Sample · 今天　2 段视频</p></div><div class="floor-show"><div class="article ql-editor"><p>帖子正文。这里保留原站内容，媒体工具与正文一起滚动。</p><button id="expand-post">点击展开完整贴文</button></div></div></div></div>
+</div></body></html>

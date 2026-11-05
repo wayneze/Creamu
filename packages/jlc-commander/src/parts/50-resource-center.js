@@ -59,7 +59,7 @@
             avidNode = document.querySelector('#video_id .text')
                 || document.querySelector('td#video_id + td .text')
                 || document.querySelector('#video_id');
-            avid = normalizeResourceAvid(avidNode?.textContent || document.title);
+            avid = normalizeResourceAvid(avidNode ? extractDetailFieldText(avidNode, [], avidNode) : document.title);
             title = compactText(document.querySelector('#video_title h3 a') || document.querySelector('#video_title a') || document.title);
         } else if (site === 'javbus') {
             anchor = document.querySelector('.col-md-3.info')
@@ -116,9 +116,8 @@
             container.id = 'jlc-resource-center';
             container.className = 'jlc-resource-center';
         }
-        if (context.anchor.nextElementSibling !== container) {
-            context.anchor.insertAdjacentElement('afterend', container);
-        }
+        const mount = ensureJlcDetailLayout(context)?.querySelector('.jlc-detail-resources');
+        if (mount && container.parentElement !== mount) mount.append(container);
         return container;
     }
 
@@ -132,34 +131,13 @@
             </a>`).join('')}</div>`;
     }
 
-    function applyJavlibraryMenuTopStyle() {
-        if (typeof document === 'undefined') return;
-        const styleId = 'jlc-javlibrary-menutop-style';
-        let styleEl = document.getElementById(styleId);
-        if (!styleEl) {
-            styleEl = document.createElement('style');
-            styleEl.id = styleId;
-            (document.head || document.documentElement || document.body)?.appendChild(styleEl);
-        }
-        if (currentWeb !== 'javlibrary' || !Status.get('menutoTop')) {
-            styleEl.textContent = '';
-            return;
-        }
-        styleEl.textContent = `
-            #leftmenu { width: 100%; float: none; }
-            #leftmenu > table { display: none; }
-            #leftmenu .menul1,
-            #leftmenu .menul1 > ul { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; }
-            #leftmenu .menul1 { padding: 5px; }
-            #rightcolumn { margin: 0 5px; padding: 10px 5px; }
-        `;
-    }
-
     function syncDetailReleaseBadge(context, dateText) {
         const node = context?.avidNode;
         if (!node || !(node instanceof Element)) return;
+        const insideCell = node.matches('td, th');
+        const host = insideCell ? node : node.parentElement;
         const value = normalizeReleaseDate(dateText);
-        let badge = node.parentElement?.querySelector('.avid-date-badge[data-jlc-detail-date="1"]') || null;
+        let badge = host?.querySelector('.avid-date-badge[data-jlc-detail-date="1"]') || null;
         if (!value) {
             badge?.remove();
             return;
@@ -168,7 +146,8 @@
             badge = document.createElement('span');
             badge.className = 'avid-date-badge';
             badge.dataset.jlcDetailDate = '1';
-            node.insertAdjacentElement('afterend', badge);
+            if (insideCell) node.append(badge);
+            else node.insertAdjacentElement('afterend', badge);
         }
         badge.textContent = value;
         badge.title = value;

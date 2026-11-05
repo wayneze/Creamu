@@ -166,7 +166,7 @@
       '    </select>' +
       '  </div>' +
       '  <div class="jlc-wb-toolbar-row jlc-wb-toolbar-note">' +
-      '分组靠手动：菜单「设分类」。未设的在「未分类」。自由词搜索不再自动拆组。检查更新间隔 5～10 秒。' +
+      '在条目菜单中设置分类；打开后可继续与当前列表比对。' +
       '  </div>' +
       '</div>' +
       '<div class="jlc-wb-list-scroll" id="jlc-wb-list-scroll"></div>';
@@ -511,7 +511,7 @@
         : '<div class="jlc-wb-item-pills"></div>') +
       '</div>' +
       '<div class="jlc-wb-item-side">' +
-      '<button type="button" class="jlc-wb-open-btn" data-tact="open" title="打开">Open</button>' +
+      '<button type="button" class="jlc-wb-open-btn" data-tact="open" title="在新标签打开">打开</button>' +
       '<button type="button" class="jlc-wb-more-btn" data-tact="menu" title="更多">···</button>' +
       '<div class="jlc-wb-item-menu" data-menu="' +
       escapeHtml(r.id) +

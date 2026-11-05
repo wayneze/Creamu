@@ -1,87 +1,93 @@
 # Creamu
 
-自用奶油系站点增强油猴脚本。
+五款站点增强油猴脚本，覆盖影片与画廊检索、追更、阅读和直播观看。各站保留适合自身的浅色或深色主题；ExH、JLC、Scout、FC2 共用可随时呼出的控制台，桌面支持并排比对，窄屏适配底部面板。
 
-仓库：https://github.com/wayneze/Creamu
+## 安装与使用
 
-非官方、无保证。使用后果自负。
+先安装 [Tampermonkey](https://www.tampermonkey.net/) 或 [Violentmonkey](https://violentmonkey.github.io/)，再点击对应的「安装」。脚本名称链接到详细使用说明。
 
-## 一键安装
+| 脚本 | 适用站点 | 主要功能 | 安装 |
+| --- | --- | --- | --- |
+| [ExH](packages/exh-commander/README.md) | E-Hentai / ExHentai | 画廊预览、标签偏好、追更断点、LRR 本地库对照 | [安装](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/exh-commander/dist/creamu-exh.user.js) |
+| [JLC · JavLibrary](packages/jlc-commander/README.md) | JavLibrary / JavBus / JavDB / AVMOO 及已适配镜像 | 影片资料与资源整合、熟人库、偏好金框、追更与 Emby 在库比对 | [安装](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/jlc-commander/dist/creamu-jlc.user.js) |
+| [Scout](packages/scout-commander/README.md) | XVideos / XNXX / Eporner | 多站搜索比较、词库、收藏、屏蔽与追更 | [安装](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/scout-commander/dist/creamu-scout.user.js) |
+| [HJ](packages/hj-commander/README.md) | haijiao.com / haijiao2.com 及其子域 | 桌面与手机阅读界面、悬浮搜索、用户帖子分页排序、详情媒体播放 | [安装](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/hj-commander/dist/creamu-hj.user.js) |
+| [FC2 Live](packages/fc2-commander/README.md) | FC2 Live 普通区 / 成人区 | 直播筛选、关注与访问记录、增强播放器、多路同屏 | [安装](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/fc2-commander/dist/creamu-fc2.user.js) |
 
-先安装 [Tampermonkey](https://www.tampermonkey.net/) 或 [Violentmonkey](https://violentmonkey.github.io/)，再点下方绿色 **Install** 徽章（raw 直链，会弹出油猴安装确认）：
+如果链接只打开代码，请确认脚本管理器已启用，或在其「从 URL 安装」中粘贴同一链接。GitHub 文件浏览页不触发安装，需要使用表中的 raw 链接。
 
-| 脚本 | 适用站点 | 安装 | 源文件 |
-|------|----------|------|--------|
-| **Creamu · ExH** | e-hentai · exhentai | [![Install](https://img.shields.io/badge/Install-userscript-00A86B?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/exh-commander/dist/creamu-exh.user.js) | [`creamu-exh.user.js`](packages/exh-commander/dist/creamu-exh.user.js) |
-| **Creamu · JavLibrary** | JavLibrary · JavBus · JavDB · AVMOO 等常见镜像 | [![Install](https://img.shields.io/badge/Install-userscript-00A86B?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/jlc-commander/dist/creamu-jlc.user.js) | [`creamu-jlc.user.js`](packages/jlc-commander/dist/creamu-jlc.user.js) |
-| **Creamu · Scout** | xvideos · xnxx · eporner | [![Install](https://img.shields.io/badge/Install-userscript-00A86B?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/scout-commander/dist/creamu-scout.user.js) | [`creamu-scout.user.js`](packages/scout-commander/dist/creamu-scout.user.js) |
-| **Creamu · HJ** | HJ系 | [![Install](https://img.shields.io/badge/Install-userscript-00A86B?style=for-the-badge&logo=tampermonkey&logoColor=white)](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/hj-commander/dist/creamu-hj.user.js) | [`creamu-scout.user.js`](packages/scout-commander/dist/creamu-scout.user.js) |
+从旧名称或旧 namespace 的脚本迁移时，先在旧脚本中导出备份，再安装新版并导入；停用旧脚本，避免重复接管页面。
 
+## 控制台与数据
 
-也可以直接点这些链接（效果相同）：
+ExH、JLC、Scout、FC2 的追更、资料库或关注记录都可从悬浮控制台查看，不必离开当前页面。宽屏可停靠在右侧并排比对，也可切换自由浮窗；手机使用适配窄屏的面板。HJ 直接增强原站页面，提供独立的悬浮搜索入口。
 
-- [Install · ExH](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/exh-commander/dist/creamu-exh.user.js)
-- [Install · JavLibrary](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/jlc-commander/dist/creamu-jlc.user.js)
-- [Install · Scout](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/scout-commander/dist/creamu-scout.user.js)
-- [Install · HJ](https://raw.githubusercontent.com/wayneze/Creamu/main/packages/hj-commander/dist/creamu-hj.user.js)
+四款控制台脚本支持 JSON 备份和 WebDAV 同步，各自使用独立数据文件：
 
-> **说明**
-> - GitHub 的 blob 浏览页**不会**触发安装，必须用 `raw.githubusercontent.com/.../*.user.js`
-> - 若点徽章只打开了代码、没有安装窗：确认扩展已启用，或在油猴里用「从 URL 安装」粘贴同一 raw 链接
-> - 默认分支写的是 `main`；若不是，请改 URL 中的分支名
-> - `dist/*.user.js` 需已推送到 GitHub，否则 raw 会 404
+| 脚本 | WebDAV 设置入口 | 默认远端文件 |
+| --- | --- | --- |
+| ExH | 控制台 → 设置 → 同步 | `/Creamu/exh.vault.json` |
+| JLC | 控制台 → 设置 → 服务同步 | `/Creamu/jlc.vault.json` |
+| Scout | 控制台 → 设置 → 同步 | `/Creamu/scout.vault.json` |
+| FC2 | 设置 → WebDAV 同步 | `/Creamu/fc2.vault.json` |
 
-从旧脚本迁移请先导出备份再导入（`@name` / `@namespace` 已更换）。
+填写服务地址、用户名、应用密码与远端目录，测试连接后执行一次手动同步；需要自动同步时再开启相应选项。HJ 暂无 WebDAV 同步。
 
-## WebDAV 同步
+坚果云配置示例：
 
-设置 → 数据 → WebDAV：填写服务地址、用户名、**应用密码**、远端目录 → 测试连接 → 启用同步。
-
-云端文件默认：`{path}/exh.vault.json`、`{path}/jlc.vault.json`、`{path}/scout.vault.json`（默认 path 为 `/Creamu`）。
-
-### 坚果云示例
-
-| 项 | 值 |
-|----|-----|
-| 地址 | `https://dav.jianguoyun.com/dav/` |
+| 项目 | 值 |
+| --- | --- |
+| 服务地址 | `https://dav.jianguoyun.com/dav/` |
 | 用户名 | 坚果云注册邮箱 |
-| 密码 | 账号安全里生成的 **应用密码**（不是登录密码） |
-| 路径 | `/Creamu`（可改） |
+| 密码 | 账号安全中生成的应用密码 |
+| 目录 | `/Creamu`，也可自行修改 |
 
-任意兼容 WebDAV 的服务（Nextcloud、群晖、自建等）均可：改地址与鉴权即可。
+也支持 Nextcloud、群晖等兼容 WebDAV 的服务。目录无法自动创建或返回 403 时，先检查远端目录、账号权限与服务流量限制。
 
-## 构建
+## 开发
 
-在根目录下：
+以下命令均在仓库根目录执行，推荐 Node.js 22 或 24（与 CI 一致）。
+
 ```bash
+npm ci
 npm run build
 ```
-或者单独构建各个脚本：
-```bash
-npm run build:exh
-npm run build:jlc
-npm run build:scout
-npm run build:hj
+
+单独构建使用 `npm run build:exh`、`build:jlc`、`build:scout`、`build:hj` 或 `build:fc2`。
+
+```text
+packages/
+  exh-commander/     ExH
+  jlc-commander/     JLC
+  scout-commander/   Scout
+  hj-commander/      HJ
+  fc2-commander/     FC2 Live
+  shared/           控制台样式、几何、交互与 WebDAV
+scripts/            共享构建器、仓库与产物校验、测试入口
+tests/              核心回归、浏览器场景及本地 fixtures
 ```
 
-测试与产物校验：
+包清单由根 `package.json` 的 `workspaces` 维护。各包的 `src/parts.manifest.json` 定义源码顺序、共享模块注入与产物路径；修改 `src/parts` 或 `packages/shared` 后重新构建，不直接编辑生成的 `dist/*.user.js`。源码与对应 dist 一起提交，安装链接使用 dist。
+
+[共享模块说明](packages/shared/README.md) 定义四款控制台共用的样式、位置约束、拖动与缩放接口；产品包负责页面内容、数据存储和主题扩展。
+
+## 验证
+
 ```bash
 npm run check
+npx playwright install chromium
 npm run test:e2e
 ```
 
-`check` 包含仓库规则与公开单元测试；`test:e2e` 包含构建、产物校验和本地浏览器场景。需要单独检查生成文件时可运行 `npm run check:dist`，它会按当前 manifest 重组源码并比较 `dist`，不依赖 Git 工作区是否干净。
+| 命令 | 检查范围 |
+| --- | --- |
+| `npm run check` | 仓库规则、五包构建、版本一致性、核心回归 |
+| `npm run test:e2e` | 构建、产物一致性、控制台与页面浏览器回归 |
+| `npm run check:dist` | 按当前 manifest 重组源码，与已生成的 dist 比较；不修改产物 |
+| `npm run check:metadata` | 包版本、源码头部与 dist 头部的版本一致性 |
 
-浏览器测试使用本地 fixture，不访问真实站点。首次运行前安装 Chromium：
-
-```bash
-npx playwright install chromium
-```
-
-源码在 `packages/*/src/parts`，构建为单文件 userscript。
-
-三个工作台共用 `packages/shared/creamu-workbench-geometry.js`、`packages/shared/creamu-workbench-interactions.js` 和 `packages/shared/creamu-workbench-css.js`。产品包只负责页面内容、数据存储和主题扩展；位置约束、拖动、缩放与样式注入由共享层统一维护。
+浏览器测试使用本地 fixtures 和模拟响应。真实站点登录、付费观看、移动浏览器及油猴沙箱兼容性需在对应环境验收，不能由本地回归替代。
 
 ## License
 
-MIT
+[MIT](LICENSE)

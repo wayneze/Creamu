@@ -43,7 +43,6 @@
 
   async function enhanceListPageNow(options) {
     const opts = options || {};
-    bindListLiveRefresh();
     const pageContext = parseExhPageContext(location.href);
     const trackingStatePromise = resolveListTrackingState(pageContext, opts.trackingState);
     const allItems = Array.from(opts.items || queryListItems()).filter(
@@ -228,40 +227,16 @@
     }
   }
 
-  async function refreshListVolatileState() {
+  async function refreshListVolatileState(preloaded) {
     const kind = detectPageKind();
     if (kind === 'gallery' || kind === 'image') return;
     const pageContext = parseExhPageContext(location.href);
-    const trackingRecord = await loadListTrackingRecord(pageContext);
+    const trackingState = await resolveListTrackingState(pageContext, preloaded);
+    const trackingRecord = trackingState.record;
     applyListVolatileState(loadSeenGids(), trackingRecord);
     if (typeof refreshTrackingBarState === 'function') {
-      await refreshTrackingBarState({
-        context: pageContext,
-        record: trackingRecord,
-        resolved: true,
-      });
+      await refreshTrackingBarState(trackingState);
     }
-  }
-
-  let listLiveRefreshTimer = null;
-  function scheduleListLiveRefresh(reason) {
-    if (listLiveRefreshTimer) clearTimeout(listLiveRefreshTimer);
-    listLiveRefreshTimer = setTimeout(() => {
-      listLiveRefreshTimer = null;
-      refreshListVolatileState().catch((error) => {
-        console.warn('[ExC] list live refresh', reason, error);
-      });
-    }, 200);
-  }
-
-  function bindListLiveRefresh() {
-    if (window.__excListLiveBound) return;
-    window.__excListLiveBound = true;
-    window.addEventListener('pageshow', () => scheduleListLiveRefresh('pageshow'));
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') scheduleListLiveRefresh('visible');
-    });
-    window.addEventListener('focus', () => scheduleListLiveRefresh('focus'));
   }
 
   function observeListMutations() {

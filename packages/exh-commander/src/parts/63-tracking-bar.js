@@ -128,7 +128,7 @@
       '<div class="exc-track-actions">' +
       // 继续断点放最前：有断点时最显眼，不再排在「已追更」后面
       '<button type="button" class="jlc-wb-btn primary exc-track-btn exc-bp-continue" id="exc-goto-bp" hidden title="在当前列表向后加载直到命中断点">继续断点</button>' +
-      '<button type="button" class="jlc-wb-btn ghost exc-track-btn" id="exc-save-tracking">⭐ 收藏追更</button>' +
+      '<button type="button" class="jlc-wb-btn ghost exc-track-btn" id="exc-save-tracking">收藏追更</button>' +
       '<button type="button" class="jlc-wb-btn ghost exc-track-btn" id="exc-untrack" hidden title="从追更列表移除">取消追更</button>' +
       '</div>' +
       '<div class="exc-track-meta" id="exc-track-meta" hidden></div>';
@@ -219,10 +219,10 @@
       }
       bar.classList.add('is-tracked');
       if (status) status.textContent = '已追更';
-      btn.textContent = '✓ 已追更';
+      btn.textContent = '调整分类';
       btn.classList.remove('primary');
       btn.classList.add('ghost');
-      btn.title = '已在追更列表';
+      btn.title = '调整当前追更的分类';
       if (untrack) untrack.hidden = false;
       const hasBp = trackingHasAnyBreakpoint(rec);
       const searching =
@@ -259,7 +259,7 @@
             (bpPosted ? ' · ' + bpPosted : '') +
             '（约第 ' +
             bpPageLabel +
-            ' 页）· 在封面点「断」可改断点';
+            ' 页）· 点卡片「设为断点」可更改';
         }
       }
       if (meta) {
@@ -290,7 +290,7 @@
             typeof getTrackingUnreadEstimate === 'function' ? getTrackingUnreadEstimate(rec) : 0;
           bits.push(n > 0 ? (rec.unread_estimate_capped ? '+' + n + '+ 未读' : '+' + n + ' 未读') : '有更新');
         }
-        bits.push('封面右下角「断」= 设作品断点');
+        bits.push('点卡片「设为断点」记录阅读位置');
         meta.textContent = bits.join(' · ');
       }
       // 轻量记浏览页（防抖）；深页/游标页绝不改写 top_gid
@@ -380,7 +380,7 @@
     } else {
       bar.classList.remove('is-tracked');
       if (status) status.textContent = '未收藏';
-      btn.textContent = '⭐ 收藏追更';
+      btn.textContent = '收藏追更';
       btn.title = '收藏当前搜索到追更';
       if (gotoBp) gotoBp.hidden = true;
       if (untrack) untrack.hidden = true;
@@ -390,7 +390,7 @@
           (pageState.mode === 'cursor' && !pageState.known
             ? '当前深页（游标）'
             : '当前列表第 ' + pageDisp + ' 页') +
-          ' · 在任意作品封面右下角点「断」设为断点作品';
+          ' · 点任意卡片「设为断点」记录阅读位置';
       }
     }
   }

@@ -375,12 +375,15 @@
         return record;
     }
 
-    function refreshTrackingToolbarButtons() {
+    function refreshTrackingToolbarButtons(items = getTrackingItemNodesFromRoot(document)) {
         const activeCode = normalizeCode(trackingPageState.record?.last_seen_avid || '');
-        getTrackingItemNodesFromRoot(document).forEach(item => {
+        items.forEach(item => {
             const button = item.querySelector('.jlc-tool-btn.j-bm');
             if (button) {
-                button.classList.toggle('active-bookmark', !!activeCode && normalizeCode(item.dataset.jlcAvid || '') === activeCode);
+                const active = !!activeCode && normalizeCode(item.dataset.jlcAvid || '') === activeCode;
+                button.classList.toggle('active-bookmark', active);
+                button.setAttribute('aria-pressed', String(active));
+                button.textContent = active ? '当前断点' : '设为断点';
             }
         });
     }

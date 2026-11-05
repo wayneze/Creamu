@@ -193,7 +193,7 @@
             return;
         }
         body.innerHTML = makeResourceStatusMarkup(pendingStatuses)
-            + '<div class="jlc-resource-note">沿用主脚本截图面板，优先 BlogJav，失败再回退 JavStore；默认手动加载避免拖慢首屏。</div>'
+            + '<div class="jlc-resource-note">点击加载影片截图。</div>'
             + '<div class="jlc-resource-inline-actions"><button type="button" data-jlc-load-screenshot>加载截图</button></div>';
         body.querySelector('[data-jlc-load-screenshot]')?.addEventListener('click', loadScreenshots, { once: true });
     }

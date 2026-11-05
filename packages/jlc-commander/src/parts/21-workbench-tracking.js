@@ -157,7 +157,7 @@
             + '      <div class="jlc-wb-item-pills">' + subPills.join('') + '</div>'
             + '    </div>'
             + '    <div class="jlc-wb-item-side">'
-            + '      <button type="button" class="jlc-wb-open-btn" data-jlc-wb-open="' + escapeHtml(record.id) + '" title="按默认方式打开">Open</button>'
+            + '      <button type="button" class="jlc-wb-open-btn" data-jlc-wb-open="' + escapeHtml(record.id) + '" title="按默认方式打开">打开</button>'
             + '      <button type="button" class="jlc-wb-more-btn" data-jlc-wb-more="' + escapeHtml(record.id) + '" title="更多操作" aria-label="更多">···</button>'
             + '      <div class="jlc-wb-item-menu" data-jlc-wb-menu="' + escapeHtml(record.id) + '" hidden>'
             + '        <button type="button" data-jlc-wb-open-same="' + escapeHtml(record.id) + '">本页打开</button>'
@@ -422,6 +422,7 @@
         const nav = compactText(tabId || '') ? mapped.nav : (session.nav || 'tracking');
         shell.classList.add('is-open');
         document.getElementById('jlc-wb-fab')?.classList.add('is-panel-open');
+        document.getElementById('jlc-wb-fab')?.setAttribute('aria-expanded', 'true');
         applyWorkbenchShellGeometry();
         persistWorkbenchSession({ panelOpen: true, nav });
         activateWorkbenchNav(nav, { forceRender: true, reuseIfUnchanged: true });
@@ -431,6 +432,7 @@
             syncWorkbenchSettingsForm();
         } else {
             setWorkbenchSettingsOpen(false);
+            shell.querySelector('.jlc-wb-nav button.active')?.focus({ preventScroll: true });
         }
         if (nav !== 'tracking') void refreshWorkbenchFabBadge();
     }
@@ -689,29 +691,33 @@
             refreshAllBtn.disabled = !!refreshRuntime;
             refreshAllBtn.textContent = runtimeButtonText;
         }
+        const saveCurrentBtn = document.getElementById('jlc-wb-save-current');
+        if (saveCurrentBtn) {
+            saveCurrentBtn.disabled = !context;
+            saveCurrentBtn.title = context ? '把当前列表加入追更' : '请先打开搜索或列表页';
+        }
 
         const useVirtual = list.length >= WB_VIRT_THRESHOLD;
         const toolbarHtml = ''
             + '<div class="jlc-wb-toolbar">'
             + '  <div class="jlc-wb-toolbar-row">'
-            + '    <input class="jlc-wb-search" id="jlc-wb-tracking-query" type="search" placeholder="搜索标题 / 番号 / 备注…" value="' + escapeHtml(session.tracking.query || '') + '">'
+            + '    <input class="jlc-wb-search" id="jlc-wb-tracking-query" aria-label="搜索追更" type="search" placeholder="搜索标题、番号或备注" value="' + escapeHtml(session.tracking.query || '') + '">'
+            + '    <button type="button" class="jlc-wb-chip" data-jlc-wb-continue>'
+            + (resumePendingIds.length ? '继续上次刷新' : '继续上次') + '</button>'
             + '  </div>'
-            + '  <div class="jlc-wb-toolbar-row">'
-            + '    <button type="button" class="jlc-wb-chip' + (session.tracking.filterUpdatesOnly ? ' is-on' : '') + '" data-jlc-wb-filter-updates>仅有更新</button>'
-            + '    <button type="button" class="jlc-wb-chip' + (session.tracking.pinCurrent !== false ? ' is-on' : '') + '" data-jlc-wb-pin-current>当前页置顶</button>'
-            + '    <select class="jlc-wb-select" id="jlc-wb-group-filter">'
+            + '  <div class="jlc-wb-toolbar-row jlc-wb-filter-row">'
+            + '    <button type="button" class="jlc-wb-chip' + (session.tracking.filterUpdatesOnly ? ' is-on' : '') + '" aria-pressed="' + !!session.tracking.filterUpdatesOnly + '" data-jlc-wb-filter-updates>仅有更新</button>'
+            + '    <button type="button" class="jlc-wb-chip' + (session.tracking.pinCurrent !== false ? ' is-on' : '') + '" aria-pressed="' + (session.tracking.pinCurrent !== false) + '" data-jlc-wb-pin-current>当前页置顶</button>'
+            + '    <select class="jlc-wb-select" aria-label="追更分组" id="jlc-wb-group-filter">'
             + '      <option value="all"' + (groupFilter === 'all' ? ' selected' : '') + '>全部分组</option>'
             + TRACKING_GROUP_ORDER.map(key => '<option value="' + key + '"' + (groupFilter === key ? ' selected' : '') + '>' + escapeHtml(getTrackingGroupLabel(key)) + '</option>').join('')
             + '    </select>'
-            + '    <select class="jlc-wb-select" id="jlc-wb-sort">'
+            + '    <select class="jlc-wb-select" aria-label="追更排序" id="jlc-wb-sort">'
             + '      <option value="updates_first"' + (session.tracking.sort === 'updates_first' ? ' selected' : '') + '>有更新优先</option>'
             + '      <option value="last_opened"' + (session.tracking.sort === 'last_opened' ? ' selected' : '') + '>最近打开</option>'
             + '      <option value="last_browsed"' + (session.tracking.sort === 'last_browsed' ? ' selected' : '') + '>最近浏览</option>'
             + '      <option value="name"' + (session.tracking.sort === 'name' ? ' selected' : '') + '>名称</option>'
             + '    </select>'
-            + '    <button type="button" class="jlc-wb-chip' + (resumePendingIds.length ? ' is-on' : '') + '" data-jlc-wb-continue>'
-            + (resumePendingIds.length ? '继续上次刷新' : '继续上次')
-            + '</button>'
             + '  </div>'
             + (resumePendingIds.length
                 ? (resumeReason === 'cf_required'
@@ -724,7 +730,7 @@
             + (useVirtual ? '  <div class="jlc-wb-toolbar-row jlc-wb-virtual-note">虚拟列表已启用（' + list.length + ' 项）</div>' : '')
             + '</div>';
 
-        const emptyHtml = '<div class="jlc-wb-empty">' + (context ? '没有匹配的追更项。可点底部「收藏当前搜索」。' : '还没有追更项，先在列表页收藏一个搜索吧。') + '</div>';
+        const emptyHtml = '<div class="jlc-wb-empty">' + (allRecords.length ? '没有匹配的追更项。试试清空搜索或调整筛选。' : context ? '把感兴趣的搜索留在这里。点击上方「收藏当前搜索」，下次就能继续浏览和查看更新。' : '还没有追更项。打开搜索或列表页后，即可收藏并记录浏览断点。') + '</div>';
 
         if (!flatRows.length) {
             root.innerHTML = toolbarHtml + '<div class="jlc-wb-list-scroll" id="jlc-wb-list-scroll">' + emptyHtml + '</div>';

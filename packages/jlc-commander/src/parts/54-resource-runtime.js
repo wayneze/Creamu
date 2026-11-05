@@ -1,8 +1,9 @@
 // @@creamu-part:54-resource-runtime
     function renderDetailResourceCenter(force = false) {
-        applyJavlibraryMenuTopStyle();
         const context = getCurrentDetailContext();
         if (context) {
+            ensureJlcDetailLayout(context);
+            updateJlcDetailSections();
             void decorateCurrentDetailPage(force);
             ensureDetailPageCopyButtons(context);
         } else {
@@ -25,19 +26,18 @@
         container.dataset.renderSignature = renderSignature;
         const token = Date.now() + '-' + Math.random().toString(36).slice(2);
         container.dataset.renderToken = token;
-        const subtitle = [context.siteLabel, context.avid, releaseDate ? ('发行 ' + releaseDate) : ''].filter(Boolean).join(' · ');
         const cards = [];
         if (config.resource_trailer !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="trailer"><h3>预告片</h3><div class="jlc-resource-body"></div></section>');
+            cards.push('<section class="jlc-resource-card" id="jlc-detail-media" data-jlc-resource="trailer"><h3>预告片</h3><div class="jlc-resource-body"></div></section>');
         }
         if (config.resource_screenshot !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="screenshot"><h3>截图</h3><div class="jlc-resource-body"></div></section>');
+            cards.push('<section class="jlc-resource-card"' + (config.resource_trailer === false ? ' id="jlc-detail-media"' : '') + ' data-jlc-resource="screenshot"><h3>截图</h3><div class="jlc-resource-body"></div></section>');
         }
         if (config.resource_magnet !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="magnet"><h3>磁力</h3><div class="jlc-resource-body"></div></section>');
+            cards.push('<section class="jlc-resource-card" id="jlc-detail-files" data-jlc-resource="magnet"><h3>磁力</h3><div class="jlc-resource-body"></div></section>');
         }
         if (config.resource_subtitle !== false) {
-            cards.push('<section class="jlc-resource-card" data-jlc-resource="subtitle"><h3>字幕</h3><div class="jlc-resource-body"></div></section>');
+            cards.push('<section class="jlc-resource-card"' + (config.resource_magnet === false ? ' id="jlc-detail-files"' : '') + ' data-jlc-resource="subtitle"><h3>字幕</h3><div class="jlc-resource-body"></div></section>');
         }
         const linksStrip = config.resource_links !== false
             ? '<div class="jlc-resource-links" data-jlc-resource="links"><span class="jlc-resource-links-label">站外</span><div class="jlc-resource-body"></div></div>'
@@ -45,8 +45,8 @@
         container.innerHTML = ''
             + '<div class="jlc-resource-header">'
             + '    <div>'
-            + '        <div class="jlc-resource-title">JLC 资源中心</div>'
-            + '        <div class="jlc-resource-subtitle">' + escapeHtml(subtitle) + (context.title ? (' · ' + escapeHtml(context.title)) : '') + '</div>'
+            + '        <div class="jlc-resource-title">观看与获取</div>'
+            + '        <div class="jlc-resource-subtitle">' + escapeHtml(context.avid) + ' · 预告、截图与可用资源</div>'
             + '    </div>'
             + '    <div class="jlc-resource-header-actions">'
             + '        <button type="button" data-jlc-resource-refresh>刷新资源</button>'

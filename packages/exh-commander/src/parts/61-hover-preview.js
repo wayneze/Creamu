@@ -17,8 +17,8 @@
     panel = document.createElement('div');
     panel.id = 'exc-hover-preview';
     panel.innerHTML =
-      '<div class="exc-hp-head"><span class="exc-hp-title">预览</span><a class="exc-hp-open" href="#" target="_blank" rel="noreferrer">打开画廊</a></div>' +
-      '<div class="exc-hp-status"></div>' +
+      '<div class="exc-hp-head"><span class="exc-hp-title">内容预览</span><a class="exc-hp-open" href="#" target="_blank" rel="noreferrer">打开画廊 ↗</a></div>' +
+      '<div class="exc-hp-status" role="status"></div>' +
       '<div class="exc-hp-grid"></div>';
     panel.addEventListener('mouseenter', () => {
       if (hoverPreviewHideTimer) {
@@ -34,11 +34,15 @@
       hoverPreviewScrollBound = true;
       window.addEventListener(
         'scroll',
-        () => {
-          hideHoverPreview();
+        (event) => {
+          if (!panel.contains(event.target)) hideHoverPreview();
         },
         { passive: true, capture: true }
       );
+      window.addEventListener('resize', hideHoverPreview, { passive: true });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') hideHoverPreview();
+      });
     }
     return panel;
   }
@@ -101,15 +105,17 @@
     panel.classList.remove('is-empty', 'is-loading', 'is-error');
     if (status) status.textContent = '内容预览 · ' + thumbs.length + ' 张（已跳过封面页）';
     grid.innerHTML = thumbs
-      .map((t) => {
+      .map((t, index) => {
         const href = t.href || galleryUrl || '#';
+        const label = '打开预览图 ' + (index + 1);
         if (t.type === 'bg' && t.style) {
           const wh =
-            (t.w ? 'width:' + t.w + 'px;' : '') + (t.h ? 'height:' + t.h + 'px;' : 'min-height:100px;');
+            'width:' + t.w + 'px;height:' + t.h + 'px;transform:scale(' +
+            Math.min(1, 110 / t.w, 160 / t.h) + ');';
           return (
             '<a class="exc-hp-cell" href="' +
             escapeHtml(href) +
-            '" target="_blank" rel="noreferrer">' +
+            '" aria-label="' + label + '" target="_blank" rel="noreferrer">' +
             '<span class="exc-hp-bg" style="' +
             escapeHtml(t.style) +
             ';' +
@@ -120,7 +126,7 @@
         return (
           '<a class="exc-hp-cell" href="' +
           escapeHtml(href) +
-          '" target="_blank" rel="noreferrer">' +
+          '" aria-label="' + label + '" target="_blank" rel="noreferrer">' +
           '<img src="' +
           escapeHtml(t.src || '') +
           '" alt="" loading="lazy"></a>'
@@ -202,7 +208,10 @@
     panel.style.display = 'block';
     const status = panel.querySelector('.exc-hp-status');
     const title = panel.querySelector('.exc-hp-title');
-    if (title) title.textContent = '预览';
+    if (title) {
+      title.textContent = partial.title_raw || partial.title || '内容预览';
+      title.title = title.textContent;
+    }
     if (status) status.textContent = '加载中…';
     const grid = panel.querySelector('.exc-hp-grid');
     if (grid) grid.innerHTML = '';
@@ -230,6 +239,8 @@
 
   function getListHoverPreviewAnchor(el) {
     if (!el || !el.querySelector) return null;
+    // Compact rows contain a hidden native image pane, not a visible cover.
+    if (el.matches('tr') && el.querySelector('.gl2c, .gl2m')) return null;
     const cover =
       el.querySelector('.exc-cover-host') ||
       el.querySelector('.glthumb') ||

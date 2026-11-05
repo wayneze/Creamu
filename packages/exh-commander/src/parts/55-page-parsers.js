@@ -99,6 +99,7 @@
     };
     // 扩展模式：.gt 的 title 常是 namespace:name
     root.querySelectorAll('.gt, .gtl, .gtw, .gtw, [title*=":"]').forEach((el) => {
+      if (el.closest('.exc-badge-container, .exc-tag-stream, .exc-tool-bar')) return;
       pushTag(el.getAttribute('title') || el.textContent);
     });
     // 标题里 [group] (artist) 与形态/原作补成伪标签

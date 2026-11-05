@@ -295,40 +295,36 @@
           escapeHtml(h.ns) +
           '" data-name="' +
           escapeHtml(h.name) +
-          '" title="加入追更">⭐ ' +
-          escapeHtml(h.ns + ':' + h.name) +
+          '" title="加入追更">' +
+          escapeHtml(({ artist: '画师', group: '团队', parody: '原作' }[h.ns]) + ' · ' + h.name) +
           '</button>'
       )
       .join('');
 
-    // 精简面板：badge + 对照卡（有才显示）+ 操作 + 可选追更
+    const manageOpen = !!panel.querySelector('.exc-g-manage[open]');
     panel.innerHTML =
-      '<div class="exc-g-head">Creamu · ExH · 画廊</div>' +
-      '<div class="exc-g-body">' +
+      '<div class="exc-g-head"><div class="exc-g-heading"><strong>作品与版本</strong><small>Creamu · ExH</small></div>' +
       badgeHtml(lib, work, edition, {
         lrrComparisonVisible: !!lrrCompareCard,
         editionComparisonVisible: !!edCompareCard,
       }) +
-      lrrCompareCard +
-      edCompareCard +
-      '<div class="jlc-wb-view-title" style="margin-top:10px">操作</div>' +
+      '</div><div class="exc-g-body">' +
       '<div class="exc-card-actions">' +
-      '<button type="button" class="jlc-wb-btn danger" data-exc-g="drop" title="屏蔽此单本（列表淡化/可隐藏）">' +
-      (work && work.blocked ? '取消抛弃' : '抛弃') +
-      '</button>' +
       '<button type="button" class="jlc-wb-btn primary" data-exc-g="best">最佳版</button>' +
-      '<button type="button" class="jlc-wb-btn ghost" data-exc-g="source">检查来源</button>' +
-      '<button type="button" class="jlc-wb-btn ghost" data-exc-g="bind">绑定 LRR</button>' +
-      '<button type="button" class="jlc-wb-btn ghost" data-exc-g="merge">合并 Work</button>' +
       '<button type="button" class="jlc-wb-btn ghost" data-exc-g="lrrq">LRR 搜索</button>' +
       '<button type="button" class="jlc-wb-btn ghost" data-exc-g="sim">相似搜索</button>' +
       lrrLinks +
       '</div>' +
+      '<div class="exc-g-comparisons">' + lrrCompareCard + edCompareCard + '</div>' +
       (trackBtns
-        ? '<div class="jlc-wb-view-title" style="margin-top:10px">快捷追更</div><div class="exc-card-actions">' +
-          trackBtns +
-          '</div>'
+        ? '<div class="exc-g-track"><span class="exc-g-label">快捷追更</span><div class="exc-card-actions">' + trackBtns + '</div></div>'
         : '') +
+      '<details class="exc-g-manage"' + (manageOpen ? ' open' : '') + '><summary>管理此作品</summary><div class="exc-card-actions">' +
+      '<button type="button" class="jlc-wb-btn ghost" data-exc-g="bind">绑定 LRR</button>' +
+      '<button type="button" class="jlc-wb-btn ghost" data-exc-g="source">检查来源</button>' +
+      '<button type="button" class="jlc-wb-btn ghost" data-exc-g="merge">合并 Work</button>' +
+      '<button type="button" class="jlc-wb-btn danger" data-exc-g="drop" title="屏蔽此单本（列表淡化/可隐藏）">' +
+      (work && work.blocked ? '取消抛弃' : '抛弃') + '</button></div></details>' +
       '</div>';
 
     panel.onclick = async (ev) => {

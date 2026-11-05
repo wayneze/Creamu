@@ -111,8 +111,7 @@ function bindCreamuFabDrag(fab, options = {}) {
     }
     if (!moved) return;
     callCreamuPreventDefault(event);
-    const width = fab.offsetWidth || 34;
-    const height = fab.offsetHeight || 34;
+    const { width, height } = getCreamuInteractionRect(fab);
     const next = clampCreamuWorkbenchPoint(
       { left: origin.left + dx, top: origin.top + dy },
       { width, height },
@@ -145,6 +144,9 @@ function bindCreamuFabDrag(fab, options = {}) {
 
   const onDown = (event) => {
     if (!isCreamuPrimaryPointer(event) || isDragDisabled(event) || shouldIgnoreDrag(event)) return;
+    // Own the gesture before the browser can start a native link/image drag underneath the FAB.
+    callCreamuPreventDefault(event);
+    fab.focus?.({ preventScroll: true });
     active = true;
     moved = false;
     startPoint = getCreamuClientPoint(event);

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>FC2 Live 观看测试</title>
+  <style>
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:1248px; font:14px sans-serif; background:#fff; color:#222; }
+    .js-head { height:110px; padding:20px; }
+    .m-viewTop { padding:24px; background:white; }
+    .m-viewPlayer_in { position:relative; width:1200px; height:629px; padding-bottom:80px; margin:auto; }
+    .playerContainer,.livePlayer,.player,.chat { position:relative; height:100%; }
+    .livePlayer { width:100%; min-height:423px; background:#eee; }
+    .chat { float:right; width:500px; }
+    .player { min-width:0; margin-right:500px; overflow:hidden; }
+    .player_content { position:absolute; inset:0 9px 0 0; background:#333; }
+    .player video { width:100%; height:100%; background:#101211; object-fit:contain; }
+    .chat_content { position:absolute; inset:0 0 0 1px; background:#eee; }
+    .chat_display { position:absolute; inset:11px 0 0; overflow:auto; }
+    .c-chatLines { padding:0; margin:0; list-style:none; }
+    /* Native message wrappers and row states, including styles applied to new comments. */
+    body .livePlayer .c-chatLines li { overflow:hidden; width:100%; }
+    body .livePlayer .c-chatLines .chat-left { float:left; width:60px; background:#fff; }
+    body .livePlayer .c-chatLines .chat-body { margin-left:60px; background:#fff; }
+    body .livePlayer .c-chatLines .com { color:#222; }
+    body .playerContainer .c-chatLines .com.black { color:#333; }
+    body .playerContainer .c-chatLines .com.red { color:#e63d37; }
+    body .livePlayer .c-chatLines li:hover, body .livePlayer .c-chatLines li:hover > div { background:#f9f9f9; }
+    body .livePlayer .c-chatLines li:is(.is-system_gift,.is-system_tip),
+    body .livePlayer .c-chatLines li:is(.is-system_gift,.is-system_tip) > div { background:#fceeb6; }
+    body .livePlayer .c-chatLines li:is(.is-system_gift,.is-system_tip):hover,
+    body .livePlayer .c-chatLines li:is(.is-system_gift,.is-system_tip):hover > div { background:#fbe89e; }
+    body .livePlayer .c-chatLines li:is(.is-system_login,.is-system_survey-start),
+    body .livePlayer .c-chatLines li:is(.is-system_login,.is-system_survey-start) > div { background:#ffdbc2; }
+    body .livePlayer .c-chatLines li.is-clicked, body .livePlayer .c-chatLines li.is-clicked > div { background:#ececec; }
+    body .livePlayer .c-chatLines li.is-sameUser, body .livePlayer .c-chatLines li.is-sameUser > div { background:#dbe8ff; }
+    body .livePlayer .c-chatLines li.is-sameUser:hover, body .livePlayer .c-chatLines li.is-sameUser:hover > div { background:#c2d8ff; }
+    .operation_row { height:45px; padding:8px 0; }
+    .operation_topLeft { margin-right:320px; }
+    .operation_topRight { float:right; }
+    .commentSend input { width:calc(100% - 60px); height:28px; }
+    .commentSend button { float:right; }
+    .operation button { padding:10px; }
+    .m-viewBtm { padding:30px; }
+    /* Independent light surfaces observed in FC2's native room styles. */
+    .c-bx05 { background:#fff; border:1px solid #e7e7e7; padding:22px; margin-bottom:16px; }
+    .chat_tab-content { background:#fff; height:100%; }
+    .chat_tab-control { background:#ddd; margin:0; padding:8px; }
+    .chat_tab-control li { display:inline-block; padding:8px; }
+    .chat_tab-control li.is-active { background:white; }
+    .chat_tab-control a, .c-tab01_itm { color:#555; }
+    #js-amount .m-payInf > div { background:#f4f3f8; padding:12px; }
+    .m-payInf { display:flex; gap:8px; }
+    .m-payInf > div { flex:1; }
+    .c-tab01 { display:flex; border-bottom:1px solid #e7e7e7; }
+    .c-tab01_itm { padding:14px; border-bottom:2px solid white; }
+    .c-tab01_cr { border-color:#ef5763; }
+    .c-button-op, .c-button, .c-pgr01_btn { background:linear-gradient(#f7f7f7,#efefef); border:1px solid #ddd; color:#333; text-shadow:0 1px white; }
+    .c-pgr01 .c-pgr01_crt .c-pgr01_btn { background:white; }
+    .c-pgr01_btns { display:flex; gap:8px; }
+    .c-pgr01_btn { display:block; padding:8px; }
+    .recommend, .c-popup_in, .c-modal_content, .m-fterMdl { background:#fff; color:#333; padding:16px; }
+    .recommend { margin-top:16px; }
+    .cover-chat { background:#f2f2f2; padding:8px; }
+    .setting_content { background:#eee; padding:16px; }
+    .setting_title, .setting_item .title { color:#555; }
+    .setting_buttonGroup button { background:white; padding:10px; }
+    .c-pointView { background:#fff8dc; color:#555; padding:8px; }
+    .c-modal_button, .m-fter01, .m-fter02, .m-fterGe { background:#f6f6f6; padding:16px; }
+    #native-settings { position:fixed; inset:15% 10% auto; z-index:100; box-shadow:0 0 0 100vmax #0008; }
+    #js-liveVideo, #js-videoComponentBox, #webrtcContent { position:relative; width:100%; height:100%; }
+    #webrtcContent > video { position:absolute; inset:0; }
+    #js-player_controls { position:absolute; bottom:0; left:0; right:0; padding:8px; background:#252929; }
+    #js-player_controls .c-toolpanel { position:absolute; bottom:40px; width:240px; background:#ddd; }
+    #js-player_controls .js-slider_bg { position:relative; width:120px; height:12px; background:#888; }
+    #js-player_controls .js-slider_range { width:50%; height:12px; background:#e65; }
+    #js-comment_canvas, #js-gift_canvas { position:absolute; inset:0; pointer-events:none; width:100%; height:100%; }
+    /* FC2 keeps this empty interaction layer above the video even while playing. */
+    .c-playerOn, .c-loading-gif, .c-soundOnly { position:absolute; inset:0; margin:auto; }
+    .c-playerOn, .c-loading-gif { z-index:3; }
+    .c-playerOn_in { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); pointer-events:auto; }
+    .c-soundOnly { z-index:1; pointer-events:auto; background:#333; }
+    .cover-player { position:absolute; inset:0; z-index:6; background:#333; }
+    .c-ply01_cmtBln { position:absolute; inset:0; overflow:hidden; }
+    .c-commentLine { position:absolute; bottom:0; left:0; width:100%; }
+  </style>
+</head>
+<body class="mode-wide">
+  <div class="l-wp js-wrap">
+    <div class="m-hder-ni js-head">FC2 Live</div>
+    <div class="l-cont js-cont">
+      <div class="m-cont-ni">
+        <div class="m-info01 info"><a href="/login/">登录</a>以使用全部功能</div>
+        <div class="m-viewTop js-top_box liveBox">
+          <div class="m-viewTop_head"><div class="m-viewTop_lt">
+            <div id="js-live_info"><div class="m-pgInf">
+              <div class="m-pgInf_rt">
+                <div class="m-pgInf_row1"><p class="c-ctbName">像素电台</p></div>
+                <div class="m-pgInf_row2"><h2 class="c-pgTit">今晚一起玩复古游戏</h2></div>
+                <div class="m-pgInf_row3"><p class="js-info">主播简介与公告保留在观看区下方，阅读时不挤占视频首屏。</p><a id="js-continue" href="#">显示全文</a></div>
+              </div>
+            </div></div>
+          </div><div class="m-viewTop_rt" id="js-amount">
+            <div class="m-payInf">
+              <div data-dark-surface><dl><dt>费用</dt><dd>免费</dd></dl></div>
+              <div data-dark-surface><dl><dt>小费</dt><dd><button class="c-button" type="button">赠送</button></dd></dl></div>
+            </div>
+          </div></div>
+        </div>
+        <div class="m-viewPlayer">
+          <div id="js-player" class="m-viewPlayer_in">
+            <div id="js-livePlayerContainer" class="playerContainer is-view">
+              <div class="livePlayer js-liveContainer is-player-view">
+                <div id="js-right_area" class="chat" style="width:500px">
+                  <div id="js-chat"><div class="chat_content">
+                    <div class="chat_tab-content js-tab1 is-active" data-dark-surface>
+                    <ul class="chat_tab-control"><li class="is-active"><a href="#chat">聊天</a></li><li><a href="#users">观众</a></li></ul>
+                    <div class="chat_display" style="top:60px"><ul id="js-commentListContainer" class="c-chatLines">
+                      <li data-dark-surface><div class="chat-left js-chat_left" data-dark-surface><span class="uid">123</span><span class="nam">青叶</span></div><div class="chat-body js-chat_body" data-dark-surface><span class="tim">20:30</span><span class="com black">晚上好！</span></div></li>
+                      <li data-dark-surface><div class="chat-left js-chat_left" data-dark-surface><span class="uid">456</span><span class="nam">Mika</span></div><div class="chat-body js-chat_body" data-dark-surface><span class="tim">20:31</span><span class="com">今天继续昨天的存档吗？</span></div></li>
+                      <li data-dark-surface><div class="chat-left js-chat_left" data-dark-surface><span class="uid">789</span><span class="nam">路过的猫</span></div><div class="chat-body js-chat_body" data-dark-surface><span class="tim">20:32</span><span class="com red">这个配乐好熟悉。</span></div></li>
+                    </ul></div></div>
+                    <div class="cover-chat" style="display:none" data-dark-surface>登录后参与聊天</div>
+                  </div></div>
+                </div>
+                <div id="js-left_area" class="player" style="margin-right:500px">
+                  <div id="js-video_area" class="player_content">
+                    <div id="js-liveVideo">
+                      <div class="c-playerOn js-playerOn"></div>
+                      <div class="c-loading-gif js-loading-gif" style="display:none">连接中</div>
+                      <div id="js-videoComponentBox">
+                        <div class="c-ply01_cmtBln"><ul class="c-commentLine" id="js-commentLine"></ul></div>
+                        <canvas id="js-comment_canvas"></canvas><canvas id="js-gift_canvas"></canvas>
+                        <div id="webrtcContent" class="js-webrtcVideo">
+                          <div class="c-soundOnly" style="display:none">Sound Only</div>
+                          <video id="native-live" controls muted playsinline aria-label="原生播放器"></video>
+                          <video id="native-hls" muted playsinline style="display:none"></video>
+                          <video id="native-share" muted playsinline style="display:none"></video>
+                          <video class="subVideo" muted playsinline style="display:none"></video>
+                        </div>
+                      </div>
+                      <div id="js-player_controls">
+                        <div id="js-videoControlsBox">
+                          <button type="button" class="js-reloadBtn">原生重连</button>
+                          <button type="button" class="js-commentMoveBtn"><span class="js-commentMoveBtn_on">弹幕开</span><span class="js-commentMoveBtn_off" style="display:none">弹幕关</span></button>
+                          <button type="button" class="js-giftMoveBtn"><span class="js-giftMoveBtn_on">礼物开</span><span class="js-giftMoveBtn_off" style="display:none">礼物关</span></button>
+                          <div class="c-toolpanel">
+                            <div class="js-hlsQualityBtnArea"><div class="js-hlsQualityBtn"><p>自动</p><ul id="js-hlsQualityList"><li class="is-current" data-index="0">自动</li><li data-index="3">1.2Mbps</li><li data-index="5">3Mbps</li></ul></div></div>
+                            <div class="js-hlsLatencyArea"><div class="js-slider" data-name="changeHlsLatency"><div class="js-slider_bg"><div class="js-slider_range"></div></div><div class="js-slider_value" data-min="0" data-max="2" data-step="1">1</div></div></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="recommend" style="display:none" data-dark-surface><p class="recommend_title">推荐直播</p></div>
+                  </div>
+                </div>
+              </div>
+              <div class="livePlayer-operation js-operationContainer"><div id="js-operation" class="js-operation"><div class="operation">
+                <div class="operation_row">
+                  <div class="operation_topRight"><button class="c-button-op" type="button" id="native-setting">原生播放设置</button></div>
+                  <div class="operation_topLeft"><form class="commentSend"><input aria-label="聊天内容" class="js-commentText" placeholder="发送聊天（测试，不联网）"><button class="c-button-op" type="button" id="native-send">发送</button></form></div>
+                </div>
+                <div class="operation_row">直播中 · 186 人在看</div>
+              </div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="m-viewBtm">
+          <div class="c-bx05 m-view-share" data-dark-surface><h3>分享直播</h3><label>链接 <input class="c-input-text" value="https://live.fc2.com/1001/" readonly></label></div>
+          <div id="js-tab_contents" class="c-bx05" data-dark-surface>
+            <div class="c-tab01"><a class="c-tab01_itm c-tab01_cr" href="#videos">视频</a><a class="c-tab01_itm" href="#gallery">相册</a><a class="c-tab01_itm" href="#blog">博客</a></div>
+            <div class="liverec js-tab_lists"><p>这里还没有视频</p></div>
+            <div class="c-pgr01"><div class="c-pgr01_btns"><div class="c-pgr01_crt"><span class="c-pgr01_btn">1</span></div><div><a class="c-pgr01_btn" href="#page2" data-dark-surface>2</a></div></div></div>
+          </div>
+          <div class="c-bx05" data-dark-surface><h3>主播资料</h3><p class="m-pfl_name">像素电台</p><p>游戏、音乐与日常。</p></div>
+          <div id="js-user_list" class="c-bx05 m-pgrRt_wp" data-dark-surface><h3>观众列表</h3><p>青叶 · Mika · 路过的猫</p></div>
+        </div>
+      </div>
+    </div>
+    <footer class="m-fter-ni js-foot"><div class="m-fter01" data-dark-surface>FC2 Live</div><div class="m-fter02" data-dark-surface><a href="#help">帮助</a></div><div class="m-fterGe" data-dark-surface>本地测试页面</div></footer>
+  </div>
+  <template id="native-settings-template">
+    <div id="native-settings" class="c-modal">
+      <div class="c-modal_content" data-dark-surface>
+        <div class="setting_content" data-dark-surface><h3 class="setting_title">原生播放设置</h3><div class="setting_item"><p class="title">播放画质</p><div class="setting_buttonGroup"><button type="button" class="is-active">自动</button><button type="button" data-dark-surface>普通</button></div></div></div>
+        <div class="c-popup_in" data-dark-surface><p>原生点数提示</p><span class="c-pointView" data-dark-surface>0 点</span></div>
+      </div>
+      <div class="c-modal_button" data-dark-surface><button type="button" class="c-button" id="native-close">关闭播放设置</button></div>
+    </div>
+  </template>
+  <script>
+    window.nativePlayerActions = { reload: 0, quality: '0', latency: 1 };
+    document.addEventListener('click', event => {
+      if (event.target.closest('.js-reloadBtn')) nativePlayerActions.reload++;
+      const quality = event.target.closest('#js-hlsQualityList li');
+      if (quality) {
+        nativePlayerActions.quality = quality.dataset.index;
+        document.querySelector('#js-hlsQualityList .is-current')?.classList.remove('is-current');
+        quality.classList.add('is-current');
+      }
+      for (const [name, canvas] of [['comment', 'js-comment_canvas'], ['gift', 'js-gift_canvas']]) {
+        if (!event.target.closest(`.js-${name}MoveBtn`)) continue;
+        const on = document.querySelector(`.js-${name}MoveBtn_on`);
+        const enabled = on.style.display !== 'none';
+        on.style.display = enabled ? 'none' : '';
+        document.querySelector(`.js-${name}MoveBtn_off`).style.display = enabled ? '' : 'none';
+        document.getElementById(canvas).style.display = enabled ? 'none' : '';
+      }
+    });
+    document.addEventListener('mousedown', event => {
+      const slider = event.target.closest('.js-slider');
+      if (!slider) return;
+      const bounds = slider.querySelector('.js-slider_bg').getBoundingClientRect();
+      document.addEventListener('mouseup', release => {
+        nativePlayerActions.latency = Math.round(Math.min(1, Math.max(0, (release.clientX - bounds.left) / bounds.width)) * 2);
+        slider.querySelector('.js-slider_value').textContent = String(nativePlayerActions.latency);
+      }, { once: true });
+    });
+    document.getElementById('native-setting').addEventListener('click', () => {
+      if (document.getElementById('native-settings')) return;
+      document.body.append(document.getElementById('native-settings-template').content.cloneNode(true));
+      document.getElementById('native-close').addEventListener('click', () => document.getElementById('native-settings').remove());
+    });
+  </script>
+</body>
+</html>

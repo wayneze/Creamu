@@ -115,6 +115,7 @@ function createHarness() {
       });
     },
     isScoutMobileListViewport: () => false,
+    refreshScoutWorkbenchContext() {},
     getScoutDetailContentSignature() {
       counts.detailSignatures += 1;
       return state.detailSignature;

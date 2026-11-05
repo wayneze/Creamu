@@ -46,7 +46,7 @@ console.log('  OK  settings refresh only the active workbench page');
   '.scout-search-condition {',
   '.scout-search-assessment-site {',
   '.scout-search-assessment-metrics {',
-  '.scout-search-savebar,',
+  '.scout-search-savebar {',
   '.scout-wb-add-form {',
   '.scout-lexicon-edit {',
   '.scout-publisher-name.is-loved {',

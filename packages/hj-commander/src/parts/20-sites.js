@@ -1,9 +1,13 @@
 // 20-sites.js
 
-/** 只在海角站点上跑。域名含 haijiao，或地址里带海角路径。 */
 function isHjSite() {
-  const host = String((typeof location !== 'undefined' && location.hostname) || '').toLowerCase();
-  const href = String((typeof location !== 'undefined' && location.href) || '').toLowerCase();
-  if (host.includes('haijiao')) return true;
-  return /haijiao/.test(href);
+  const host = String(location.hostname || '').toLowerCase();
+  return /(^|\.)haijiao[^.]*\.com$/.test(host);
 }
+
+function currentHjPostId(href = location.href) {
+  const match = String(href || '').match(/(?:[?&#](?:pid|topicId)=|\/(?:post|topic)\/)(\d+)/i);
+  return match ? match[1] : '';
+}
+
+function isHjPostDetail() { return !!currentHjPostId(); }

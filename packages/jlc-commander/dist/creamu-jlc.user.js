@@ -2,7 +2,7 @@
 // @name         Creamu · JavLibrary
 // @name:zh-CN   Creamu · JavLibrary
 // @namespace    https://github.com/wayneze/Creamu
-// @version      3.9.6
+// @version      3.9.7
 // @description  Creamu：统一浅色页面与影片详情；随时呼出的对照控制台；追更 / Emby / WebDAV
 // @author       wayneze
 // @include      *javbus.com/*
@@ -10642,8 +10642,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         ['page', 'p', 'offset'].forEach(key => parsed.searchParams.delete(key));
         if (/javlibrary\./i.test(String(parsed.hostname || '')) && /\/vl_searchby(?:title|combo)\.php$/i.test(String(parsed.pathname || '').toLowerCase())) {
             const keyword = compactText(parsed.searchParams.get('keyword') || parsed.searchParams.get('q') || parsed.searchParams.get('search') || '');
-            const lowerPath = String(parsed.pathname || '').toLowerCase();
-            if (/\/vl_searchbycombo\.php$/i.test(lowerPath) || keyword) {
+            if (keyword) {
                 parsed.searchParams.delete('searchid');
             }
         }
@@ -10651,6 +10650,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             parsed.pathname = parsed.pathname.replace(/\/\d+\/?$/, '');
         }
         parsed.pathname = parsed.pathname.replace(/\/{2,}/g, '/');
+        parsed.searchParams.sort();
         return parsed.toString().replace(/\/$/, '');
     }
 
@@ -10667,8 +10667,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         let text = compactText(decodeTrackingSegment(value || ''));
         if (!text) return '';
         text = text
-            .replace(/^(?:search\s*result(?:s)?(?:\s*of)?|search|results?\s*for|搜索结果|搜尋結果|标题搜索|標題搜索|title\s*search|组合搜索|組合搜索|combo\s*search)[:：\s-]*/i, '')
-            .replace(/^["'“”‘’【】\[\]『』]+|["'“”‘’【】\[\]『』]+$/g, '')
+            .replace(/^(?:(?:标题|標題|组合|組合)搜[索尋寻](?:[结結]果)?|(?:title|combo)\s*search(?:\s*results?)?|search\s*results?(?:\s*(?:of|for))?|results?\s*for|搜索结果|搜尋結果|search)[:：·\s-]*/i, '')
+            .replace(/^["'“”‘’【】\[\]「」『』]+|["'“”‘’【】\[\]「」『』]+$/g, '')
             .trim();
         return text;
     }
@@ -10744,6 +10744,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         pushCandidate(parsed?.searchParams?.get('keyword'));
         pushCandidate(parsed?.searchParams?.get('q'));
         pushCandidate(parsed?.searchParams?.get('search'));
+        // 结果标题属于当前搜索；顶部的通用搜索框可能仍是另一个查询。
+        if (isJavLibraryResolvableSearchUrl(parsed?.href || '')) pushCandidate(heading);
         [
             'input[name="keyword"]',
             'input[name="q"]',
@@ -10796,6 +10798,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const lowerPath = String(target.pathname || '').toLowerCase();
         ['page', 'p', 'offset'].forEach(key => target.searchParams.delete(key));
         if (lowerSite === 'javlibrary') {
+            if (/\/vl_searchby(?:title|combo)\.php$/i.test(lowerPath)) {
+                const query = pickTrackingSearchQueryCandidate([
+                    descriptor.raw_query, descriptor.query_text, target.searchParams.get('keyword')
+                ]);
+                if (query) target.searchParams.set('keyword', query);
+            }
             if (/\/vl_searchbycombo\.php$/i.test(lowerPath)) {
                 const pageCandidate = descriptor?.page_url || descriptor?.pageUrl || descriptor?.href || '';
                 if (!compactText(target.searchParams.get('searchid') || '') && pageCandidate) {
@@ -12266,7 +12274,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             || ''
         );
         const cover = extractCoverUrlFromNode(node, location.href);
-        return { avid, title, cover, node };
+        return {
+            avid, title, cover, node,
+            page_hint: Number(node.dataset.jlcSourcePage || 0) || getCurrentListPageHint(),
+            is_latest_page: node.dataset.jlcLatestPage === 'true'
+        };
     }
 
     function getTrackingItemNodesFromRoot(root = document) {
@@ -12588,9 +12600,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             pageTitleBare
         ) || getSiteLabel(site);
         const resolvedQueryText = pickClean(queryText);
-        const resolvedRawQuery = groupType === 'keyword'
-            ? pickClean(extractTrackingSearchKeyword(doc, parsed, heading), resolvedQueryText)
-            : '';
+        const resolvedRawQuery = groupType === 'keyword' ? resolvedQueryText : '';
         return {
             page_type: pageType,
             group_type: groupType,
@@ -12602,13 +12612,21 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     }
 
     function buildTrackingSignature(context) {
-        const seedUrl = context?.open_url || context?.pageUrl || location.href;
+        const seedUrl = context?.open_url || context?.pageUrl || context?.page_url || location.href;
         const parsed = parseTrackingUrl(seedUrl);
-        let identity = compactText(context?.raw_query || context?.query_text || '');
-        if (!identity && /javlibrary\./i.test(String(parsed?.hostname || '')) && /\/vl_searchby(?:title|combo)\.php$/i.test(String(parsed?.pathname || '').toLowerCase())) {
-            const searchId = compactText(parsed?.searchParams?.get('searchid') || '');
-            if (searchId) identity = 'searchid:' + searchId;
+        if (isJavLibraryResolvableSearchUrl(seedUrl)) {
+            const query = getTrackingSearchQuery(context);
+            // searchid 是临时结果集；有原条件时只由完整条件决定身份。
+            if (query) {
+                const entries = /combo\.php$/i.test(parsed.pathname) ? parseJavLibraryComboKeyword(query) : [];
+                const identity = entries.length && entries.length === query.replace(/^\|+|\|+$/g, '').split('||').length
+                    ? entries.map(entry => [entry.fieldAlias, entry.value]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+                    : query;
+                return JSON.stringify(['javlibrary', parsed.pathname.toLowerCase(), identity]);
+            }
+            return JSON.stringify(['javlibrary', buildTrackingCanonicalUrl(seedUrl)]);
         }
+        const identity = compactText(context?.raw_query || context?.query_text || '');
         const parts = [
             String(context?.site || '').toLowerCase(),
             String(context?.page_type || '').toLowerCase(),
@@ -12642,9 +12660,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             raw_query: descriptor.raw_query,
             title: descriptor.title,
             firstItem,
+            is_latest_page: firstItem?.is_latest_page === true,
+            top_page_hint: firstItem?.page_hint || pageHint,
             itemNodes,
             page_hint: pageHint,
-            page_size_hint: itemNodes.length || 0,
+            page_size_hint: Math.max(0, ...itemNodes.map(node => Number(node.dataset.jlcSourcePageSize || 0))),
             search_mode: searchMode
         };
         context.query_signature = buildTrackingSignature(context);
@@ -12922,6 +12942,24 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
 
     async function getTrackingRecordBySignature(signature, openUrl = '', preloadedRows) {
         const list = await getTrackingSearches(preloadedRows);
+        if (isJavLibraryResolvableSearchUrl(openUrl)) {
+            // 已存记录也用同一入口重新计算，避免旧签名丢失中文或混入临时 searchid。
+            const matches = list.filter(item => buildTrackingSignature(item) === signature);
+            if (matches.length) {
+                matches.sort((a, b) => (Date.parse(b.last_seen_at || 0) || 0) - (Date.parse(a.last_seen_at || 0) || 0));
+                return { ...matches[0] };
+            }
+            const parsed = parseTrackingUrl(openUrl);
+            const searchId = parsed?.searchParams.get('searchid');
+            const query = extractTrackingSearchQueryFromUrl(openUrl);
+            const sameSession = searchId && list.find(item => {
+                const saved = parseTrackingUrl(item.open_url || item.page_url || '');
+                return saved?.origin === parsed.origin && saved?.pathname === parsed.pathname
+                    && saved.searchParams.get('searchid') === searchId
+                    && (!query || !getTrackingSearchQuery(item));
+            });
+            return sameSession ? { ...sameSession } : null;
+        }
         const canonical = buildTrackingCanonicalUrl(openUrl || '');
         const record = list.find(item => item.query_signature === signature)
             || list.find(record => buildTrackingCanonicalUrl(record.open_url || '') === canonical)
@@ -13013,18 +13051,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             record.custom_label = compactText(options.customLabel || '');
         }
 
-        const shouldAdoptContextTop = (() => {
-            if (!firstItem?.avid || options.checkTop === false) return false;
-            if (!existing || !record.top_avid) return true;
-            if (searchMode === 'forward') return pageHint <= 1;
-            if (searchMode === 'backfill') {
-                const knownTopPage = Number(record.top_page_hint || 0) || 0;
-                return knownTopPage > 0
-                    && knownTopPage === pageHint
-                    && normalizeCode(record.top_avid || '') === normalizeCode(firstItem.avid || '');
-            }
-            return pageHint <= 1;
-        })();
+        const shouldAdoptContextTop = !!firstItem?.avid
+            && options.checkTop !== false && context.is_latest_page === true;
 
         const pageBaseUrl = context.pageUrl || context.open_url || location.href;
         const pageAvatar = extractTrackingAvatarFromDocument(document, context.group_type || record.group_type, pageBaseUrl);
@@ -13032,7 +13060,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         if (shouldAdoptContextTop) {
             record.top_avid = firstItem.avid;
             record.top_title = firstItem.title || record.top_title || '';
-            record.top_page_hint = pageHint;
+            record.top_page_hint = context.top_page_hint || pageHint;
             applyTrackingCoverFields(record, firstItem, { baseUrl: pageBaseUrl, avatar: pageAvatar });
             if (options.updateCheck !== false) {
                 record.top_checked_at = now;
@@ -13066,10 +13094,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             record.last_seen_avid = firstItem.avid;
             record.last_seen_title = firstItem.title || '';
             record.last_seen_at = now;
-            record.last_seen_page_hint = pageHint;
+            record.last_seen_page_hint = firstItem.page_hint || pageHint;
             record.last_found_at = now;
             applyTrackingUnreadEstimate(record, 0);
-            record.check_status = 'latest';
+            record.check_status = deriveTrackingStatusFromSnapshot(record);
             record.check_note = '初始断点已设为当前首项';
         }
 
@@ -13084,9 +13112,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 const totalUnread = estimateTrackingUnreadTotal(record, {
                     localUnread: explicitUnreadEstimate,
                     localFound: true,
-                    localPage: record.last_seen_page_hint,
+                    localPage: context.top_page_hint,
                     topPage: record.top_page_hint,
-                    pageSize: record.page_size_hint
+                    pageSize: record.page_size_hint,
+                    spanCovered: options.explicitLastSeen.span_covered === true
                 });
                 applyTrackingUnreadEstimate(record, totalUnread >= 0 ? totalUnread : explicitUnreadEstimate);
             }
@@ -13843,6 +13872,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             }
         });
         if (foundIndex >= 0) {
+            record.last_seen_page_hint = getTrackingItemInfoFromNode(items[foundIndex]).page_hint;
             trackingPageState.lastSeenFound = true;
             trackingPageState.breakpointMissHint = '';
             trackingPageState.breakpointCursor = { prev: '', next: '' };
@@ -13861,7 +13891,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 const totalUnread = estimateTrackingUnreadTotal(record, {
                     localUnread,
                     localFound: true,
-                    localPage: currentPageHint,
+                    localPage: currentContext?.top_page_hint,
                     topPage: record.top_page_hint,
                     pageSize: record.page_size_hint
                 });
@@ -13984,7 +14014,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                     + (searching ? ' disabled' : '')
                     + ' title="' + escapeHtml(continueTitle) + '">' + escapeHtml(continueLabel) + '</button>'
                 : '')
-            + '  <button type="button" class="primary" data-jlc-page-mark-read>设首页为断点</button>'
+            + '  <button type="button" class="primary" data-jlc-page-mark-read' + (record.top_avid ? '' : ' disabled') + '>将最新项设为断点</button>'
             + '  <button type="button" data-jlc-page-refresh>刷新本项</button>'
             + '  <button type="button" data-jlc-page-focus>在工作台中定位</button>'
             + '  <button type="button" data-jlc-page-edit-label>备注</button>'
@@ -13993,7 +14023,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         bar.querySelector('[data-jlc-page-mark-read]')?.addEventListener('click', async () => {
             await markTrackingRecordRead(record.id, 'top');
             renderTrackingUI();
-            showAlert('已把当前首项设为新断点！');
+            showAlert('已把最新项设为新断点！');
         });
         bar.querySelector('[data-jlc-page-continue-bp]')?.addEventListener('click', () => {
             if (trackingPageState.breakpointSearching) return;
@@ -14063,8 +14093,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             explicitLastSeen: {
                 avid: info.avid,
                 title: info.title,
-                page_hint: context.page_hint,
-                unread_estimate: unreadEstimate
+                page_hint: info.page_hint,
+                unread_estimate: unreadEstimate,
+                span_covered: context.is_latest_page
             }
         });
         trackingPageState.context = context;
@@ -14187,7 +14218,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                         break;
                     }
                     const doc = new DOMParser().parseFromString(response.responseText, 'text/html');
-                    let elems = GridPanel.parseItems($(doc).find(currentObj.itemSelector));
+                    let elems = GridPanel.parseItems($(doc).find(currentObj.itemSelector), response.finalUrl || nextUrl, doc);
                     if (currentWeb !== 'javdb' && location.pathname.includes('/star/') && elems) {
                         elems = elems.slice(1);
                     }
@@ -16623,7 +16654,12 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             this.$dom.append($elems);
             lazyLoad.update(this.$dom);
         }
-        static parseItems(elems){
+        static parseItems(elems, pageUrl = location.href, pageDoc = document){
+            const pageHint = getCurrentListPageHint(pageUrl, pageDoc);
+            const mode = detectTrackingSearchMode(currentWeb, parseTrackingUrl(pageUrl));
+            const isLatestPage = mode === 'backfill'
+                ? getTrackingLastPageInfo(pageDoc, pageUrl).page === pageHint && !getTrackingNextPageUrl(pageDoc, currentWeb, pageUrl)
+                : pageHint === 1;
             let elemsHtml = "";
             let {imgStyle,getAvItem,toolBar,copyBtn,fullTitle,magnet,magnetTip,downloadTip,pictureTip} = {
                 imgStyle: Status.isHalfImg() ? halfImgCSS : fullImgCSS,
@@ -16687,6 +16723,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 elemsHtml = elemsHtml + html;
             }
             let $elems = $(elemsHtml);
+            $elems.attr({
+                'data-jlc-source-page': pageHint,
+                'data-jlc-source-page-size': elems.length,
+                'data-jlc-latest-page': String(isLatestPage)
+            });
             $elems.find('.jlc-card-more').on('keydown', function (event) {
                 if (event.key !== 'Escape' || !this.open) return;
                 event.preventDefault();
@@ -16771,7 +16812,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
                 if (this.destroyed) return false;
 
                 let $body = $(new DOMParser().parseFromString(responseText, 'text/html'));
-                let elems = GridPanel.parseItems($body.find(currentObj.itemSelector));
+                let elems = GridPanel.parseItems($body.find(currentObj.itemSelector), response.url || new URL(url, location.href).href, $body.get(0));
                 if (currentWeb != "javdb" && location.pathname.includes('/star/') && elems) {
                     elems=elems.slice(1);
                 }

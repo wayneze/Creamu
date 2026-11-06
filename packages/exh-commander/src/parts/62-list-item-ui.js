@@ -69,8 +69,8 @@
       hit.kind === 'exact'
         ? '上次看到这里'
         : hit.kind === 'older'
-          ? '断点已下架，停在后面这部'
-          : '断点已下架，停在前面这部';
+          ? '本页未找到原断点，停在后面这部'
+          : '本页未找到原断点，停在前面这部';
     // 网格用红框和封面标记定位，不插入整行分隔而打断紧凑排列。
     const marker = hit.el.querySelector('.exc-last-seen-mark');
     if (marker) marker.title = label;

@@ -207,7 +207,11 @@
             || ''
         );
         const cover = extractCoverUrlFromNode(node, location.href);
-        return { avid, title, cover, node };
+        return {
+            avid, title, cover, node,
+            page_hint: Number(node.dataset.jlcSourcePage || 0) || getCurrentListPageHint(),
+            is_latest_page: node.dataset.jlcLatestPage === 'true'
+        };
     }
 
     function getTrackingItemNodesFromRoot(root = document) {
@@ -529,9 +533,7 @@
             pageTitleBare
         ) || getSiteLabel(site);
         const resolvedQueryText = pickClean(queryText);
-        const resolvedRawQuery = groupType === 'keyword'
-            ? pickClean(extractTrackingSearchKeyword(doc, parsed, heading), resolvedQueryText)
-            : '';
+        const resolvedRawQuery = groupType === 'keyword' ? resolvedQueryText : '';
         return {
             page_type: pageType,
             group_type: groupType,
@@ -543,13 +545,21 @@
     }
 
     function buildTrackingSignature(context) {
-        const seedUrl = context?.open_url || context?.pageUrl || location.href;
+        const seedUrl = context?.open_url || context?.pageUrl || context?.page_url || location.href;
         const parsed = parseTrackingUrl(seedUrl);
-        let identity = compactText(context?.raw_query || context?.query_text || '');
-        if (!identity && /javlibrary\./i.test(String(parsed?.hostname || '')) && /\/vl_searchby(?:title|combo)\.php$/i.test(String(parsed?.pathname || '').toLowerCase())) {
-            const searchId = compactText(parsed?.searchParams?.get('searchid') || '');
-            if (searchId) identity = 'searchid:' + searchId;
+        if (isJavLibraryResolvableSearchUrl(seedUrl)) {
+            const query = getTrackingSearchQuery(context);
+            // searchid 是临时结果集；有原条件时只由完整条件决定身份。
+            if (query) {
+                const entries = /combo\.php$/i.test(parsed.pathname) ? parseJavLibraryComboKeyword(query) : [];
+                const identity = entries.length && entries.length === query.replace(/^\|+|\|+$/g, '').split('||').length
+                    ? entries.map(entry => [entry.fieldAlias, entry.value]).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+                    : query;
+                return JSON.stringify(['javlibrary', parsed.pathname.toLowerCase(), identity]);
+            }
+            return JSON.stringify(['javlibrary', buildTrackingCanonicalUrl(seedUrl)]);
         }
+        const identity = compactText(context?.raw_query || context?.query_text || '');
         const parts = [
             String(context?.site || '').toLowerCase(),
             String(context?.page_type || '').toLowerCase(),
@@ -583,9 +593,11 @@
             raw_query: descriptor.raw_query,
             title: descriptor.title,
             firstItem,
+            is_latest_page: firstItem?.is_latest_page === true,
+            top_page_hint: firstItem?.page_hint || pageHint,
             itemNodes,
             page_hint: pageHint,
-            page_size_hint: itemNodes.length || 0,
+            page_size_hint: Math.max(0, ...itemNodes.map(node => Number(node.dataset.jlcSourcePageSize || 0))),
             search_mode: searchMode
         };
         context.query_signature = buildTrackingSignature(context);

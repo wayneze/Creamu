@@ -302,6 +302,7 @@
               ? await findTrackingForContext(ctx)
               : await getTrackingBySignature(ctx.query_signature);
           if (!latest) return;
+          const wasMissing = latest.breakpoint_missing === 1;
           latest.last_page = pageIdx;
           latest.last_browsed_at = nowMs();
           if (latest.open_url && typeof canonicalizeTrackingOpenUrl === 'function') {
@@ -349,32 +350,21 @@
             // 深页浏览：只记位置；未读禁止用当页局部覆盖（next= 会把 +200 打成 +23）
             // 已知 page=N 时才允许用页偏移抬高下限
             try {
-              if (pageState.known && pageIdx >= 0) {
-                const gids =
-                  typeof extractOrderedGidsFromDocument === 'function'
-                    ? extractOrderedGidsFromDocument(document)
-                    : [];
-                if (typeof applyTrackingUnreadFromGids === 'function') {
-                  applyTrackingUnreadFromGids(latest, gids, latest.top_gid || '', {
-                    pageIndex: pageIdx,
-                    isFirst: false,
-                    deepUnknown: false,
-                    mode: 'browse',
-                  });
-                }
-              } else {
-                // 游标深页：最多维持 has_update，不改 unread_estimate
-                if (
-                  latest.top_gid &&
-                  latest.breakpoint_gid &&
-                  String(latest.top_gid) !== String(latest.breakpoint_gid)
-                ) {
-                  latest.has_update = 1;
-                }
+              const gids = extractOrderedGidsFromDocument(document);
+              if (typeof applyTrackingUnreadFromGids === 'function') {
+                applyTrackingUnreadFromGids(latest, gids, latest.top_gid || '', {
+                  pageIndex: pageIdx,
+                  isFirst: false,
+                  deepUnknown: !pageState.known,
+                  mode: 'browse',
+                });
               }
             } catch (_) { /* ignore */ }
           }
           await saveTrackingRecord(latest);
+          if (wasMissing && latest.breakpoint_missing !== 1 && window.__excRefreshWorkbench) {
+            window.__excRefreshWorkbench();
+          }
         } catch (_) { /* ignore */ }
       }, 800);
     } else {

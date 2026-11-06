@@ -65,6 +65,9 @@
       if (!(Number(merged.size_bytes) > 0) && Number(prev.size_bytes) > 0) {
         merged.size_bytes = prev.size_bytes;
       }
+      if (!(Number(merged.posted_at) > 0) && Number(prev.posted_at) > 0) {
+        merged.posted_at = prev.posted_at;
+      }
       merged.tags_fetched_at = Math.max(
         Number(rec.tags_fetched_at) || 0,
         Number(prev && prev.tags_fetched_at) || 0

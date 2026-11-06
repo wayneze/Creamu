@@ -303,6 +303,8 @@
       // 仅页码，不改作品断点
     } else if (opts.gid) {
       rec.breakpoint_gid = String(opts.gid);
+      rec.breakpoint_missing = 0;
+      rec.breakpoint_anchor_kind = 'exact';
       rec.breakpoint_token = compactText(opts.token || '');
       rec.breakpoint_title = compactText(opts.title || '').slice(0, 120);
       let posted = Number(opts.posted_at) || 0;
@@ -896,8 +898,8 @@
       marked.scrollIntoView(true);
     }
     if (hit.kind === 'exact') showToast('已定位到断点作品');
-    else if (hit.kind === 'older') showToast('断点作品已下架，已停在它后面那部');
-    else showToast('断点作品已下架，已停在它前面那部');
+    else if (hit.kind === 'older') showToast('本页未找到原断点，已停在它后面那部');
+    else showToast('本页未找到原断点，已停在它前面那部');
     const later =
       (typeof window !== 'undefined' && window.setTimeout) ||
       (typeof setTimeout === 'function' ? setTimeout : null);

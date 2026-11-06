@@ -150,4 +150,57 @@ const resumedTask = schedulerContext.pickNextTrackingRefreshRecord(
 assert.equal(resumedTask.index, 0);
 assert.equal(resumedTask.record.id, 'limited');
 
-console.log('JLC tracking state module tests passed');
+// Existing saved searches must resolve by their full conditions, even if their
+// old signature dropped Chinese characters or their searchid has expired.
+const identityContext = {
+  URL,
+  location: { href: 'https://www.javlibrary.com/cn/' },
+  compactText: normalizationContext.compactText,
+  normalizeCode: normalizationContext.normalizeCode,
+  TRACKING_STORE: 'tracking_searches',
+};
+vm.createContext(identityContext);
+vm.runInContext(
+  fs.readFileSync(path.join(partsRoot, '40-tracking-search.js'), 'utf8')
+    + fs.readFileSync(path.join(partsRoot, '42-javlibrary-search-runtime.js'), 'utf8')
+    + pageContextSource + stateSource,
+  identityContext
+);
+const searchRecord = (kind, query, id = '1') => ({
+  id,
+  site: 'javlibrary',
+  page_type: 'search',
+  group_type: 'keyword',
+  open_url: `https://www.javlibrary.com/cn/vl_searchby${kind}.php?searchid=${id}`,
+  raw_query: query,
+  query_signature: 'old-colliding-signature',
+});
+const titleRecord = searchRecord('title', '标题搜寻结果: "親子');
+const titleContext = searchRecord('title', '親子', '2');
+assert.equal(
+  identityContext.buildTrackingSignature(titleRecord),
+  identityContext.buildTrackingSignature(titleContext)
+);
+const comboRecord = searchRecord('combo', '|类别=母亲||类别=妹妹|', '3');
+const otherCombo = searchRecord('combo', '|类别=强奸||类别=乱伦|', '4');
+const comboContext = searchRecord('combo', '|类别=妹妹||类别=母亲|', '5');
+assert.notEqual(identityContext.buildTrackingSignature(comboRecord), identityContext.buildTrackingSignature(otherCombo));
+assert.equal(identityContext.buildTrackingSignature(comboRecord), identityContext.buildTrackingSignature(comboContext));
+for (const [context, expected] of [[titleContext, titleRecord], [comboContext, comboRecord]]) {
+  const found = await identityContext.getTrackingRecordBySignature(
+    identityContext.buildTrackingSignature(context), context.open_url,
+    [otherCombo, titleRecord, comboRecord]
+  );
+  assert.equal(found.id, expected.id);
+}
+assert.notEqual(
+  identityContext.buildTrackingSignature(searchRecord('combo', '', '6')),
+  identityContext.buildTrackingSignature(searchRecord('combo', '', '7')),
+  'unidentified searches must not collapse to the same URL'
+);
+const recentDuplicate = { ...titleContext, id: 'recent', last_seen_at: '2026-11-06T08:00:00Z' };
+assert.equal((await identityContext.getTrackingRecordBySignature(
+  identityContext.buildTrackingSignature(titleContext), titleContext.open_url,
+  [titleRecord, recentDuplicate]
+)).id, 'recent', 'existing duplicates should continue the most recently saved breakpoint');
+console.log('JLC tracking state and saved search identity tests passed');

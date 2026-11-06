@@ -196,10 +196,7 @@
         } catch (_) { /* ignore */ }
         let posted_at = 0;
         try {
-          posted_at = extractListItemPostedAtInDoc(root, gt.gid, doc);
-          if (!posted_at && typeof extractListItemPostedAt === 'function') {
-            posted_at = extractListItemPostedAt(root, gt.gid);
-          }
+          posted_at = extractListItemPostedAt(root, gt.gid, doc);
         } catch (_) { /* ignore */ }
         const ps = extractListItemPagesSize(root);
         // 列表上语言/码级先从标题猜；gdata 会再补

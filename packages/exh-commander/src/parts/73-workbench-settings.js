@@ -526,6 +526,9 @@
           applyCreamSiteTheme();
           applyGalleryThumbScale();
           if (tab === 'sync') renderSettingsSections('sync');
+          if (tab === 'pref') {
+            void enhanceListPage({ items: [], reapplyFold: true });
+          }
         }
       };
     }

@@ -191,6 +191,9 @@
               } catch (_) {}
             }
           });
+          if (updated.length && config.list_fold_works) {
+            await enhanceListPage({ items: [], reapplyFold: true });
+          }
         } catch (err) {
           console.warn('[ExC] fillListTagsFromGdata chunk error', err);
         }

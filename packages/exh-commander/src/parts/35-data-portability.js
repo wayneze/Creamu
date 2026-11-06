@@ -62,6 +62,10 @@
     const top = compactText(out.top_gid || '');
     const bp = compactText(out.breakpoint_gid || '');
     const caughtUp = !!(top && bp && top === bp);
+    // 定位结果属于具体断点，不能从另一条旧断点继承“未找到”。
+    const bpSide = remoteBpAt > localBpAt ? remote : localBpAt > remoteBpAt ? local : newer;
+    out.breakpoint_missing = caughtUp ? 0 : (bpSide.breakpoint_missing ? 1 : 0);
+    out.breakpoint_anchor_kind = caughtUp ? 'exact' : (bpSide.breakpoint_anchor_kind || '');
     if (caughtUp) {
       out.has_update = 0;
       out.unread_estimate = 0;
@@ -69,7 +73,6 @@
       out.unread_estimate_source = 'home_caught_up';
     } else {
       out.has_update = local.has_update || remote.has_update ? 1 : out.has_update || 0;
-      const bpSide = remoteBpAt > localBpAt ? remote : localBpAt > remoteBpAt ? local : newer;
       if (bpSide && bpSide.unread_estimate != null) {
         out.unread_estimate = Math.max(0, Math.floor(Number(bpSide.unread_estimate) || 0));
         out.unread_estimate_capped = bpSide.unread_estimate_capped ? 1 : 0;

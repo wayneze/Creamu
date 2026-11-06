@@ -270,6 +270,24 @@
 
     async function getTrackingRecordBySignature(signature, openUrl = '', preloadedRows) {
         const list = await getTrackingSearches(preloadedRows);
+        if (isJavLibraryResolvableSearchUrl(openUrl)) {
+            // 已存记录也用同一入口重新计算，避免旧签名丢失中文或混入临时 searchid。
+            const matches = list.filter(item => buildTrackingSignature(item) === signature);
+            if (matches.length) {
+                matches.sort((a, b) => (Date.parse(b.last_seen_at || 0) || 0) - (Date.parse(a.last_seen_at || 0) || 0));
+                return { ...matches[0] };
+            }
+            const parsed = parseTrackingUrl(openUrl);
+            const searchId = parsed?.searchParams.get('searchid');
+            const query = extractTrackingSearchQueryFromUrl(openUrl);
+            const sameSession = searchId && list.find(item => {
+                const saved = parseTrackingUrl(item.open_url || item.page_url || '');
+                return saved?.origin === parsed.origin && saved?.pathname === parsed.pathname
+                    && saved.searchParams.get('searchid') === searchId
+                    && (!query || !getTrackingSearchQuery(item));
+            });
+            return sameSession ? { ...sameSession } : null;
+        }
         const canonical = buildTrackingCanonicalUrl(openUrl || '');
         const record = list.find(item => item.query_signature === signature)
             || list.find(record => buildTrackingCanonicalUrl(record.open_url || '') === canonical)
@@ -361,18 +379,8 @@
             record.custom_label = compactText(options.customLabel || '');
         }
 
-        const shouldAdoptContextTop = (() => {
-            if (!firstItem?.avid || options.checkTop === false) return false;
-            if (!existing || !record.top_avid) return true;
-            if (searchMode === 'forward') return pageHint <= 1;
-            if (searchMode === 'backfill') {
-                const knownTopPage = Number(record.top_page_hint || 0) || 0;
-                return knownTopPage > 0
-                    && knownTopPage === pageHint
-                    && normalizeCode(record.top_avid || '') === normalizeCode(firstItem.avid || '');
-            }
-            return pageHint <= 1;
-        })();
+        const shouldAdoptContextTop = !!firstItem?.avid
+            && options.checkTop !== false && context.is_latest_page === true;
 
         const pageBaseUrl = context.pageUrl || context.open_url || location.href;
         const pageAvatar = extractTrackingAvatarFromDocument(document, context.group_type || record.group_type, pageBaseUrl);
@@ -380,7 +388,7 @@
         if (shouldAdoptContextTop) {
             record.top_avid = firstItem.avid;
             record.top_title = firstItem.title || record.top_title || '';
-            record.top_page_hint = pageHint;
+            record.top_page_hint = context.top_page_hint || pageHint;
             applyTrackingCoverFields(record, firstItem, { baseUrl: pageBaseUrl, avatar: pageAvatar });
             if (options.updateCheck !== false) {
                 record.top_checked_at = now;
@@ -414,10 +422,10 @@
             record.last_seen_avid = firstItem.avid;
             record.last_seen_title = firstItem.title || '';
             record.last_seen_at = now;
-            record.last_seen_page_hint = pageHint;
+            record.last_seen_page_hint = firstItem.page_hint || pageHint;
             record.last_found_at = now;
             applyTrackingUnreadEstimate(record, 0);
-            record.check_status = 'latest';
+            record.check_status = deriveTrackingStatusFromSnapshot(record);
             record.check_note = '初始断点已设为当前首项';
         }
 
@@ -432,9 +440,10 @@
                 const totalUnread = estimateTrackingUnreadTotal(record, {
                     localUnread: explicitUnreadEstimate,
                     localFound: true,
-                    localPage: record.last_seen_page_hint,
+                    localPage: context.top_page_hint,
                     topPage: record.top_page_hint,
-                    pageSize: record.page_size_hint
+                    pageSize: record.page_size_hint,
+                    spanCovered: options.explicitLastSeen.span_covered === true
                 });
                 applyTrackingUnreadEstimate(record, totalUnread >= 0 ? totalUnread : explicitUnreadEstimate);
             }

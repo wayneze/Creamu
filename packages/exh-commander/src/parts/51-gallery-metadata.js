@@ -13,16 +13,16 @@
    * 从列表卡片取发布时间（ms）。
    * 优先 #posted_{gid}（全页），再卡片内文本。极简模式可能无日期 → 上层用 gdata 补。
    */
-  function extractListItemPostedAt(root, gid) {
+  function extractListItemPostedAt(root, gid, doc = document) {
     const g = compactText(gid || '');
     const tryNode = (node) => {
       if (!node) return 0;
       const bits = [
-        node.textContent,
-        node.innerText,
+        node.getAttribute && node.getAttribute('datetime'),
         node.getAttribute && node.getAttribute('title'),
         node.getAttribute && node.getAttribute('data-title'),
-        node.outerHTML,
+        node.textContent,
+        node.innerText,
       ];
       for (let i = 0; i < bits.length; i++) {
         const t = parsePostedToMs(bits[i]);
@@ -31,15 +31,15 @@
       return 0;
     };
     // 全页 id 最准（扩展/缩略图列表）
-    if (g && typeof document !== 'undefined') {
+    if (g && doc) {
       try {
-        const byId = document.getElementById('posted_' + g);
+        const byId = doc.getElementById('posted_' + g);
         const t = tryNode(byId);
         if (t) return t;
         // 有的皮肤 id 大小写或嵌套
         const alt =
-          document.querySelector('[id="posted_' + g + '"]') ||
-          document.querySelector('[id="Posted_' + g + '"]');
+          doc.querySelector('[id="posted_' + g + '"]') ||
+          doc.querySelector('[id="Posted_' + g + '"]');
         const t2 = tryNode(alt);
         if (t2) return t2;
       } catch (_) { /* ignore */ }
@@ -54,7 +54,7 @@
         const t = tryNode(postedEls[i]);
         if (t) return t;
       }
-      const dateEl = root.querySelector('.glnew, .gltime, .gl4t, .gl2c, td.gl2c');
+      const dateEl = root.querySelector('.glnew, .gltime, .gl4t, .gl2c, td.gl2c, .gl3e, .gl4e');
       if (dateEl) {
         const t = tryNode(dateEl);
         if (t) return t;
@@ -64,9 +64,9 @@
       if (m) return parsePostedToMs(m[1] + (m[2] ? ' ' + m[2] : ''));
     }
     // 无 root 时仍可用 gid 扫全页邻近
-    if (g && typeof document !== 'undefined') {
+    if (g && doc) {
       try {
-        const link = document.querySelector('a[href*="/g/' + g + '/"]');
+        const link = doc.querySelector('a[href*="/g/' + g + '/"]');
         if (link) {
           const card =
             link.closest('tr, .gl1t, .gl1e, .gl2t, .gl3t, .exc-gl-item') ||
@@ -391,48 +391,6 @@
     return result;
   }
 
-  /** 从离线 doc 取 posted（不用全局 document） */
-  function extractListItemPostedAtInDoc(root, gid, doc) {
-    const g = compactText(gid || '');
-    const tryNode = (node) => {
-      if (!node) return 0;
-      const bits = [
-        node.textContent,
-        node.getAttribute && node.getAttribute('title'),
-        node.outerHTML,
-      ];
-      for (let i = 0; i < bits.length; i++) {
-        const t = parsePostedToMs(bits[i]);
-        if (t) return t;
-      }
-      return 0;
-    };
-    if (g && doc && doc.getElementById) {
-      const t = tryNode(doc.getElementById('posted_' + g));
-      if (t) return t;
-    }
-    if (root && root.querySelector) {
-      if (g) {
-        const t = tryNode(root.querySelector('#posted_' + g));
-        if (t) return t;
-      }
-      const postedEls = root.querySelectorAll('[id^="posted_"], [id^="Posted_"]');
-      for (let i = 0; i < postedEls.length; i++) {
-        const t = tryNode(postedEls[i]);
-        if (t) return t;
-      }
-      const dateEl = root.querySelector('.glnew, .gltime, .gl4t, .gl2c, td.gl2c, .gl3e, .gl4e');
-      if (dateEl) {
-        const t = tryNode(dateEl);
-        if (t) return t;
-      }
-      const blob = normalizePostedText(root.textContent || '').slice(0, 1200);
-      const m = blob.match(/(20\d{2}-\d{1,2}-\d{1,2})(?:\s+(\d{1,2}:\d{2}))?/);
-      if (m) return parsePostedToMs(m[1] + (m[2] ? ' ' + m[2] : ''));
-    }
-    return 0;
-  }
-
   /** 解析作品发布时间：DOM →（可选）gdata */
   async function resolveGalleryPostedMs(gid, token, root) {
     const g = compactText(gid || '');
@@ -455,11 +413,8 @@
     const g = compactText(gid || '');
     if (!g) return 0;
     try {
-      const byId = document.getElementById('posted_' + g);
-      if (byId) {
-        const t = parsePostedToMs(byId.textContent || '');
-        if (t) return t;
-      }
+      const posted = extractListItemPostedAt(null, g);
+      if (posted) return posted;
       const links = document.querySelectorAll('a[href*="/g/' + g + '/"]');
       for (let i = 0; i < links.length; i++) {
         const card =

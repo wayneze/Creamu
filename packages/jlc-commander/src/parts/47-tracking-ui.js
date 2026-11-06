@@ -140,6 +140,7 @@
             }
         });
         if (foundIndex >= 0) {
+            record.last_seen_page_hint = getTrackingItemInfoFromNode(items[foundIndex]).page_hint;
             trackingPageState.lastSeenFound = true;
             trackingPageState.breakpointMissHint = '';
             trackingPageState.breakpointCursor = { prev: '', next: '' };
@@ -158,7 +159,7 @@
                 const totalUnread = estimateTrackingUnreadTotal(record, {
                     localUnread,
                     localFound: true,
-                    localPage: currentPageHint,
+                    localPage: currentContext?.top_page_hint,
                     topPage: record.top_page_hint,
                     pageSize: record.page_size_hint
                 });
@@ -281,7 +282,7 @@
                     + (searching ? ' disabled' : '')
                     + ' title="' + escapeHtml(continueTitle) + '">' + escapeHtml(continueLabel) + '</button>'
                 : '')
-            + '  <button type="button" class="primary" data-jlc-page-mark-read>设首页为断点</button>'
+            + '  <button type="button" class="primary" data-jlc-page-mark-read' + (record.top_avid ? '' : ' disabled') + '>将最新项设为断点</button>'
             + '  <button type="button" data-jlc-page-refresh>刷新本项</button>'
             + '  <button type="button" data-jlc-page-focus>在工作台中定位</button>'
             + '  <button type="button" data-jlc-page-edit-label>备注</button>'
@@ -290,7 +291,7 @@
         bar.querySelector('[data-jlc-page-mark-read]')?.addEventListener('click', async () => {
             await markTrackingRecordRead(record.id, 'top');
             renderTrackingUI();
-            showAlert('已把当前首项设为新断点！');
+            showAlert('已把最新项设为新断点！');
         });
         bar.querySelector('[data-jlc-page-continue-bp]')?.addEventListener('click', () => {
             if (trackingPageState.breakpointSearching) return;
@@ -360,8 +361,9 @@
             explicitLastSeen: {
                 avid: info.avid,
                 title: info.title,
-                page_hint: context.page_hint,
-                unread_estimate: unreadEstimate
+                page_hint: info.page_hint,
+                unread_estimate: unreadEstimate,
+                span_covered: context.is_latest_page
             }
         });
         trackingPageState.context = context;
@@ -484,7 +486,7 @@
                         break;
                     }
                     const doc = new DOMParser().parseFromString(response.responseText, 'text/html');
-                    let elems = GridPanel.parseItems($(doc).find(currentObj.itemSelector));
+                    let elems = GridPanel.parseItems($(doc).find(currentObj.itemSelector), response.finalUrl || nextUrl, doc);
                     if (currentWeb !== 'javdb' && location.pathname.includes('/star/') && elems) {
                         elems = elems.slice(1);
                     }

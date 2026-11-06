@@ -436,6 +436,11 @@
     if (!rec) return rec;
     opts = opts || {};
     const bp = compactText(rec.breakpoint_gid || '');
+    // 列表直接命中可以推翻旧扫描的“未找到”，与页码是否可估算无关。
+    if (bp && Array.isArray(gids) && gids.some(gid => String(gid) === bp)) {
+      rec.breakpoint_missing = 0;
+      rec.breakpoint_anchor_kind = 'exact';
+    }
     const prevTop = compactText(opts.previousTop || rec.prev_top_gid || '');
     const topS = compactText(top || '');
     const pageLen = Array.isArray(gids) ? gids.length : 0;
@@ -715,7 +720,7 @@
           }
           rec.unread_estimate_source = scan.source || 'page_formula';
         } else {
-          // 深度扫满仍未见断点：列表检查本身成功，只是作品可能已下架
+          // 扫描范围内未定位；页数上限、过滤条件和请求中断都不能证明下架。
           rec.has_update = 1;
           rec.breakpoint_missing = 1;
           rec.unread_estimate = Math.max(

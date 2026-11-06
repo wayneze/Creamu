@@ -5,7 +5,9 @@ import { chromium } from 'playwright';
 import {
   PATHS,
   assertNoRuntimeErrors,
+  gmMockSource,
   openScriptPage,
+  stripUserscriptMeta,
   waitFab,
   waitWorkbenchClosed,
   waitWorkbenchOpen,
@@ -2244,6 +2246,106 @@ try {
   );
 
   await runCase(
+    'ExH folding: newest survives late metadata, refresh and preference changes',
+    {
+      host: 'e-hentai.org',
+      fixtureHtml: '<!doctype html><html><head><title>Fold fixture</title></head><body><table class="itg"><tbody>'
+        + '<tr><td class="glname"><a href="/g/710000/aaaaaaaaaa/"><div class="glink">[Group] Fold Example [Chinese] [Uncensored]</div></a>'
+        + '<div id="posted_710000">2025-01-01 12:00</div></td></tr>'
+        + '<tr><td class="glname"><a href="/g/710001/bbbbbbbbbb/"><div class="glink">[Group] Fold Example [Japanese]</div></a></td></tr>'
+        + '</tbody></table></body></html>',
+      scriptPath: PATHS.exhDist,
+      gmValues: { exh_commander_config_v1: { fold_primary_mode: 'newest', list_hover_preview: false } },
+      beforeInject: async page => page.evaluate(installExhStorageMetrics),
+      beforeScript: async page => {
+        await page.evaluate(() => {
+          window.__foldRequests = [];
+          window.__releaseFoldMetadata = [];
+          window.GM_xmlhttpRequest = options => {
+            if (!/\/api\.php(?:$|\?)/.test(options.url || '')) {
+              setTimeout(() => options.onload?.({ status: 200, responseText: '' }), 0);
+              return;
+            }
+            window.__foldRequests.push(options.url);
+            const payload = JSON.parse(options.data);
+            const gmetadata = payload.gidlist.map(([gid, token]) => ({
+              gid, token,
+              title: Number(gid) === 710000
+                ? '[Group] Fold Example [Chinese] [Uncensored]' : '[Group] Fold Example [Japanese]',
+              posted: String(Date.UTC(Number(gid) === 710000 ? 2025 : 2026, 0, 1, 12) / 1000),
+              tags: [Number(gid) === 710000 ? 'language:chinese' : 'language:japanese', 'female:sample'],
+              filecount: '100', filesize: '1000000', expunged: false,
+            }));
+            window.__releaseFoldMetadata.push(() => options.onload?.({
+              status: 200, responseText: JSON.stringify({ gmetadata }),
+            }));
+          };
+        });
+      },
+    },
+    async page => {
+      const oldCard = page.locator('.exc-gl-item[data-exc-gid="710000"]');
+      const newCard = page.locator('.exc-gl-item[data-exc-gid="710001"]');
+      await oldCard.locator('.exc-fold-tag').waitFor();
+      await page.waitForFunction(() => window.__releaseFoldMetadata.length > 0);
+      await page.evaluate(() => window.__releaseFoldMetadata.splice(0).forEach(release => release()));
+      await newCard.locator('.exc-fold-tag').waitFor();
+      assert.equal(await oldCard.isVisible(), false, 'newest must replace the old primary when its date arrives');
+      assert.equal(await newCard.isVisible(), true);
+      await newCard.locator('.exc-fold-tag').click();
+      assert.equal(await oldCard.isVisible(), true, 'older editions remain available through expansion');
+      await newCard.locator('.exc-fold-tag').click();
+
+      await page.evaluate(() => {
+        // Translation scripts abbreviate this year's dates just like the user's cards.
+        document.getElementById('posted_710000').textContent = '2025/6/4 12:32';
+        const newer = document.createElement('div');
+        newer.id = 'posted_710001';
+        newer.textContent = '8/28 17:52';
+        document.querySelector('.exc-gl-item[data-exc-gid="710001"] .glname').append(newer);
+        window.__resetExhListMetrics();
+        window.__excRefreshPage();
+      });
+      await page.waitForFunction(() => window.__exhListMetrics.transactions.total > 0
+        && performance.now() - window.__exhListMetrics.lastTransactionAt > 250);
+      await newCard.locator('.exc-fold-tag').waitFor();
+      const records = await page.evaluate(() => window.__readExhStores(['editions']));
+      const parsedShortDate = await page.evaluate(() => new Date(new Date().getFullYear(), 7, 28, 17, 52).getTime());
+      assert.equal(records.editions.find(row => String(row.gid) === '710001').posted_at, parsedShortDate,
+        'a yearless current-year date must never become 2001');
+      await page.evaluate(() => {
+        document.getElementById('posted_710001').remove();
+        window.__resetExhListMetrics();
+        window.__excRefreshPage();
+      });
+      await page.waitForFunction(() => window.__exhListMetrics.transactions.total > 0
+        && performance.now() - window.__exhListMetrics.lastTransactionAt > 250);
+      const cachedRecords = await page.evaluate(() => window.__readExhStores(['editions']));
+      assert.equal(cachedRecords.editions.find(row => String(row.gid) === '710001').posted_at, parsedShortDate,
+        'a later list without dates must preserve the corrected publication time');
+      assert.equal(await page.evaluate(() => window.__foldRequests.length), 1, 'cached dates must not need another request');
+
+      await openAndCheckTitle(page, /ExH/i);
+      await openWorkbenchSettingsTab(page, 'pref');
+      await page.locator('#exc-cfg-fold-mode').selectOption('preference');
+      await page.locator('#exc-cfg-save').click();
+      await oldCard.locator('.exc-fold-tag').waitFor();
+      await page.locator('#exc-cfg-fold-mode').selectOption('newest');
+      await page.locator('#exc-cfg-save').click();
+      await newCard.locator('.exc-fold-tag').waitFor();
+      await page.locator('#jlc-wb-settings-close').click();
+      await page.locator('#jlc-wb-close-btn').click();
+      assert.equal(await oldCard.isVisible(), false, 'saving newest must change the primary without a page reload');
+
+      await newCard.locator('.exc-fold-tag').click();
+      await oldCard.locator('[data-exc-act="breakpoint"]').click();
+      await oldCard.locator('.exc-last-seen-mark').waitFor();
+      assert.equal(await oldCard.isVisible(), true, 'the saved breakpoint stays visible even when it is an older edition');
+      assert.equal(await newCard.locator('.exc-fold-tag').count(), 1, 'revealing a breakpoint must not move the fold primary');
+    }
+  );
+
+  await runCase(
     'ExH tracking: collection chooses a folder and immediately establishes the breakpoint',
     {
       host: 'e-hentai.org',
@@ -2284,6 +2386,36 @@ try {
       ]);
       assert.ok(firstState.trackingId, 'newly tracked cards should receive their tracking id immediately');
       assert.match(firstState.marker, /上次看到/);
+
+      // Reproduce a stale "missing" flag while the actual breakpoint is on screen.
+      await page.evaluate(async () => {
+        const request = indexedDB.open('exh_commander_db');
+        const db = await new Promise((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        const transaction = db.transaction('tracking_searches', 'readwrite');
+        const store = transaction.objectStore('tracking_searches');
+        const rows = store.getAll();
+        rows.onsuccess = () => store.put({
+          ...rows.result[0], breakpoint_missing: 1, has_update: 1,
+          unread_estimate: 40, unread_estimate_source: 'deep_scan',
+        });
+        await new Promise((resolve, reject) => {
+          transaction.oncomplete = resolve;
+          transaction.onerror = () => reject(transaction.error);
+        });
+        db.close();
+        window.__excRefreshPage();
+      });
+      await page.locator('#jlc-wb-fab').click();
+      await waitWorkbenchOpen(page);
+      await page.locator('#jlc-wb-list-scroll .jlc-wb-item .jlc-wb-leaf').filter({ hasText: '已追到' }).waitFor();
+      const recovered = await page.evaluate(async () => (await window.__readExhStores(['tracking_searches'])).tracking_searches[0]);
+      assert.equal(recovered.breakpoint_missing, 0, 'visible exact matches must repair the stored miss');
+      assert.equal(recovered.unread_estimate, 0);
+      assert.equal(recovered.has_update, 0);
+      await page.locator('#jlc-wb-close-btn').click();
 
       await page.evaluate(async () => {
         history.replaceState(null, '', '/?f_search=second');
@@ -3403,6 +3535,138 @@ try {
       assert.equal(await page.locator('#jlc-wb-fab').evaluate(el => el === document.activeElement), true);
     }
   );
+
+  for (const kind of ['title', 'combo']) {
+    const query = kind === 'title' ? '親子' : '|类别=母亲||类别=妹妹|';
+    const startPage = kind === 'title' ? 47 : 1;
+    const latestPage = kind === 'title' ? 48 : 1;
+    const searchUrl = (pageNumber, searchId, keyword = '') => 'https://www.javlibrary.com/cn/vl_searchby'
+      + kind + '.php?searchid=' + searchId + '&page=' + pageNumber
+      + (keyword ? '&keyword=' + encodeURIComponent(keyword) : '');
+    const searchFixture = (pageNumber, lastPage, codes, keyword = query) => `<!doctype html>
+      <html><head><meta charset="utf-8"><title>${kind === 'title' ? '标题' : '组合'}搜寻结果 - JAVLibrary</title></head>
+      <body><form action="vl_searchbyid.php"><input name="keyword" value="unrelated search"></form>
+      <main id="rightcolumn"><h3>${kind === 'title' ? '标题' : '组合'}搜寻结果: "${keyword}"</h3>
+      <div class="videothumblist"><div class="videos">${codes.map(code => `
+        <div class="video"><a href="./?v=${code}"><img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+        <div class="id">${code}</div><div class="title">Sample ${code}</div></a></div>`).join('')}</div></div>
+      <div class="page_selector">${pageNumber > 1 ? `<a class="page prev" href="?searchid=100&page=${pageNumber - 1}">上一页</a>` : ''}
+      ${pageNumber < lastPage ? `<a class="page next" href="?searchid=100&page=${pageNumber + 1}">下一页</a>
+      <a class="page last" href="?searchid=100&page=${lastPage}">末页</a>` : ''}</div></main></body></html>`;
+    const orderedCodes = latest => kind === 'title' ? ['SAMPLE-001', latest] : [latest, 'SAMPLE-001'];
+    await runCase(
+      'JLC search tracking: ' + kind + ' pagination, identity and latest breakpoint',
+      {
+        host: 'www.javlibrary.com',
+        fixtureHtml: searchFixture(startPage, kind === 'title' ? 47 : 2, orderedCodes('OLD-001')),
+        scriptPath: PATHS.jlcDist,
+        needJquery: true,
+        gmValues: { version: '20250311' },
+        beforeInject: async page => {
+          await page.evaluate(url => history.replaceState(null, '', url), searchUrl(startPage, '100', query));
+          await page.evaluate(installJlcStorageMetrics);
+        },
+      },
+      async page => {
+        const readRecords = () => page.evaluate(() => window.__readJlcStore('tracking_searches'));
+        const waitRecords = async predicate => {
+          const deadline = Date.now() + 10000;
+          let rows;
+          do {
+            rows = await readRecords();
+            if (predicate(rows)) return rows;
+            await page.waitForTimeout(50);
+          } while (Date.now() < deadline);
+          assert.fail('tracking state did not settle: ' + JSON.stringify(rows));
+        };
+        const setBreakpoint = async (code, count, pageHint) => {
+          const card = page.locator(`[data-jlc-avid="${code}"]`);
+          await card.locator('.jlc-card-more summary').click();
+          await card.locator('.j-bm').click();
+          await waitRecords(rows => rows.length === count
+            && rows.some(row => row.last_seen_avid === code && row.last_seen_page_hint === pageHint));
+        };
+        const navigate = async (url, html, autoPage = false) => {
+          await page.route(url, route => route.fulfill({ contentType: 'text/html', body: html }));
+          await page.goto(url);
+          await page.addScriptTag({ content: gmMockSource({ version: '20250311', autoPage }) });
+          await page.addScriptTag({ content: fs.readFileSync(PATHS.jquery, 'utf8') });
+          await page.evaluate(installJlcStorageMetrics);
+          await page.addScriptTag({ content: stripUserscriptMeta(fs.readFileSync(PATHS.jlcDist, 'utf8')) });
+          if (autoPage) await page.locator('.page_selector').scrollIntoViewIfNeeded();
+          await waitJlcListDecorated(page, autoPage ? 4 : 2);
+        };
+        await waitJlcListDecorated(page, 2);
+        await setBreakpoint('OLD-001', 1, startPage);
+        const originalId = (await readRecords())[0].id;
+        if (kind === 'combo') {
+          await navigate(searchUrl(2, '100'), searchFixture(2, 2, orderedCodes('HISTORY-001')));
+          await setBreakpoint('HISTORY-001', 1, 2);
+          assert.equal((await readRecords())[0].top_avid, 'OLD-001', 'an older page must not replace the latest item');
+          assert.notEqual(await page.locator('#jlc-tracking-pagebar .jlc-status-pill').textContent(), '已读');
+        }
+        await navigate(searchUrl(latestPage, '100'), searchFixture(latestPage, kind === 'title' ? 48 : 2, orderedCodes('NEW-001')));
+        await setBreakpoint('NEW-001', 1, latestPage);
+        let record = (await readRecords())[0];
+        assert.equal(record.id, originalId, 'native pagination without keyword must reuse the saved record');
+        assert.equal(record.top_avid, 'NEW-001');
+        assert.equal(record.raw_query, query, 'site headings and unrelated inputs must not pollute the query');
+        assert.equal(record.unread_estimate, 0);
+        assert.equal(await page.locator('#jlc-tracking-pagebar .jlc-status-pill').textContent(), '已读');
+
+        const requests = [];
+        let newestCode = 'NEW-001';
+        await page.route('**/*.php*', async route => {
+          const request = route.request();
+          const url = new URL(request.url());
+          requests.push({ url: url.href, method: request.method(), body: request.postData() || '' });
+          if (request.method() === 'POST') {
+            return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ID: '200', URL: 'vl_searchby' + kind + '.php' }) });
+          }
+          const pageNumber = Number(url.searchParams.get('page') || 1);
+          return route.fulfill({ contentType: 'text/html', body: searchFixture(pageNumber, kind === 'title' ? 48 : 2,
+            orderedCodes(pageNumber === latestPage ? newestCode : 'OLD-002')) });
+        });
+        const previousCheck = record.last_check_at;
+        await page.locator('[data-jlc-page-refresh]').click();
+        await waitRecords(rows => {
+          const row = rows[0];
+          return row?.check_note === '已追到最新' && row.last_check_at > previousCheck && !!row.manual_query;
+        });
+        record = (await readRecords())[0];
+        assert.equal(record.top_avid, 'NEW-001', 'refresh must use the correct end of the result set');
+        assert.equal(record.top_page_hint, latestPage);
+        assert.equal(record.check_status, 'latest');
+        assert.equal(record.unread_estimate, 0);
+        assert.equal(await page.locator('#jlc-tracking-pagebar .jlc-status-pill').textContent(), '已读');
+        assert.ok(requests.some(request => request.method === 'POST'));
+        assert.ok(requests.some(request => Number(new URL(request.url).searchParams.get('page') || 1) === latestPage), JSON.stringify({ requests, record }));
+
+        if (kind === 'combo') {
+          await navigate(searchUrl(1, '300'), searchFixture(1, 2, orderedCodes('OTHER-001'), '|类别=强奸||类别=乱伦|'));
+          await setBreakpoint('OTHER-001', 2, 1);
+          assert.equal((await readRecords()).find(row => row.id === originalId).last_seen_avid, 'NEW-001',
+            'different Chinese conditions must keep independent breakpoints');
+        }
+        await navigate(searchUrl(latestPage, '400'), searchFixture(latestPage, kind === 'title' ? 48 : 2, orderedCodes('NEW-002')));
+        await setBreakpoint('NEW-002', kind === 'combo' ? 2 : 1, latestPage);
+        record = (await readRecords()).find(row => row.id === originalId);
+        assert.equal(record.top_avid, 'NEW-002', 'a new latest item on the same page must replace a stale top');
+        assert.equal(record.last_seen_avid, 'NEW-002', 'a new searchid must still update the original record');
+        assert.equal(record.unread_estimate, 0);
+        newestCode = 'NEW-002';
+        await navigate(searchUrl(kind === 'title' ? 47 : 1, '400', query),
+          searchFixture(kind === 'title' ? 47 : 1, kind === 'title' ? 48 : 2,
+            orderedCodes(kind === 'title' ? 'OLD-002' : 'NEW-002')), true);
+        await setBreakpoint(kind === 'title' ? 'NEW-002' : 'OLD-002', kind === 'combo' ? 2 : 1, kind === 'title' ? 48 : 2);
+        record = (await readRecords()).find(row => row.id === originalId);
+        assert.equal(record.top_page_hint, latestPage);
+        assert.equal(record.page_size_hint, 2, 'concatenated pages must not inflate the per-page size');
+        assert.equal(record.unread_estimate, kind === 'title' ? 0 : 2,
+          'loaded pages must use the actual breakpoint position without counting the page gap twice');
+      }
+    );
+  }
 
   await runCase(
     'JLC tracking: reopen and local views avoid redundant storage work',

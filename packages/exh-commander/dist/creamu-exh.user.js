@@ -2,7 +2,7 @@
 // @name         Creamu · ExH
 // @name:zh-CN   Creamu · ExH
 // @namespace    https://github.com/wayneze/Creamu
-// @version      0.10.5
+// @version      0.10.6
 // @description  Creamu：e/exhentai 奶油工作台；WebDAV 同步；LRR 只读对照
 // @author       wayneze
 // @match        *://e-hentai.org/*
@@ -5048,6 +5048,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       if (!(Number(merged.size_bytes) > 0) && Number(prev.size_bytes) > 0) {
         merged.size_bytes = prev.size_bytes;
       }
+      if (!(Number(merged.posted_at) > 0) && Number(prev.posted_at) > 0) {
+        merged.posted_at = prev.posted_at;
+      }
       merged.tags_fetched_at = Math.max(
         Number(rec.tags_fetched_at) || 0,
         Number(prev && prev.tags_fetched_at) || 0
@@ -6788,6 +6791,10 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const top = compactText(out.top_gid || '');
     const bp = compactText(out.breakpoint_gid || '');
     const caughtUp = !!(top && bp && top === bp);
+    // 定位结果属于具体断点，不能从另一条旧断点继承“未找到”。
+    const bpSide = remoteBpAt > localBpAt ? remote : localBpAt > remoteBpAt ? local : newer;
+    out.breakpoint_missing = caughtUp ? 0 : (bpSide.breakpoint_missing ? 1 : 0);
+    out.breakpoint_anchor_kind = caughtUp ? 'exact' : (bpSide.breakpoint_anchor_kind || '');
     if (caughtUp) {
       out.has_update = 0;
       out.unread_estimate = 0;
@@ -6795,7 +6802,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       out.unread_estimate_source = 'home_caught_up';
     } else {
       out.has_update = local.has_update || remote.has_update ? 1 : out.has_update || 0;
-      const bpSide = remoteBpAt > localBpAt ? remote : localBpAt > remoteBpAt ? local : newer;
       if (bpSide && bpSide.unread_estimate != null) {
         out.unread_estimate = Math.max(0, Math.floor(Number(bpSide.unread_estimate) || 0));
         out.unread_estimate_capped = bpSide.unread_estimate_capped ? 1 : 0;
@@ -7839,16 +7845,16 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
    * 从列表卡片取发布时间（ms）。
    * 优先 #posted_{gid}（全页），再卡片内文本。极简模式可能无日期 → 上层用 gdata 补。
    */
-  function extractListItemPostedAt(root, gid) {
+  function extractListItemPostedAt(root, gid, doc = document) {
     const g = compactText(gid || '');
     const tryNode = (node) => {
       if (!node) return 0;
       const bits = [
-        node.textContent,
-        node.innerText,
+        node.getAttribute && node.getAttribute('datetime'),
         node.getAttribute && node.getAttribute('title'),
         node.getAttribute && node.getAttribute('data-title'),
-        node.outerHTML,
+        node.textContent,
+        node.innerText,
       ];
       for (let i = 0; i < bits.length; i++) {
         const t = parsePostedToMs(bits[i]);
@@ -7857,15 +7863,15 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       return 0;
     };
     // 全页 id 最准（扩展/缩略图列表）
-    if (g && typeof document !== 'undefined') {
+    if (g && doc) {
       try {
-        const byId = document.getElementById('posted_' + g);
+        const byId = doc.getElementById('posted_' + g);
         const t = tryNode(byId);
         if (t) return t;
         // 有的皮肤 id 大小写或嵌套
         const alt =
-          document.querySelector('[id="posted_' + g + '"]') ||
-          document.querySelector('[id="Posted_' + g + '"]');
+          doc.querySelector('[id="posted_' + g + '"]') ||
+          doc.querySelector('[id="Posted_' + g + '"]');
         const t2 = tryNode(alt);
         if (t2) return t2;
       } catch (_) { /* ignore */ }
@@ -7880,7 +7886,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         const t = tryNode(postedEls[i]);
         if (t) return t;
       }
-      const dateEl = root.querySelector('.glnew, .gltime, .gl4t, .gl2c, td.gl2c');
+      const dateEl = root.querySelector('.glnew, .gltime, .gl4t, .gl2c, td.gl2c, .gl3e, .gl4e');
       if (dateEl) {
         const t = tryNode(dateEl);
         if (t) return t;
@@ -7890,9 +7896,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       if (m) return parsePostedToMs(m[1] + (m[2] ? ' ' + m[2] : ''));
     }
     // 无 root 时仍可用 gid 扫全页邻近
-    if (g && typeof document !== 'undefined') {
+    if (g && doc) {
       try {
-        const link = document.querySelector('a[href*="/g/' + g + '/"]');
+        const link = doc.querySelector('a[href*="/g/' + g + '/"]');
         if (link) {
           const card =
             link.closest('tr, .gl1t, .gl1e, .gl2t, .gl3t, .exc-gl-item') ||
@@ -8217,48 +8223,6 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return result;
   }
 
-  /** 从离线 doc 取 posted（不用全局 document） */
-  function extractListItemPostedAtInDoc(root, gid, doc) {
-    const g = compactText(gid || '');
-    const tryNode = (node) => {
-      if (!node) return 0;
-      const bits = [
-        node.textContent,
-        node.getAttribute && node.getAttribute('title'),
-        node.outerHTML,
-      ];
-      for (let i = 0; i < bits.length; i++) {
-        const t = parsePostedToMs(bits[i]);
-        if (t) return t;
-      }
-      return 0;
-    };
-    if (g && doc && doc.getElementById) {
-      const t = tryNode(doc.getElementById('posted_' + g));
-      if (t) return t;
-    }
-    if (root && root.querySelector) {
-      if (g) {
-        const t = tryNode(root.querySelector('#posted_' + g));
-        if (t) return t;
-      }
-      const postedEls = root.querySelectorAll('[id^="posted_"], [id^="Posted_"]');
-      for (let i = 0; i < postedEls.length; i++) {
-        const t = tryNode(postedEls[i]);
-        if (t) return t;
-      }
-      const dateEl = root.querySelector('.glnew, .gltime, .gl4t, .gl2c, td.gl2c, .gl3e, .gl4e');
-      if (dateEl) {
-        const t = tryNode(dateEl);
-        if (t) return t;
-      }
-      const blob = normalizePostedText(root.textContent || '').slice(0, 1200);
-      const m = blob.match(/(20\d{2}-\d{1,2}-\d{1,2})(?:\s+(\d{1,2}:\d{2}))?/);
-      if (m) return parsePostedToMs(m[1] + (m[2] ? ' ' + m[2] : ''));
-    }
-    return 0;
-  }
-
   /** 解析作品发布时间：DOM →（可选）gdata */
   async function resolveGalleryPostedMs(gid, token, root) {
     const g = compactText(gid || '');
@@ -8281,11 +8245,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     const g = compactText(gid || '');
     if (!g) return 0;
     try {
-      const byId = document.getElementById('posted_' + g);
-      if (byId) {
-        const t = parsePostedToMs(byId.textContent || '');
-        if (t) return t;
-      }
+      const posted = extractListItemPostedAt(null, g);
+      if (posted) return posted;
       const links = document.querySelectorAll('a[href*="/g/' + g + '/"]');
       for (let i = 0; i < links.length; i++) {
         const card =
@@ -8841,6 +8802,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       // 仅页码，不改作品断点
     } else if (opts.gid) {
       rec.breakpoint_gid = String(opts.gid);
+      rec.breakpoint_missing = 0;
+      rec.breakpoint_anchor_kind = 'exact';
       rec.breakpoint_token = compactText(opts.token || '');
       rec.breakpoint_title = compactText(opts.title || '').slice(0, 120);
       let posted = Number(opts.posted_at) || 0;
@@ -9434,8 +9397,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       marked.scrollIntoView(true);
     }
     if (hit.kind === 'exact') showToast('已定位到断点作品');
-    else if (hit.kind === 'older') showToast('断点作品已下架，已停在它后面那部');
-    else showToast('断点作品已下架，已停在它前面那部');
+    else if (hit.kind === 'older') showToast('本页未找到原断点，已停在它后面那部');
+    else showToast('本页未找到原断点，已停在它前面那部');
     const later =
       (typeof window !== 'undefined' && window.setTimeout) ||
       (typeof setTimeout === 'function' ? setTimeout : null);
@@ -9717,10 +9680,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
         } catch (_) { /* ignore */ }
         let posted_at = 0;
         try {
-          posted_at = extractListItemPostedAtInDoc(root, gt.gid, doc);
-          if (!posted_at && typeof extractListItemPostedAt === 'function') {
-            posted_at = extractListItemPostedAt(root, gt.gid);
-          }
+          posted_at = extractListItemPostedAt(root, gt.gid, doc);
         } catch (_) { /* ignore */ }
         const ps = extractListItemPagesSize(root);
         // 列表上语言/码级先从标题猜；gdata 会再补
@@ -10309,6 +10269,11 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     if (!rec) return rec;
     opts = opts || {};
     const bp = compactText(rec.breakpoint_gid || '');
+    // 列表直接命中可以推翻旧扫描的“未找到”，与页码是否可估算无关。
+    if (bp && Array.isArray(gids) && gids.some(gid => String(gid) === bp)) {
+      rec.breakpoint_missing = 0;
+      rec.breakpoint_anchor_kind = 'exact';
+    }
     const prevTop = compactText(opts.previousTop || rec.prev_top_gid || '');
     const topS = compactText(top || '');
     const pageLen = Array.isArray(gids) ? gids.length : 0;
@@ -10588,7 +10553,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           }
           rec.unread_estimate_source = scan.source || 'page_formula';
         } else {
-          // 深度扫满仍未见断点：列表检查本身成功，只是作品可能已下架
+          // 扫描范围内未定位；页数上限、过滤条件和请求中断都不能证明下架。
           rec.has_update = 1;
           rec.breakpoint_missing = 1;
           rec.unread_estimate = Math.max(
@@ -10638,7 +10603,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
     return null;
   }
 
-  function parsePostedToMs(text) {
+  function parsePostedToMs(text, referenceTime = Date.now()) {
     const s = normalizePostedText(text);
     if (!s) return 0;
     // unix 秒（gdata / 偶发属性）
@@ -10650,37 +10615,26 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       const ms = Number(s);
       return ms > 1e12 ? ms : 0;
     }
-    // EH 标准：2025-03-18 14:20
-    let m = s.match(/(20\d{2})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-    if (m) {
-      const d = new Date(
-        Number(m[1]),
-        Number(m[2]) - 1,
-        Number(m[3]),
-        Number(m[4] || 0),
-        Number(m[5] || 0),
-        Number(m[6] || 0)
-      );
-      const t = d.getTime();
-      return Number.isFinite(t) && t > 0 ? t : 0;
+    const makeDate = (year, month, day, hour = 0, minute = 0, second = 0) => {
+      const date = new Date(year, month - 1, day, hour, minute, second);
+      return date.getFullYear() === year && date.getMonth() === month - 1
+        && date.getDate() === day && date.getHours() === hour
+        && date.getMinutes() === minute && date.getSeconds() === second
+        ? date.getTime() : 0;
+    };
+    // 原站完整日期，以及翻译脚本显示的当年短日期；不能交给 Date.parse 猜年份。
+    const full = s.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (full) return makeDate(...full.slice(1).map(value => Number(value || 0)));
+    const reference = new Date(referenceTime);
+    const short = s.match(/^(\d{1,2})[/-](\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (short) return makeDate(reference.getFullYear(), ...short.slice(1).map(value => Number(value || 0)));
+    const relative = s.match(/^(今天|今日|昨天|昨日|today|yesterday)\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/i);
+    if (relative) {
+      if (/^(昨天|昨日|yesterday)$/i.test(relative[1])) reference.setDate(reference.getDate() - 1);
+      return makeDate(reference.getFullYear(), reference.getMonth() + 1, reference.getDate(),
+        ...relative.slice(2).map(value => Number(value || 0)));
     }
-    m = s.match(/(20\d{2})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
-    if (m) {
-      const d = new Date(
-        Number(m[1]),
-        Number(m[2]) - 1,
-        Number(m[3]),
-        Number(m[4] || 0),
-        Number(m[5] || 0)
-      );
-      const t = d.getTime();
-      return Number.isFinite(t) && t > 0 ? t : 0;
-    }
-    // 从混杂 HTML 里抠日期
-    m = s.match(/(20\d{2}-\d{1,2}-\d{1,2}(?:\s+\d{1,2}:\d{2})?)/);
-    if (m) return parsePostedToMs(m[1]);
-    const t = Date.parse(s.replace(/-/g, '/'));
-    return Number.isFinite(t) && t > 0 ? t : 0;
+    return 0;
   }
 
   function parseListCard(root) {
@@ -12338,8 +12292,8 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       hit.kind === 'exact'
         ? '上次看到这里'
         : hit.kind === 'older'
-          ? '断点已下架，停在后面这部'
-          : '断点已下架，停在前面这部';
+          ? '本页未找到原断点，停在后面这部'
+          : '本页未找到原断点，停在前面这部';
     // 网格用红框和封面标记定位，不插入整行分隔而打断紧凑排列。
     const marker = hit.el.querySelector('.exc-last-seen-mark');
     if (marker) marker.title = label;
@@ -13477,6 +13431,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
               ? await findTrackingForContext(ctx)
               : await getTrackingBySignature(ctx.query_signature);
           if (!latest) return;
+          const wasMissing = latest.breakpoint_missing === 1;
           latest.last_page = pageIdx;
           latest.last_browsed_at = nowMs();
           if (latest.open_url && typeof canonicalizeTrackingOpenUrl === 'function') {
@@ -13524,32 +13479,21 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
             // 深页浏览：只记位置；未读禁止用当页局部覆盖（next= 会把 +200 打成 +23）
             // 已知 page=N 时才允许用页偏移抬高下限
             try {
-              if (pageState.known && pageIdx >= 0) {
-                const gids =
-                  typeof extractOrderedGidsFromDocument === 'function'
-                    ? extractOrderedGidsFromDocument(document)
-                    : [];
-                if (typeof applyTrackingUnreadFromGids === 'function') {
-                  applyTrackingUnreadFromGids(latest, gids, latest.top_gid || '', {
-                    pageIndex: pageIdx,
-                    isFirst: false,
-                    deepUnknown: false,
-                    mode: 'browse',
-                  });
-                }
-              } else {
-                // 游标深页：最多维持 has_update，不改 unread_estimate
-                if (
-                  latest.top_gid &&
-                  latest.breakpoint_gid &&
-                  String(latest.top_gid) !== String(latest.breakpoint_gid)
-                ) {
-                  latest.has_update = 1;
-                }
+              const gids = extractOrderedGidsFromDocument(document);
+              if (typeof applyTrackingUnreadFromGids === 'function') {
+                applyTrackingUnreadFromGids(latest, gids, latest.top_gid || '', {
+                  pageIndex: pageIdx,
+                  isFirst: false,
+                  deepUnknown: !pageState.known,
+                  mode: 'browse',
+                });
               }
             } catch (_) { /* ignore */ }
           }
           await saveTrackingRecord(latest);
+          if (wasMissing && latest.breakpoint_missing !== 1 && window.__excRefreshWorkbench) {
+            window.__excRefreshWorkbench();
+          }
         } catch (_) { /* ignore */ }
       }, 800);
     } else {
@@ -14236,6 +14180,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
               } catch (_) {}
             }
           });
+          if (updated.length && config.list_fold_works) {
+            await enhanceListPage({ items: [], reapplyFold: true });
+          }
         } catch (err) {
           console.warn('[ExC] fillListTagsFromGdata chunk error', err);
         }
@@ -15463,13 +15410,13 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
       : '';
     if (missingBp) {
       const noteBits = [
-        '断点作品可能已下架',
+        '扫描范围内未找到原断点，尚不能确认作品是否下架',
         unreadNote,
         getTrackingBpMetaLabel(r) ? '原断点 ' + getTrackingBpMetaLabel(r) : '',
       ].filter(Boolean);
       return {
         tone: 'yellow',
-        text: pill || '断点已下架',
+        text: pill || '未定位断点',
         note: noteBits.join(' · '),
       };
     }
@@ -15931,7 +15878,7 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
               typeof getTrackingUpdatePillText === 'function' ? getTrackingUpdatePillText(rec) : '';
             showToast(
               rec.breakpoint_missing
-                ? '检查完成，断点作品可能已下架：' + getTrackingDisplayTitle(rec)
+                ? '检查完成，扫描范围内未找到原断点：' + getTrackingDisplayTitle(rec)
                 : pending
                   ? '有更新' + (pill && pill !== '更新' ? ' ' + pill : '') + '：' + getTrackingDisplayTitle(rec)
                   : rec.breakpoint_anchor_kind && rec.breakpoint_anchor_kind !== 'exact'
@@ -16973,6 +16920,9 @@ function bindCreamuWorkbenchResize(panel, options = {}) {
           applyCreamSiteTheme();
           applyGalleryThumbScale();
           if (tab === 'sync') renderSettingsSections('sync');
+          if (tab === 'pref') {
+            void enhanceListPage({ items: [], reapplyFold: true });
+          }
         }
       };
     }

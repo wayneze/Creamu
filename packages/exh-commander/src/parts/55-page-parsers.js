@@ -17,7 +17,7 @@
     return null;
   }
 
-  function parsePostedToMs(text) {
+  function parsePostedToMs(text, referenceTime = Date.now()) {
     const s = normalizePostedText(text);
     if (!s) return 0;
     // unix 秒（gdata / 偶发属性）
@@ -29,37 +29,26 @@
       const ms = Number(s);
       return ms > 1e12 ? ms : 0;
     }
-    // EH 标准：2025-03-18 14:20
-    let m = s.match(/(20\d{2})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-    if (m) {
-      const d = new Date(
-        Number(m[1]),
-        Number(m[2]) - 1,
-        Number(m[3]),
-        Number(m[4] || 0),
-        Number(m[5] || 0),
-        Number(m[6] || 0)
-      );
-      const t = d.getTime();
-      return Number.isFinite(t) && t > 0 ? t : 0;
+    const makeDate = (year, month, day, hour = 0, minute = 0, second = 0) => {
+      const date = new Date(year, month - 1, day, hour, minute, second);
+      return date.getFullYear() === year && date.getMonth() === month - 1
+        && date.getDate() === day && date.getHours() === hour
+        && date.getMinutes() === minute && date.getSeconds() === second
+        ? date.getTime() : 0;
+    };
+    // 原站完整日期，以及翻译脚本显示的当年短日期；不能交给 Date.parse 猜年份。
+    const full = s.match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+    if (full) return makeDate(...full.slice(1).map(value => Number(value || 0)));
+    const reference = new Date(referenceTime);
+    const short = s.match(/^(\d{1,2})[/-](\d{1,2})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (short) return makeDate(reference.getFullYear(), ...short.slice(1).map(value => Number(value || 0)));
+    const relative = s.match(/^(今天|今日|昨天|昨日|today|yesterday)\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/i);
+    if (relative) {
+      if (/^(昨天|昨日|yesterday)$/i.test(relative[1])) reference.setDate(reference.getDate() - 1);
+      return makeDate(reference.getFullYear(), reference.getMonth() + 1, reference.getDate(),
+        ...relative.slice(2).map(value => Number(value || 0)));
     }
-    m = s.match(/(20\d{2})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
-    if (m) {
-      const d = new Date(
-        Number(m[1]),
-        Number(m[2]) - 1,
-        Number(m[3]),
-        Number(m[4] || 0),
-        Number(m[5] || 0)
-      );
-      const t = d.getTime();
-      return Number.isFinite(t) && t > 0 ? t : 0;
-    }
-    // 从混杂 HTML 里抠日期
-    m = s.match(/(20\d{2}-\d{1,2}-\d{1,2}(?:\s+\d{1,2}:\d{2})?)/);
-    if (m) return parsePostedToMs(m[1]);
-    const t = Date.parse(s.replace(/-/g, '/'));
-    return Number.isFinite(t) && t > 0 ? t : 0;
+    return 0;
   }
 
   function parseListCard(root) {

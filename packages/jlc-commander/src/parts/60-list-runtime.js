@@ -88,7 +88,12 @@
             this.$dom.append($elems);
             lazyLoad.update(this.$dom);
         }
-        static parseItems(elems){
+        static parseItems(elems, pageUrl = location.href, pageDoc = document){
+            const pageHint = getCurrentListPageHint(pageUrl, pageDoc);
+            const mode = detectTrackingSearchMode(currentWeb, parseTrackingUrl(pageUrl));
+            const isLatestPage = mode === 'backfill'
+                ? getTrackingLastPageInfo(pageDoc, pageUrl).page === pageHint && !getTrackingNextPageUrl(pageDoc, currentWeb, pageUrl)
+                : pageHint === 1;
             let elemsHtml = "";
             let {imgStyle,getAvItem,toolBar,copyBtn,fullTitle,magnet,magnetTip,downloadTip,pictureTip} = {
                 imgStyle: Status.isHalfImg() ? halfImgCSS : fullImgCSS,
@@ -152,6 +157,11 @@
                 elemsHtml = elemsHtml + html;
             }
             let $elems = $(elemsHtml);
+            $elems.attr({
+                'data-jlc-source-page': pageHint,
+                'data-jlc-source-page-size': elems.length,
+                'data-jlc-latest-page': String(isLatestPage)
+            });
             $elems.find('.jlc-card-more').on('keydown', function (event) {
                 if (event.key !== 'Escape' || !this.open) return;
                 event.preventDefault();
@@ -236,7 +246,7 @@
                 if (this.destroyed) return false;
 
                 let $body = $(new DOMParser().parseFromString(responseText, 'text/html'));
-                let elems = GridPanel.parseItems($body.find(currentObj.itemSelector));
+                let elems = GridPanel.parseItems($body.find(currentObj.itemSelector), response.url || new URL(url, location.href).href, $body.get(0));
                 if (currentWeb != "javdb" && location.pathname.includes('/star/') && elems) {
                     elems=elems.slice(1);
                 }

@@ -2,7 +2,7 @@
 // @name         Creamu · JavLibrary
 // @name:zh-CN   Creamu · JavLibrary
 // @namespace    https://github.com/wayneze/Creamu
-// @version      3.9.6
+// @version      3.9.7
 // @description  Creamu：统一浅色页面与影片详情；随时呼出的对照控制台；追更 / Emby / WebDAV
 // @author       wayneze
 // @include      *javbus.com/*

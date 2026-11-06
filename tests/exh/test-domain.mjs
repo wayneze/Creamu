@@ -48,6 +48,7 @@ function loadDomain() {
   };
   const ctx = createContext(sandbox);
   runInContext(src, ctx, { filename: '20-domain.js' });
+  runInContext(fs.readFileSync(path.join(partsDir, '51-gallery-metadata.js'), 'utf8'), ctx);
   const src55 = fs.readFileSync(path.join(partsDir, '55-page-parsers.js'), 'utf8');
   runInContext(src55, ctx, { filename: '55-page-parsers.js' });
   return ctx;
@@ -69,6 +70,20 @@ function test(name, fn) {
 console.log('ExH domain tests');
 
 const d = loadDomain();
+
+test('发布时间识别当年短日期，优先完整日期属性，不猜成 2001 年', () => {
+  const reference = new Date(2026, 10, 6, 20).getTime();
+  assert.equal(d.parsePostedToMs('8/28 17:52', reference), new Date(2026, 7, 28, 17, 52).getTime());
+  assert.equal(d.parsePostedToMs('2025/6/4 12:32'), new Date(2025, 5, 4, 12, 32).getTime());
+  assert.equal(d.parsePostedToMs('今天 13:28', reference), new Date(2026, 10, 6, 13, 28).getTime());
+  assert.equal(d.parsePostedToMs('昨天 23:59', new Date(2026, 0, 1, 2).getTime()),
+    new Date(2025, 11, 31, 23, 59).getTime());
+  assert.equal(d.parsePostedToMs('2/30 12:00', reference), 0);
+  assert.equal(d.parsePostedToMs('203 pages'), 0);
+  const node = { textContent: '8/28 17:52', getAttribute: key => key === 'title' ? '2025-08-28 17:52' : '' };
+  const doc = { getElementById: () => node };
+  assert.equal(d.extractListItemPostedAt(null, '1', doc), new Date(2025, 7, 28, 17, 52).getTime());
+});
 
 test('buildTitleCore 去括号与语言噪声', () => {
   const core = d.buildTitleCore('[Group] Sample Work (Chinese) [Digital]');

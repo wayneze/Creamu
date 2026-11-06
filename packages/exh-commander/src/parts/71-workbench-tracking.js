@@ -359,13 +359,13 @@
       : '';
     if (missingBp) {
       const noteBits = [
-        '断点作品可能已下架',
+        '扫描范围内未找到原断点，尚不能确认作品是否下架',
         unreadNote,
         getTrackingBpMetaLabel(r) ? '原断点 ' + getTrackingBpMetaLabel(r) : '',
       ].filter(Boolean);
       return {
         tone: 'yellow',
-        text: pill || '断点已下架',
+        text: pill || '未定位断点',
         note: noteBits.join(' · '),
       };
     }
@@ -827,7 +827,7 @@
               typeof getTrackingUpdatePillText === 'function' ? getTrackingUpdatePillText(rec) : '';
             showToast(
               rec.breakpoint_missing
-                ? '检查完成，断点作品可能已下架：' + getTrackingDisplayTitle(rec)
+                ? '检查完成，扫描范围内未找到原断点：' + getTrackingDisplayTitle(rec)
                 : pending
                   ? '有更新' + (pill && pill !== '更新' ? ' ' + pill : '') + '：' + getTrackingDisplayTitle(rec)
                   : rec.breakpoint_anchor_kind && rec.breakpoint_anchor_kind !== 'exact'

@@ -195,8 +195,7 @@
         ['page', 'p', 'offset'].forEach(key => parsed.searchParams.delete(key));
         if (/javlibrary\./i.test(String(parsed.hostname || '')) && /\/vl_searchby(?:title|combo)\.php$/i.test(String(parsed.pathname || '').toLowerCase())) {
             const keyword = compactText(parsed.searchParams.get('keyword') || parsed.searchParams.get('q') || parsed.searchParams.get('search') || '');
-            const lowerPath = String(parsed.pathname || '').toLowerCase();
-            if (/\/vl_searchbycombo\.php$/i.test(lowerPath) || keyword) {
+            if (keyword) {
                 parsed.searchParams.delete('searchid');
             }
         }
@@ -204,6 +203,7 @@
             parsed.pathname = parsed.pathname.replace(/\/\d+\/?$/, '');
         }
         parsed.pathname = parsed.pathname.replace(/\/{2,}/g, '/');
+        parsed.searchParams.sort();
         return parsed.toString().replace(/\/$/, '');
     }
 
@@ -220,8 +220,8 @@
         let text = compactText(decodeTrackingSegment(value || ''));
         if (!text) return '';
         text = text
-            .replace(/^(?:search\s*result(?:s)?(?:\s*of)?|search|results?\s*for|搜索结果|搜尋結果|标题搜索|標題搜索|title\s*search|组合搜索|組合搜索|combo\s*search)[:：\s-]*/i, '')
-            .replace(/^["'“”‘’【】\[\]『』]+|["'“”‘’【】\[\]『』]+$/g, '')
+            .replace(/^(?:(?:标题|標題|组合|組合)搜[索尋寻](?:[结結]果)?|(?:title|combo)\s*search(?:\s*results?)?|search\s*results?(?:\s*(?:of|for))?|results?\s*for|搜索结果|搜尋結果|search)[:：·\s-]*/i, '')
+            .replace(/^["'“”‘’【】\[\]「」『』]+|["'“”‘’【】\[\]「」『』]+$/g, '')
             .trim();
         return text;
     }
@@ -297,6 +297,8 @@
         pushCandidate(parsed?.searchParams?.get('keyword'));
         pushCandidate(parsed?.searchParams?.get('q'));
         pushCandidate(parsed?.searchParams?.get('search'));
+        // 结果标题属于当前搜索；顶部的通用搜索框可能仍是另一个查询。
+        if (isJavLibraryResolvableSearchUrl(parsed?.href || '')) pushCandidate(heading);
         [
             'input[name="keyword"]',
             'input[name="q"]',
@@ -349,6 +351,12 @@
         const lowerPath = String(target.pathname || '').toLowerCase();
         ['page', 'p', 'offset'].forEach(key => target.searchParams.delete(key));
         if (lowerSite === 'javlibrary') {
+            if (/\/vl_searchby(?:title|combo)\.php$/i.test(lowerPath)) {
+                const query = pickTrackingSearchQueryCandidate([
+                    descriptor.raw_query, descriptor.query_text, target.searchParams.get('keyword')
+                ]);
+                if (query) target.searchParams.set('keyword', query);
+            }
             if (/\/vl_searchbycombo\.php$/i.test(lowerPath)) {
                 const pageCandidate = descriptor?.page_url || descriptor?.pageUrl || descriptor?.href || '';
                 if (!compactText(target.searchParams.get('searchid') || '') && pageCandidate) {

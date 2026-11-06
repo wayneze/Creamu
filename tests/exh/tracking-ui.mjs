@@ -326,8 +326,8 @@ assert.doesNotMatch(
 );
 assert.match(
   trackingUiSource,
-  /断点已下架/,
-  'a missing breakpoint after a successful list check is not a check failure'
+  /未定位断点/,
+  'a search miss cannot prove that the gallery was removed'
 );
 assert.doesNotMatch(
   readPart('54-tracking-refresh.js'),
@@ -1043,7 +1043,7 @@ const neighborLocated = neighborContext.scrollToTrackingBreakpoint({
   breakpoint_older_gid: '12',
 });
 assert.equal(neighborLocated, true);
-assert.match(neighborToasts.join(' '), /已下架/);
+assert.match(neighborToasts.join(' '), /本页未找到原断点/);
 
 const unreadScanContext = {
   console,
@@ -1090,6 +1090,47 @@ const missingExact = unreadScanContext.estimateUnreadFromGids(['1', '2', '4'], '
 assert.equal(missingExact.found, true);
 assert.equal(missingExact.kind, 'older');
 assert.equal(missingExact.count, 2);
+
+for (const options of [
+  { pageIndex: 0, isFirst: true },
+  { pageIndex: -1, isFirst: false, deepUnknown: true, mode: 'browse' },
+]) {
+  const record = {
+    top_gid: options.isFirst ? '3' : '1',
+    breakpoint_gid: '3',
+    breakpoint_missing: 1,
+    breakpoint_anchor_kind: 'older',
+    has_update: 1,
+    unread_estimate: 40,
+  };
+  unreadScanContext.applyTrackingUnreadFromGids(record, ['3', '4'], record.top_gid, options);
+  assert.equal(record.breakpoint_missing, 0, 'an exact hit clears a stale search miss even on a cursor page');
+  assert.equal(record.breakpoint_anchor_kind, 'exact');
+  if (options.isFirst) {
+    assert.equal(record.has_update, 0);
+    assert.equal(trackingUiContext.buildExhTrackingStatus(record).text, '已追到');
+  } else {
+    assert.equal(record.unread_estimate, 40, 'cursor-page hits must not replace the total with a local count');
+  }
+}
+Object.assign(unreadScanContext, {
+  nowMs: () => 100,
+  saveTrackingRecord: async record => record,
+});
+const resetBreakpoint = await unreadScanContext.markTrackingBreakpoint(
+  { top_gid: '3', breakpoint_gid: '2', breakpoint_missing: 1 },
+  { fromGallery: true, gid: '3', posted_at: 100, pageIndex: 0 }
+);
+assert.equal(resetBreakpoint.breakpoint_missing, 0, 'a new breakpoint must not inherit the old miss');
+assert.equal(trackingUiContext.buildExhTrackingStatus(resetBreakpoint).text, '已追到');
+
+vm.runInContext(readPart('35-data-portability.js'), unreadScanContext);
+const mergedBreakpoint = unreadScanContext.mergeTrackingRecord(
+  { top_gid: '9', breakpoint_gid: '3', breakpoint_at: 200, breakpoint_missing: 0, breakpoint_anchor_kind: 'exact', updated_at: 300 },
+  { top_gid: '9', breakpoint_gid: '2', breakpoint_at: 100, breakpoint_missing: 1, updated_at: 400 }
+);
+assert.equal(mergedBreakpoint.breakpoint_gid, '3');
+assert.equal(mergedBreakpoint.breakpoint_missing, 0, 'sync must keep the chosen breakpoint and its location state together');
 
 const hoverCard = {
   matches() { return false; },
@@ -1144,7 +1185,8 @@ const missingStatus = trackingUiContext.buildExhTrackingStatus({
   unread_estimate: 12,
   unread_estimate_capped: 1,
 });
-assert.equal(missingStatus.text, '断点已下架');
+assert.equal(missingStatus.text, '未定位断点');
+assert.match(missingStatus.note, /尚不能确认/);
 assert.notEqual(missingStatus.text, '检查失败');
 
 const sortInput = [
